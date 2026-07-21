@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Agentic.Chat.Tests/Agentic.Chat.Tests.csproj" />
+  <Project Path="Agentic.Chat/Agentic.Chat.csproj" />
+</Solution>

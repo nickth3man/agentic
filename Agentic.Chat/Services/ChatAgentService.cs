@@ -145,7 +145,7 @@ public sealed class ChatAgentService
         yield return assistant;
     }
 
-    private static bool TryApplyDelta(string payload, ChatDisplayMessage assistant)
+    internal static bool TryApplyDelta(string payload, ChatDisplayMessage assistant)
     {
         try
         {
@@ -211,6 +211,6 @@ public sealed class ChatAgentService
         }
     }
 
-    private static string Truncate(string value, int max)
+    internal static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..max] + "…";
 }

@@ -1,0 +1,4 @@
+* text=auto
+
+# Shell scripts must keep LF line endings to run in Git Bash/WSL/Linux
+*.sh text eol=lf

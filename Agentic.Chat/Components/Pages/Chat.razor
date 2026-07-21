@@ -1,0 +1,178 @@
+@page "/chat"
+@rendermode InteractiveServer
+@inject ChatAgentService ChatAgent
+
+<PageTitle>Agentic</PageTitle>
+
+<main class="chat-page">
+    <div class="chat-atmosphere" aria-hidden="true">
+        <div class="orb orb-a"></div>
+        <div class="orb orb-b"></div>
+        <div class="orb orb-c"></div>
+        <div class="grid-wash"></div>
+    </div>
+
+    <header class="chat-brand">
+        <div class="brand-mark" aria-hidden="true">
+            <span class="ring ring-1"></span>
+            <span class="ring ring-2"></span>
+            <span class="core"></span>
+        </div>
+        <div class="brand-copy">
+            <h1 class="brand-name">Agentic</h1>
+            <p class="chat-subtitle">
+                Multi-turn via OpenRouter
+                <span class="model-chip"><code>openai/gpt-oss-120b</code></span>
+                <span class="session-hint">· session only</span>
+            </p>
+        </div>
+        <div class="live-badge @(isBusy ? "is-live" : "")" aria-hidden="true">
+            <span class="live-dot"></span>
+            <span class="live-label">@(isBusy ? "Streaming" : "Ready")</span>
+        </div>
+    </header>
+
+    <div id="chat-status" class="visually-hidden" aria-live="polite" aria-atomic="true">
+        @statusText
+    </div>
+
+    <div class="chat-stage">
+        <div class="chat-messages" role="log" aria-relevant="additions" aria-busy="@isBusy">
+            @if (!ChatAgent.Messages.Any())
+            {
+                <div class="empty-state">
+                    <div class="empty-glyph" aria-hidden="true">
+                        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 40c0-11 9-20 20-20s20 9 20 20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                            <circle cx="22" cy="28" r="2.5" fill="currentColor"/>
+                            <circle cx="42" cy="28" r="2.5" fill="currentColor"/>
+                            <path d="M24 46h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                            <path class="spark" d="M48 14l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <p class="empty-title">Start a signal</p>
+                    <p class="empty-body">Ask anything. Reasoning streams into Thinking as the model works.</p>
+                </div>
+            }
+
+            @foreach (var message in ChatAgent.Messages)
+            {
+                var isUser = message.Role == "user";
+                <article class="chat-bubble @(isUser ? "user" : "assistant") @(message.IsStreaming ? "is-streaming" : "")"
+                         aria-label="@(isUser ? "You" : "Assistant")">
+                    <div class="bubble-meta">
+                        <span class="avatar @(isUser ? "avatar-you" : "avatar-agent")" aria-hidden="true">
+                            @(isUser ? "Y" : "A")
+                        </span>
+                        <div class="chat-role">@(isUser ? "You" : "Assistant")</div>
+                    </div>
+
+                    @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || (message.IsStreaming && string.IsNullOrEmpty(message.Content))))
+                    {
+                        <details class="thinking-panel @(message.IsStreaming && string.IsNullOrEmpty(message.Content) ? "is-active" : "")"
+                                 open="@ShouldOpenThinking(message)">
+                            <summary>
+                                <span class="think-pulse" aria-hidden="true">
+                                    <span></span><span></span><span></span>
+                                </span>
+                                <span class="think-label">
+                                    @(message.IsStreaming && string.IsNullOrEmpty(message.Content) ? "Thinking…" : "Thinking")
+                                </span>
+                            </summary>
+                            <pre class="thinking-text">@(string.IsNullOrEmpty(message.Reasoning) ? "…" : message.Reasoning)</pre>
+                        </details>
+                    }
+
+                    @if (!string.IsNullOrEmpty(message.Content) || (message.IsStreaming && !string.IsNullOrEmpty(message.Reasoning)))
+                    {
+                        <div class="chat-content">
+                            @if (string.IsNullOrEmpty(message.Content) && message.IsStreaming)
+                            {
+                                <span class="chat-pending">
+                                    <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                                    Responding…
+                                </span>
+                            }
+                            else
+                            {
+                                @message.Content
+                                @if (message.IsStreaming)
+                                {
+                                    <span class="caret" aria-hidden="true"></span>
+                                }
+                            }
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div id="chat-error" class="chat-error" role="alert">@errorMessage</div>
+    }
+
+    <form class="chat-form" @onsubmit="SendAsync" @onsubmit:preventDefault>
+        <div class="composer">
+            <label class="visually-hidden" for="chat-input">Message</label>
+            <input id="chat-input"
+                   @bind="inputText"
+                   @bind:event="oninput"
+                   class="chat-input"
+                   placeholder="Type a message…"
+                   disabled="@isBusy"
+                   autocomplete="off"
+                   aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")" />
+            <button type="submit" class="chat-send" disabled="@isBusy" aria-label="Send message">
+                <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 12h12M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="send-text">Send</span>
+            </button>
+        </div>
+    </form>
+</main>
+
+@code {
+    private string inputText = string.Empty;
+    private bool isBusy;
+    private string? errorMessage;
+    private string statusText = string.Empty;
+
+    private static bool ShouldOpenThinking(ChatDisplayMessage message)
+        => message.IsStreaming && string.IsNullOrEmpty(message.Content);
+
+    private async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(inputText) || isBusy)
+        {
+            return;
+        }
+
+        var text = inputText;
+        inputText = string.Empty;
+        errorMessage = null;
+        isBusy = true;
+        statusText = "Assistant is responding";
+
+        try
+        {
+            await foreach (var _ in ChatAgent.SendStreamingAsync(text))
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+
+            statusText = "Response complete";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            statusText = string.Empty;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

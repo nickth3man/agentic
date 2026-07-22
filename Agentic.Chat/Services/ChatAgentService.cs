@@ -17,6 +17,8 @@ public sealed class ChatAgentService
     private readonly HttpClient _httpClient;
     private readonly OpenRouterOptions _options;
     private readonly ILogger<ChatAgentService> _logger;
+    private readonly SelectedModelService _selectedModelService;
+    private readonly ModelCatalogService _modelCatalog;
     private readonly List<ChatDisplayMessage> _displayMessages = [];
     private readonly List<object> _apiMessages =
     [
@@ -26,11 +28,15 @@ public sealed class ChatAgentService
     public ChatAgentService(
         IHttpClientFactory httpClientFactory,
         IOptions<OpenRouterOptions> options,
-        ILogger<ChatAgentService> logger)
+        ILogger<ChatAgentService> logger,
+        SelectedModelService selectedModelService,
+        ModelCatalogService modelCatalog)
     {
         _httpClient = httpClientFactory.CreateClient("OpenRouter");
         _options = options.Value;
         _logger = logger;
+        _selectedModelService = selectedModelService;
+        _modelCatalog = modelCatalog;
     }
 
     public IReadOnlyList<ChatDisplayMessage> Messages => _displayMessages;
@@ -57,13 +63,21 @@ public sealed class ChatAgentService
             "Streaming chat completion with {MessageCount} message(s) in transcript",
             _apiMessages.Count);
 
+        var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
+        var modelInfo = await _modelCatalog
+            .FindByIdAsync(modelId, cancellationToken)
+            .ConfigureAwait(false);
+
         var requestBody = new Dictionary<string, object?>
         {
-            ["model"] = _options.Model,
+            ["model"] = modelId,
             ["messages"] = _apiMessages,
-            ["stream"] = true,
-            ["reasoning"] = new { enabled = true, exclude = false }
+            ["stream"] = true
         };
+        if (modelInfo?.SupportsReasoning == true)
+        {
+            requestBody["reasoning"] = new { enabled = true, exclude = false };
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
         {

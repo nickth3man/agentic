@@ -20,11 +20,10 @@
         </div>
         <div class="brand-copy">
             <h1 class="brand-name">Agentic</h1>
-            <p class="chat-subtitle">
+            <div class="chat-subtitle">
                 Multi-turn via OpenRouter
-                <span class="model-chip"><code>openai/gpt-oss-120b</code></span>
-                <span class="session-hint">· session only</span>
-            </p>
+                <ModelPicker />
+            </div>
         </div>
         <div class="live-badge @(isBusy ? "is-live" : "")" aria-hidden="true">
             <span class="live-dot"></span>

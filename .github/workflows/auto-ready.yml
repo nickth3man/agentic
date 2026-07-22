@@ -30,7 +30,7 @@ jobs:
     # Only on success — skip when CI failed/cancelled/skipped.
     if: github.event.workflow_run.conclusion == 'success'
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
             // Find the open PR whose head SHA matches this CI run.

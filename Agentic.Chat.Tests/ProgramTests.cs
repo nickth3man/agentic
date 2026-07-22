@@ -214,7 +214,10 @@ public class ProgramTests
             foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
             {
                 if (entry.Key is not string key) continue;
-                if (!key.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                // .NET config binding is case-insensitive, so an env var like
+                // OPENROUTER__KEY (Linux env vars are case-sensitive) would still bind to
+                // the OpenRouter:* section. Match case-insensitively to neutralize it.
+                if (!key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
                 scope._snapshot[key] = Environment.GetEnvironmentVariable(key);
                 Environment.SetEnvironmentVariable(key, null);
             }

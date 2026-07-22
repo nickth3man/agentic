@@ -1,0 +1,46 @@
+# cubic (cubic.dev) AI reviewer configuration.
+# Docs: https://docs.cubic.dev/configure/cubic-yaml
+# Schema for IDE validation:
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+#
+# Key change vs. default: `sensitivity: high`. The default `medium` produces
+# "balanced insights" = few inline comments. With high sensitivity, cubic flags
+# style, readability, and small polish issues in addition to correctness —
+# exactly the kind of actionable inline feedback we want.
+version: 1
+
+reviews:
+  enabled: true
+
+  # Sensitivity is the inline-comment lever for cubic.
+  #   low    — minimal noise, only critical issues
+  #   medium — balanced (default)
+  #   high   — thorough: style + best practices + correctness + nits
+  sensitivity: high
+
+  # Review every commit pushed, not just the latest. Helps catch regressions
+  # introduced mid-PR.
+  incremental_commits: true
+
+  # Free-form instructions appended to cubic's review prompt. Without these,
+  # cubic applies generic criteria; with them, it focuses on the project's
+  # actual risk areas (Blazor/SignalR/.NET).
+  custom_instructions: |
+    Be thorough. Flag every issue including trivial ones — naming, readability,
+    null safety, async/await correctness, SignalR circuit state management,
+    IDisposable disposal patterns, and security (XSS, injection, secrets).
+    Do NOT limit yourself to critical issues; small polish nits are welcome
+    when they are factual, actionable, and tied to the changed code.
+
+    Project context:
+    - Blazor Server (.NET 10) chat app — components render on the server over
+      a SignalR circuit. State management bugs around circuit lifecycle are
+      high-value findings.
+    - OpenRouter is the LLM provider — flag any unguarded HTTP or streaming
+      cancellation issues.
+    - start-phone.sh is the only supported run entrypoint — bash hygiene
+      (quoting, traps, set -euo pipefail) matters.
+
+# Not enabled: ultrareview. It costs 3x per reviewed line and runs for ~30 min.
+# Reserve for security/auth/migration PRs by commenting @cubic-dev-ai ultrareview
+# on the PR when needed, rather than enabling globally here.

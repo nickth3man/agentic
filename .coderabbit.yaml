@@ -1,0 +1,75 @@
+# CodeRabbit configuration.
+# Docs: https://docs.coderabbit.ai/reference/configuration
+#
+# Key change vs. default: `request_changes_workflow: true` forces CodeRabbit to
+# submit a formal GitHub pull request review object (with inline annotations on
+# the diff) instead of just posting a walkthrough summary comment. With the
+# default (false), even ASSERTIVE profile produces 0 inline comments — exactly
+# what we observed on PRs #6 and #7 before this config landed.
+language: en-US
+
+reviews:
+  # Profile controls how many issues CodeRabbit will flag.
+  #   quiet     — only the most important feedback (real bugs)
+  #   chill     — balanced (default)
+  #   assertive — more feedback, including nits (level 8: dead code, null safety,
+  #               argument type checking, typehint checks)
+  profile: assertive
+
+  # THE key flag. Default false = only walkthrough summary, no formal review.
+  # True = submit a real PR review with inline annotations + state
+  # (COMMENT / APPROVE / REQUEST_CHANGES).
+  request_changes_workflow: true
+
+  # We already know what the PR does from the description; skip the redundant
+  # high-level summary and the poem to reduce noise.
+  high_level_summary: false
+  poem: false
+
+  # Show a "Review Status" indicator at the top of the review thread.
+  review_status: true
+
+  auto_review:
+    enabled: true
+    # Don't burn review quota on drafts — wait until the author marks ready.
+    # (Pairs well with .github/workflows/auto-ready.yml which auto-marks
+    # ready when CI passes.)
+    drafts: false
+    base_branches:
+      - main
+
+  # Per-path natural-language instructions appended to CodeRabbit's system
+  # prompt for files matching the glob. These are project-specific risk areas
+  # we want flagged consistently. Without them, the AI applies generic review
+  # criteria and may miss Blazor/.NET-specific patterns.
+  path_instructions:
+    - path: "**/*.cs"
+      instructions: |
+        Flag every instance of:
+        - Missing null checks before accessing parameters or fields
+        - Unawaited async calls (fire-and-forget without explicit intent)
+        - catch blocks that silently swallow exceptions
+        - Missing IDisposable on types that own disposable resources
+        - Public methods without XML doc comments
+        - Hardcoded secrets, connection strings, or API keys
+        - SignalR circuit lifecycle bugs (e.g., StateHasChanged after circuit death)
+        - Async void methods (except event handlers)
+    - path: "**/*.razor"
+      instructions: |
+        Flag every instance of:
+        - Missing @key on iterated component loops
+        - Inline styles that should be CSS classes
+        - Incorrect @bind usage (missing @bind:event when timing matters)
+        - Potential excessive re-renders (e.g., StateHasChanged in tight loops)
+        - Component parameters mutated from within the component
+    - path: "**/*.sh"
+      instructions: |
+        Flag every instance of:
+        - Missing `set -euo pipefail` or equivalent safety guards
+        - Unquoted variable expansions subject to word splitting
+        - Missing `trap` for cleanup on EXIT/INT/TERM
+        - Hardcoded paths that should be configurable
+
+# No tools.linters block: CodeRabbit's tool catalog has no C# linter, so
+# enabling linters here would be inert for this project. Revisit if/when
+# CodeRabbit ships a Roslyn/StyleCop integration.

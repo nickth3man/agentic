@@ -147,6 +147,21 @@ Don't casually modify `.coderabbit.yaml` or `cubic.yaml` without understanding
 the tradeoffs — see the commit history of those files for context on why each
 flag is set the way it is.
 
+## Issue → PR workflow (agent kit)
+
+A reusable, agent-agnostic workflow for resolving GitHub issues lives in
+`agents/` (two prompts + two `gh` scripts), with identical slash-command
+wrappers for Claude Code (`.claude/commands/`), Cursor (`.cursor/commands/`),
+and OpenCode (`.opencode/command/`):
+
+- `/fix-issue <number|url>` — read the issue, implement, verify, open a draft PR.
+- `/babysit-pr <number>` — resume later: classify CI failures and unresolved
+  review threads, fix (max 3 repair rounds) or escalate.
+
+Cross-session state lives in a `<!-- agent-state -->` comment on the PR, so any
+agent or human can resume. See `agents/README.md`; `agents/KIT.md` is a
+copy-paste bundle for other projects.
+
 ## Git workflow (PRs on `main`)
 
 `main` is protected: PRs required, no force-push, no deletion. CI runs three

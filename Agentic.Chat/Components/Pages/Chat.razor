@@ -25,9 +25,39 @@
                 <ModelPicker />
             </div>
         </div>
-        <div class="live-badge @(isBusy ? "is-live" : "")" aria-hidden="true">
-            <span class="live-dot"></span>
-            <span class="live-label">@(isBusy ? "Streaming" : "Ready")</span>
+        <div class="chat-header-actions">
+            @if (_confirmNewChat)
+            {
+                <div class="new-chat-confirm" role="group" aria-label="Confirm clear conversation"
+                     @onkeydown="OnNewChatConfirmKeyDown">
+                    <button type="button"
+                            class="new-chat-btn is-confirm"
+                            disabled="@isBusy"
+                            @onclick="ConfirmNewChatAsync">
+                        Clear?
+                    </button>
+                    <button type="button"
+                            class="new-chat-cancel"
+                            disabled="@isBusy"
+                            @onclick="CancelNewChatConfirm">
+                        Cancel
+                    </button>
+                </div>
+            }
+            else
+            {
+                <button type="button"
+                        class="new-chat-btn"
+                        disabled="@isBusy"
+                        @onclick="OnNewChatClickAsync"
+                        aria-label="New chat">
+                    New chat
+                </button>
+            }
+            <div class="live-badge @(isBusy ? "is-live" : "")" aria-hidden="true">
+                <span class="live-dot"></span>
+                <span class="live-label">@(isBusy ? "Streaming" : "Ready")</span>
+            </div>
         </div>
     </header>
 
@@ -116,6 +146,7 @@
         <div class="composer">
             <label class="visually-hidden" for="chat-input">Message</label>
             <input id="chat-input"
+                   @ref="_composerInput"
                    @bind="inputText"
                    @bind:event="oninput"
                    class="chat-input"
@@ -138,9 +169,67 @@
     private bool isBusy;
     private string? errorMessage;
     private string statusText = string.Empty;
+    private bool _confirmNewChat;
+    private ElementReference _composerInput;
 
     private static bool ShouldOpenThinking(ChatDisplayMessage message)
         => message.IsStreaming && string.IsNullOrEmpty(message.Content);
+
+    private async Task OnNewChatClickAsync()
+    {
+        if (isBusy)
+        {
+            return;
+        }
+
+        if (!ChatAgent.Messages.Any())
+        {
+            await PerformResetAsync();
+            return;
+        }
+
+        _confirmNewChat = true;
+    }
+
+    private async Task ConfirmNewChatAsync()
+    {
+        if (isBusy)
+        {
+            return;
+        }
+
+        await PerformResetAsync();
+    }
+
+    private void CancelNewChatConfirm()
+    {
+        _confirmNewChat = false;
+    }
+
+    private void OnNewChatConfirmKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _confirmNewChat = false;
+        }
+    }
+
+    private async Task PerformResetAsync()
+    {
+        ChatAgent.Reset();
+        _confirmNewChat = false;
+        errorMessage = null;
+        statusText = string.Empty;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await _composerInput.FocusAsync();
+        }
+        catch
+        {
+            /* focus failure is non-fatal */
+        }
+    }
 
     private async Task SendAsync()
     {
@@ -152,6 +241,7 @@
         var text = inputText;
         inputText = string.Empty;
         errorMessage = null;
+        _confirmNewChat = false;
         isBusy = true;
         statusText = "Assistant is responding";
 

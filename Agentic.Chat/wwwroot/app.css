@@ -258,6 +258,81 @@ body {
     transition: border-color 0.3s, color 0.3s, background 0.3s;
 }
 
+.chat-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+}
+
+.new-chat-confirm {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.new-chat-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(10px);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.new-chat-btn:hover:not(:disabled) {
+    color: var(--teal-deep);
+    border-color: rgba(13, 124, 124, 0.35);
+    background: rgba(13, 124, 124, 0.08);
+}
+
+.new-chat-btn.is-confirm {
+    color: var(--copper);
+    border-color: rgba(196, 107, 46, 0.35);
+    background: rgba(243, 220, 200, 0.55);
+}
+
+.new-chat-btn:disabled,
+.new-chat-cancel:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.new-chat-btn:focus-visible,
+.new-chat-cancel:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.new-chat-cancel {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.55rem;
+    border-radius: 999px;
+    background: transparent;
+    border: 1px solid transparent;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.new-chat-cancel:hover:not(:disabled) {
+    color: var(--ink-soft);
+    border-color: var(--line);
+}
+
 .live-dot {
     width: 0.5rem;
     height: 0.5rem;
@@ -738,7 +813,7 @@ body {
         grid-template-rows: auto auto;
     }
 
-    .live-badge {
+    .chat-header-actions {
         grid-column: 2;
         justify-self: start;
     }

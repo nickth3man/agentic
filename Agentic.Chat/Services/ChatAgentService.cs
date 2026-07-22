@@ -24,6 +24,7 @@ public sealed class ChatAgentService
     [
         new { role = "system", content = "You are a helpful chat agent." }
     ];
+    private bool _streamActive;
 
     public ChatAgentService(
         IHttpClientFactory httpClientFactory,
@@ -41,122 +42,142 @@ public sealed class ChatAgentService
 
     public IReadOnlyList<ChatDisplayMessage> Messages => _displayMessages;
 
+    public void Reset()
+    {
+        if (_streamActive)
+        {
+            return;
+        }
+
+        _displayMessages.Clear();
+        _apiMessages.Clear();
+        _apiMessages.Add(new { role = "system", content = "You are a helpful chat agent." });
+    }
+
     public async IAsyncEnumerable<ChatDisplayMessage> SendStreamingAsync(
         string userText,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userText);
 
-        var trimmed = userText.Trim();
-        _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
-        _apiMessages.Add(new { role = "user", content = trimmed });
-
-        var assistant = new ChatDisplayMessage
+        _streamActive = true;
+        try
         {
-            Role = "assistant",
-            IsStreaming = true
-        };
-        _displayMessages.Add(assistant);
-        yield return assistant;
+            var trimmed = userText.Trim();
+            _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
+            _apiMessages.Add(new { role = "user", content = trimmed });
 
-        _logger.LogInformation(
-            "Streaming chat completion with {MessageCount} message(s) in transcript",
-            _apiMessages.Count);
+            var assistant = new ChatDisplayMessage
+            {
+                Role = "assistant",
+                IsStreaming = true
+            };
+            _displayMessages.Add(assistant);
+            yield return assistant;
 
-        var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
-        var modelInfo = await _modelCatalog
-            .FindByIdAsync(modelId, cancellationToken)
-            .ConfigureAwait(false);
+            _logger.LogInformation(
+                "Streaming chat completion with {MessageCount} message(s) in transcript",
+                _apiMessages.Count);
 
-        var requestBody = new Dictionary<string, object?>
-        {
-            ["model"] = modelId,
-            ["messages"] = _apiMessages,
-            ["stream"] = true
-        };
-        if (modelInfo?.SupportsReasoning == true)
-        {
-            requestBody["reasoning"] = new { enabled = true, exclude = false };
-        }
+            var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
+            var modelInfo = await _modelCatalog
+                .FindByIdAsync(modelId, cancellationToken)
+                .ConfigureAwait(false);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
-        {
-            Content = new StringContent(JsonSerializer.Serialize(requestBody, JsonOptions), Encoding.UTF8, "application/json")
-        };
+            var requestBody = new Dictionary<string, object?>
+            {
+                ["model"] = modelId,
+                ["messages"] = _apiMessages,
+                ["stream"] = true
+            };
+            if (modelInfo?.SupportsReasoning == true)
+            {
+                requestBody["reasoning"] = new { enabled = true, exclude = false };
+            }
 
-        using var response = await _httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(requestBody, JsonOptions), Encoding.UTF8, "application/json")
+            };
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                assistant.IsStreaming = false;
+                assistant.Content = $"(Error {(int)response.StatusCode}: {Truncate(errorBody, 300)})";
+                yield return assistant;
+                yield break;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var reader = new StreamReader(stream);
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var line = await reader.ReadLineAsync(cancellationToken);
+                if (line is null)
+                {
+                    break;
+                }
+
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                if (!line.StartsWith("data:", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var payload = line["data:".Length..].Trim();
+                if (payload is "[DONE]")
+                {
+                    break;
+                }
+
+                if (!TryApplyDelta(payload, assistant))
+                {
+                    continue;
+                }
+
+                yield return assistant;
+            }
+
             assistant.IsStreaming = false;
-            assistant.Content = $"(Error {(int)response.StatusCode}: {Truncate(errorBody, 300)})";
-            yield return assistant;
-            yield break;
-        }
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var reader = new StreamReader(stream);
-
-        while (true)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var line = await reader.ReadLineAsync(cancellationToken);
-            if (line is null)
+            if (string.IsNullOrWhiteSpace(assistant.Content) && string.IsNullOrWhiteSpace(assistant.Reasoning))
             {
-                break;
+                assistant.Content = "(No response content returned.)";
             }
 
-            if (string.IsNullOrWhiteSpace(line))
+            // Keep assistant content (+ reasoning when present) in the API transcript for multi-turn continuity.
+            if (!string.IsNullOrWhiteSpace(assistant.Reasoning))
             {
-                continue;
+                _apiMessages.Add(new
+                {
+                    role = "assistant",
+                    content = assistant.Content,
+                    reasoning = assistant.Reasoning
+                });
             }
-
-            if (!line.StartsWith("data:", StringComparison.Ordinal))
+            else
             {
-                continue;
-            }
-
-            var payload = line["data:".Length..].Trim();
-            if (payload is "[DONE]")
-            {
-                break;
-            }
-
-            if (!TryApplyDelta(payload, assistant))
-            {
-                continue;
+                _apiMessages.Add(new { role = "assistant", content = assistant.Content });
             }
 
             yield return assistant;
         }
-
-        assistant.IsStreaming = false;
-
-        if (string.IsNullOrWhiteSpace(assistant.Content) && string.IsNullOrWhiteSpace(assistant.Reasoning))
+        finally
         {
-            assistant.Content = "(No response content returned.)";
+            _streamActive = false;
         }
-
-        // Keep assistant content (+ reasoning when present) in the API transcript for multi-turn continuity.
-        if (!string.IsNullOrWhiteSpace(assistant.Reasoning))
-        {
-            _apiMessages.Add(new
-            {
-                role = "assistant",
-                content = assistant.Content,
-                reasoning = assistant.Reasoning
-            });
-        }
-        else
-        {
-            _apiMessages.Add(new { role = "assistant", content = assistant.Content });
-        }
-
-        yield return assistant;
     }
 
     internal static bool TryApplyDelta(string payload, ChatDisplayMessage assistant)

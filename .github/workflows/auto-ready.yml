@@ -20,7 +20,9 @@ on:
 
 permissions:
   pull-requests: write   # required for markPullRequestReadyForReview
-  contents: read
+  contents: write        # also required by markPullRequestReadyForReview — with
+                         # contents: read the mutation fails FORBIDDEN
+                         # ("Resource not accessible by integration")
 
 jobs:
   ready:

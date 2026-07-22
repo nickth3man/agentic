@@ -147,20 +147,22 @@ Don't casually modify `.coderabbit.yaml` or `cubic.yaml` without understanding
 the tradeoffs — see the commit history of those files for context on why each
 flag is set the way it is.
 
-## Issue → PR workflow (agent kit)
+## Issue → PR workflow (agent skills)
 
-A reusable, agent-agnostic workflow for resolving GitHub issues lives in
-`agents/` (two prompts + two `gh` scripts), with identical slash-command
-wrappers for Claude Code (`.claude/commands/`), Cursor (`.cursor/commands/`),
-and OpenCode (`.opencode/command/`):
+Two machine-level Agent Skills (open standard, agentskills.io) drive the
+issue-resolution loop in OpenCode, Claude Code, and Cursor — nothing is stored
+in this repo:
 
-- `/fix-issue <number|url>` — read the issue, implement, verify, open a draft PR.
-- `/babysit-pr <number>` — resume later: classify CI failures and unresolved
-  review threads, fix (max 3 repair rounds) or escalate.
+- `/fix-issue <number|url>` — read the issue, discover conventions, reproduce,
+  implement, verify, open a draft PR, post a state comment.
+- `/babysit-pr <number>` — resume any PR: classify CI failures and unresolved
+  review threads, repair (max 3 rounds) or escalate.
 
-Cross-session state lives in a `<!-- agent-state -->` comment on the PR, so any
-agent or human can resume. See `agents/README.md`; `agents/KIT.md` is a
-copy-paste bundle for other projects.
+Canonical skills: `~/.config/opencode/skills/{fix-issue,babysit-pr}/` (proxied
+into `~/.claude/skills/` and `~/.agents/skills/`; commands installed per
+agent). Cross-session state lives in a `<!-- agent-state -->` comment on the
+PR, so any agent or human can resume. Portable copies:
+`~/Documents/GitHub/skills/`.
 
 ## Git workflow (PRs on `main`)
 

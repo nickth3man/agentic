@@ -5,7 +5,7 @@ Guidance for AI agents (and humans) working in this repo.
 ## What this is
 
 **Agentic.Chat** — a Blazor Server (.NET 10) chat app backed by the OpenRouter API.
-It runs via `start-phone.sh`, which starts the app with `dotnet watch` (hot reload) and exposes it to a phone via a Cloudflare quick tunnel.
+It runs via `start-phone.sh`, which starts the app with `dotnet watch` (hot reload) and exposes it to a phone via a Cloudflare quick tunnel. Users pick models via a ModelPicker UI; selection persists across sessions via `ProtectedLocalStorage`.
 
 - `Agentic.Chat/` — the web app (entry point: `Program.cs`)
 - `Agentic.Chat.Tests/` — xUnit test project
@@ -109,20 +109,59 @@ Gotchas learned the hard way:
 dotnet test              # or: dotnet test -c Release (see hard rule 2)
 ```
 
-Tests are xUnit in `Agentic.Chat.Tests/`. Add one `[Fact]` class per concern,
+The .NET tests are xUnit in `Agentic.Chat.Tests/`. Add one `[Fact]` class per concern,
 named `<Thing>Tests.cs`. There is no test DB or network mocking yet — keep tests
 fast and hermetic (no OpenRouter calls).
 
+Additional test suites (run as separate CI jobs, not part of `dotnet test`):
+
+- `tests/start-phone/` — bash suite for `start-phone.sh` lifecycle, logging, and
+  error paths. Run locally with `bash tests/start-phone/run-tests.sh`. Uses no
+  external test framework (no bats); plain bash with assertions in `lib/assertions.sh`.
+- `tests/playwright/` — Playwright browser suite for the Blazor reconnect UI.
+  Run locally with `cd tests/playwright && npm install && npm test`. Auto-starts
+  the app via `dotnet run` on port 5123 with a fake `OPENROUTER_API_KEY`.
+
+## AI reviewers
+
+Three AI code reviewers run on every PR: **CodeRabbit**, **Sourcery**, and **cubic**.
+All three are advisory — none block merge.
+
+Configuration:
+
+- `.coderabbit.yaml` (in-repo) — `request_changes_workflow: true` forces inline
+  annotations instead of summary-only output; `path_instructions` add C#/.razor/.sh-
+  specific risk areas (null safety, async, SignalR circuit lifecycle, dispose
+  patterns, bash hygiene).
+- `cubic.yaml` (in-repo) — `sensitivity: high` enables thorough inline feedback;
+  `custom_instructions` inject Blazor/SignalR/.NET project context.
+- Sourcery — AI review config is dashboard-only at
+  [app.sourcery.ai/dashboard/review-settings](https://app.sourcery.ai/dashboard/review-settings).
+  No in-repo YAML exists.
+
+The PR template's `## Review focus` section is parsed by CodeRabbit and cubic as
+per-PR guidance that adds to the config-file instructions. Use it on PRs with
+specific concerns; delete the section on PRs where it doesn't apply.
+
+Don't casually modify `.coderabbit.yaml` or `cubic.yaml` without understanding
+the tradeoffs — see the commit history of those files for context on why each
+flag is set the way it is.
+
 ## Git workflow (PRs on `main`)
 
-`main` is protected: PRs required, no force-push, no deletion. CI (build + test)
-must be green to merge.
+`main` is protected: PRs required, no force-push, no deletion. CI runs three
+parallel jobs — `test` (xUnit on ubuntu-latest), `start-phone-tests` (bash suite
+on windows-latest; installs `cloudflared` explicitly since it's not preinstalled),
+`playwright-tests` (browser suite on ubuntu-latest). All three must pass to merge.
+AI reviewer checks (CodeRabbit / Sourcery / cubic) are advisory and do not block.
 
 ```bash
 git checkout -b feat/short-name          # or fix/, chore/, docs/
 # ...work, commit early...
 git push -u origin feat/short-name
 gh pr create --draft                     # fill in What / Why / How tested
+                                         # (.github/workflows/auto-ready.yml
+                                         #  auto-promotes to ready when CI passes)
 # review the diff: gh pr diff   (or ask an agent to review the PR)
 gh pr merge --squash --delete-branch
 git checkout main && git pull --prune
@@ -132,3 +171,8 @@ git checkout main && git pull --prune
 - "How tested" needs evidence (test output, HTTP checks), not intentions.
 - Trivial docs/typo fixes may go straight to `main` only if protection allows —
   prefer a PR anyway; it costs a minute.
+- **Auto-ready**: drafts auto-promote to "ready for review" when CI completes
+  successfully. So `gh pr create --draft` is "fire and forget" — you don't have
+  to come back and `gh pr ready` manually. Caveat: `workflow_run` events use the
+  workflow file from `main`, so the auto-ready behavior only applies to PRs
+  opened AFTER the workflow file itself landed on `main`.

@@ -93,56 +93,17 @@ fail()  {
   exit 1
 }
 
-# Send all subsequent stdout/stderr to BOTH the inherited destination (terminal,
-# or wherever the caller redirected) AND $SCRIPT_LOG. Agents can run this script
-# with no redirection at all and still recover the full run narrative afterwards
-# from logs/start-phone/<run>/script.log.
-exec > >(tee "$SCRIPT_LOG") 2>&1
-
-info "Run ID: $RUN_ID"
-info "Log dir: $LOG_DIR"
-info "Started at: $START_TIME"
-
 # ---------------------------------------------------------------------------
-# 1. OPENROUTER_API_KEY — must be present; never printed or persisted.
-# ---------------------------------------------------------------------------
-if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-  # Git Bash sessions started before the var was set won't inherit it; pull it
-  # from the Windows User (then Machine) environment without displaying it.
-  for scope in User Machine; do
-    val="$(powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('OPENROUTER_API_KEY','$scope')" 2>/dev/null | tr -d '\r' || true)"
-    if [[ -n "$val" ]]; then
-      export OPENROUTER_API_KEY="$val"
-      info "OPENROUTER_API_KEY loaded from Windows $scope environment (value not shown)."
-      break
-    fi
-  done
-fi
-[[ -n "${OPENROUTER_API_KEY:-}" ]] || fail "api_key_missing" "OPENROUTER_API_KEY is not set. Set it as a Windows User environment variable (or export it) and re-run."
-unset val
-
-# ---------------------------------------------------------------------------
-# 2. Prerequisites
-# ---------------------------------------------------------------------------
-command -v dotnet      >/dev/null 2>&1 || fail "prereq_missing" "dotnet not found on PATH. Install the .NET SDK and re-run."
-command -v cloudflared >/dev/null 2>&1 || fail "prereq_missing" "cloudflared not found on PATH. Install cloudflared (https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) and re-run."
-
-# ---------------------------------------------------------------------------
-# 3. Port check — REFUSE if occupied. dotnet watch owns 5123 for the whole session.
+# Helper functions — defined EARLY (before any check that can call fail()) so
+# the EXIT trap can fire safely on every exit path: api_key_missing,
+# prereq_missing, port_occupied, app_startup_failed, SIGTERM, normal exit.
+# Under `set -euo pipefail`, calling an undefined function from inside a trap
+# crashes the trap itself, so all helpers must exist before the trap is set.
 # ---------------------------------------------------------------------------
 listener_pid() {
   netstat -ano 2>/dev/null | grep 'LISTENING' | grep -E "[:.]$APP_PORT[[:space:]]" | awk '{print $NF}' | head -1
 }
 
-existing_pid="$(listener_pid || true)"
-if [[ -n "$existing_pid" ]]; then
-  pname="$(powershell -NoProfile -Command "(Get-Process -Id $existing_pid -ErrorAction SilentlyContinue).ProcessName" 2>/dev/null | tr -d '\r' || true)"
-  fail "port_occupied" "Port $APP_PORT is already occupied by '$pname' (PID $existing_pid). start-phone.sh uses dotnet watch and must own the port for the whole session. Free it yourself (taskkill //PID $existing_pid //T //F) and re-run."
-fi
-
-# ---------------------------------------------------------------------------
-# 4. Cleanup — kill both process trees, write meta.json, guarantee the port is freed.
-# ---------------------------------------------------------------------------
 winpid_of() { cat "/proc/$1/winpid" 2>/dev/null || true; }
 
 kill_tree() {
@@ -187,17 +148,78 @@ cleanup() {
   kill_tree "$TUNNEL_PID"
   kill_tree "$APP_PID"
   sleep 2
-  # Safety net: nothing may remain bound to the port.
-  local leftover; leftover="$(listener_pid || true)"
-  if [[ -n "$leftover" ]]; then
-    taskkill //PID "$leftover" //T //F >/dev/null 2>&1 || true
+  # Safety net: nothing may remain bound to the port. ONLY run if we actually
+  # started the app (APP_PID is set). Without this guard, an early fail() path
+  # (api_key_missing / prereq_missing / port_occupied) would taskkill a process
+  # the script never started — e.g., the test's dummy listener, or in production
+  # another developer's concurrent start-phone.sh instance.
+  if [[ -n "$APP_PID" ]]; then
+    local leftover; leftover="$(listener_pid || true)"
+    if [[ -n "$leftover" ]]; then
+      taskkill //PID "$leftover" //T //F >/dev/null 2>&1 || true
+    fi
   fi
   write_meta
   info "Stopped. Port $APP_PORT freed; tunnel URL no longer serves."
   info "Run artifacts: $LOG_DIR  (script.log, app.log, tunnel.log, meta.json)"
   info "Latest run marker: $LOGS_ROOT/LATEST  (contains: $RUN_ID)"
 }
+
+# Send all subsequent stdout/stderr to BOTH the inherited destination (terminal,
+# or wherever the caller redirected) AND $SCRIPT_LOG. Agents can run this script
+# with no redirection at all and still recover the full run narrative afterwards
+# from logs/start-phone/<run>/script.log.
+exec > >(tee "$SCRIPT_LOG") 2>&1
+
+# Register the EXIT trap NOW — after the exec redirect (so cleanup output flows
+# to script.log) but BEFORE any check that can call fail() (api_key / prereq /
+# port checks below). This guarantees meta.json is written on every exit path,
+# including early fail() exits that previously missed cleanup entirely because
+# the trap wasn't registered yet.
 trap cleanup INT TERM EXIT
+
+info "Run ID: $RUN_ID"
+info "Log dir: $LOG_DIR"
+info "Started at: $START_TIME"
+
+# ---------------------------------------------------------------------------
+# 1. OPENROUTER_API_KEY — must be present; never printed or persisted.
+# ---------------------------------------------------------------------------
+if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+  # Git Bash sessions started before the var was set won't inherit it; pull it
+  # from the Windows User (then Machine) environment without displaying it.
+  for scope in User Machine; do
+    val="$(powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('OPENROUTER_API_KEY','$scope')" 2>/dev/null | tr -d '\r' || true)"
+    if [[ -n "$val" ]]; then
+      export OPENROUTER_API_KEY="$val"
+      info "OPENROUTER_API_KEY loaded from Windows $scope environment (value not shown)."
+      break
+    fi
+  done
+fi
+[[ -n "${OPENROUTER_API_KEY:-}" ]] || fail "api_key_missing" "OPENROUTER_API_KEY is not set. Set it as a Windows User environment variable (or export it) and re-run."
+unset val
+
+# ---------------------------------------------------------------------------
+# 2. Prerequisites
+# ---------------------------------------------------------------------------
+command -v dotnet      >/dev/null 2>&1 || fail "prereq_missing" "dotnet not found on PATH. Install the .NET SDK and re-run."
+command -v cloudflared >/dev/null 2>&1 || fail "prereq_missing" "cloudflared not found on PATH. Install cloudflared (https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) and re-run."
+
+# ---------------------------------------------------------------------------
+# 3. Port check — REFUSE if occupied. dotnet watch owns 5123 for the whole session.
+# ---------------------------------------------------------------------------
+existing_pid="$(listener_pid || true)"
+if [[ -n "$existing_pid" ]]; then
+  pname="$(powershell -NoProfile -Command "(Get-Process -Id $existing_pid -ErrorAction SilentlyContinue).ProcessName" 2>/dev/null | tr -d '\r' || true)"
+  fail "port_occupied" "Port $APP_PORT is already occupied by '$pname' (PID $existing_pid). start-phone.sh uses dotnet watch and must own the port for the whole session. Free it yourself (taskkill //PID $existing_pid //T //F) and re-run."
+fi
+
+# ---------------------------------------------------------------------------
+# 4. (Helpers and trap were hoisted above — see "Helper functions" section
+#     right after fail(). This keeps the EXIT trap registered before any
+#     fail()-reachable check, so meta.json is written on every exit path.)
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # 5. Start dotnet watch (hot reload) in the background and wait for the app.

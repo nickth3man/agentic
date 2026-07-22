@@ -162,8 +162,11 @@ else
     START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))
     REASON=$(meta_field "$RUN_DIR" "exit_reason")
     assert_eq "api_key_missing" "$REASON" "meta.json .exit_reason is 'api_key_missing'"
-    # app_pid and tunnel_pid should both be null (never got that far)
-    APP_PID_VAL=$(jq -r '.app_pid // "MISSING"' "$RUN_DIR/meta.json" 2>/dev/null || echo "JQ_MISSING")
+    # meta.json .app_pid should be null (script never reached app startup).
+    # NOTE: do NOT use jq's `// "MISSING"` fallback here — jq treats JSON null as
+    # falsey and would return the fallback. Use plain `.app_pid`; jq -r outputs
+    # the literal string "null" for JSON null, which is what we want to compare.
+    APP_PID_VAL=$(jq -r '.app_pid' "$RUN_DIR/meta.json" 2>/dev/null || echo "JQ_MISSING")
     if [[ "$APP_PID_VAL" == "null" ]]; then
       printf '  \u2713 meta.json .app_pid is null (script never reached app startup)\n'
       START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))

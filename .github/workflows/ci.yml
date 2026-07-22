@@ -42,6 +42,14 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Install cloudflared (not preinstalled on windows-latest)
+        run: |
+          # The script uses cloudflared for the tunnel; windows-latest doesn't ship it.
+          # Download the standalone .exe into Git Bash's /usr/bin so it's on PATH.
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -o /usr/bin/cloudflared.exe
+          chmod +x /usr/bin/cloudflared.exe
+          cloudflared --version
+
       - name: bash syntax check (priority 1)
         run: bash -n start-phone.sh
 

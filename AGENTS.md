@@ -147,6 +147,23 @@ Don't casually modify `.coderabbit.yaml` or `cubic.yaml` without understanding
 the tradeoffs — see the commit history of those files for context on why each
 flag is set the way it is.
 
+## Issue → PR workflow (agent skills)
+
+Two machine-level Agent Skills (open standard, agentskills.io) drive the
+issue-resolution loop in OpenCode, Claude Code, and Cursor — nothing is stored
+in this repo:
+
+- `/fix-issue <number|url>` — read the issue, discover conventions, reproduce,
+  implement, verify, open a draft PR, post a state comment.
+- `/babysit-pr <number>` — resume any PR: classify CI failures and unresolved
+  review threads, repair (max 3 rounds) or escalate.
+
+Canonical skills: `~/.config/opencode/skills/{fix-issue,babysit-pr}/` (proxied
+into `~/.claude/skills/` and `~/.agents/skills/`; commands installed per
+agent). Cross-session state lives in a `<!-- agent-state -->` comment on the
+PR, so any agent or human can resume. Portable copies:
+`~/Documents/GitHub/skills/`.
+
 ## Git workflow (PRs on `main`)
 
 `main` is protected: PRs required, no force-push, no deletion. CI runs three

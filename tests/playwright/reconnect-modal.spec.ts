@@ -35,9 +35,18 @@ async function dispatchReconnectState(page: Page, state: string): Promise<void> 
 test.describe('ReconnectModal state handler', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/chat');
-    // Wait for Blazor to mount the reconnect modal. The handler is registered by
-    // ReconnectModal.razor.js (loaded as a module after the element exists).
-    await page.waitForSelector('#components-reconnect-modal', { timeout: 15_000 });
+    // Wait for Blazor to mount the reconnect modal element. CRITICAL: use
+    // `state: 'attached'`, NOT the default `'visible'`. The element is a
+    // <dialog> in the App.razor layout — it is always present in the DOM but
+    // only becomes visible when Blazor actually loses the SignalR circuit.
+    // On a healthy connection (which is what these tests simulate), the dialog
+    // stays hidden, so waitForSelector with default state would time out.
+    // We only need the element to exist so the ReconnectModal.razor.js handler
+    // has registered its event listener on it.
+    await page.waitForSelector('#components-reconnect-modal', {
+      state: 'attached',
+      timeout: 15_000,
+    });
   });
 
   test("'resume-failed' state triggers location.reload()", async ({ page }) => {

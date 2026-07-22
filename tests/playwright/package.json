@@ -1,0 +1,16 @@
+{
+  "name": "agentic-chat-playwright-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright browser tests for the Blazor Server reconnect UI (ReconnectModal.razor.js). Priority 4 of the start-phone.sh test plan.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "install-browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

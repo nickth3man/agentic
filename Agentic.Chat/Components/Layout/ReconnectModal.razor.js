@@ -15,7 +15,10 @@ function handleReconnectStateChanged(event) {
         reconnectModal.close();
     } else if (event.detail.state === "failed") {
         document.addEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
-    } else if (event.detail.state === "rejected") {
+    } else if (event.detail.state === "rejected" || event.detail.state === "resume-failed") {
+        // "resume-failed" is a .NET 10.0.0 GA state that fires after a server restart
+        // instead of "rejected". Fixed upstream in .NET 10.0.2 (dotnet/aspnetcore#64228);
+        // this branch is redundant after upgrade but harmless.
         location.reload();
     }
 }

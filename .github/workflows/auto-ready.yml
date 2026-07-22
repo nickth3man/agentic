@@ -3,7 +3,7 @@ name: Auto ready for review
 # When the CI workflow completes successfully on a PR, automatically mark the
 # matching PR as ready for review. Native GitHub has no built-in "auto-ready on
 # green CI" toggle, so this workflow implements it via the workflow_run trigger
-# + the markAsReadyForReview REST endpoint.
+# + POST /repos/{owner}/{repo}/pulls/{pull_number}/ready_for_review.
 #
 # IMPORTANT: workflow_run events ALWAYS run against the workflow file on the
 # default branch (main), regardless of which branch the run is for. This is a
@@ -50,9 +50,15 @@ jobs:
               core.info(`PR #${pr.number} is authored by a bot (${pr.user.login}); leaving as draft.`);
               return;
             }
-            await github.rest.pulls.markAsReadyForReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-            });
+            // github.rest.pulls.markAsReadyForReview is missing from the
+            // @octokit/rest bundle shipped with actions/github-script@v7
+            // (TypeError: not a function). Call the REST route via request().
+            await github.request(
+              'POST /repos/{owner}/{repo}/pulls/{pull_number}/ready_for_review',
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+              },
+            );
             core.info(`PR #${pr.number} marked ready for review (CI green).`);

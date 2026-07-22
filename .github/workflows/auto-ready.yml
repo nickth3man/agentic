@@ -1,0 +1,58 @@
+name: Auto ready for review
+
+# When the CI workflow completes successfully on a PR, automatically mark the
+# matching PR as ready for review. Native GitHub has no built-in "auto-ready on
+# green CI" toggle, so this workflow implements it via the workflow_run trigger
+# + the markAsReadyForReview REST endpoint.
+#
+# IMPORTANT: workflow_run events ALWAYS run against the workflow file on the
+# default branch (main), regardless of which branch the run is for. This is a
+# GitHub security guarantee. So this file only takes effect after it lands on
+# main — it will NOT trigger for the PR that adds it.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  pull-requests: write   # required for markAsReadyForReview
+  contents: read
+
+jobs:
+  ready:
+    runs-on: ubuntu-latest
+    # Only on success — skip when CI failed/cancelled/skipped.
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            // Find the open PR whose head SHA matches this CI run.
+            const headSha = context.payload.workflow_run.head_sha;
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+            });
+            const pr = prs.find(p => p.head.sha === headSha);
+            if (!pr) {
+              core.info(`No open PR matches head SHA ${headSha} — likely a push to main. Skipping.`);
+              return;
+            }
+            if (!pr.draft) {
+              core.info(`PR #${pr.number} is already non-draft. Nothing to do.`);
+              return;
+            }
+            // Skip bot-authored PRs (dependabot, etc.) — they usually want a human
+            // reviewer to opt in before going ready.
+            if (pr.user.type === 'Bot') {
+              core.info(`PR #${pr.number} is authored by a bot (${pr.user.login}); leaving as draft.`);
+              return;
+            }
+            await github.rest.pulls.markAsReadyForReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+            core.info(`PR #${pr.number} marked ready for review (CI green).`);

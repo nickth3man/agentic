@@ -1,0 +1,32 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+
+  // Maximum automation: every dependency (nuget, npm, github-actions are all
+  // auto-detected), every semver level, merged automatically once CI is green.
+  extends: [
+    "config:recommended",
+  ],
+
+  // Auto-merge everything — including major bumps — via GitHub's native
+  // auto-merge, so branch protection's required CI checks stay the merge gate.
+  automerge: true,
+  major: { automerge: true },
+  platformAutomerge: true,
+
+  // No cooldown: propose new versions the moment they publish (Renovate's
+  // default — there is no minimumReleaseAge/stabilityDays holdback here).
+
+  // Open update PRs as fast as possible, with no throttling.
+  prCreation: "immediate",
+  prConcurrentLimit: 0,
+  prHourlyLimit: 0,
+
+  // Also keep digests (e.g. pinned action SHAs) and lockfiles current.
+  lockFileMaintenance: {
+    enabled: true,
+    automerge: true,
+  },
+
+  // Single tracking issue listing everything Renovate manages.
+  dependencyDashboard: true,
+}

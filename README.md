@@ -5,19 +5,24 @@ Minimal Blazor chat agent that talks to OpenRouter with an in-memory rolling con
 ## Requirements
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- Environment variable `OPENROUTER_API_KEY` (never commit this)
+- [cloudflared](https://github.com/cloudflare/cloudflared) on PATH
+- Git Bash (Windows) or any bash shell (macOS/Linux)
+- Environment variable `OPENROUTER_API_KEY` (never commit this; can be set as a Windows User env var — the script auto-loads it from the registry)
 
 ## Run
 
 ```bash
-export OPENROUTER_API_KEY=sk-or-v1-...   # Windows Git Bash / macOS / Linux
-# or: set OPENROUTER_API_KEY=sk-or-v1-...  # Windows cmd
-# or: $env:OPENROUTER_API_KEY="sk-or-v1-..."  # PowerShell
-
-dotnet run --project Agentic.Chat
+bash start-phone.sh
 ```
 
-Open the URL shown in the console (typically `https://localhost:7xxx`) and use the chat page.
+The script starts the app on `http://localhost:5123` with hot reload enabled and
+brings up a Cloudflare tunnel for phone access. It prints two URLs:
+- Local: `http://localhost:5123/chat`
+- Phone: `https://*.trycloudflare.com`
+
+Edit any file — both browsers update live (Razor markup, C# method bodies, CSS).
+Rude edits (`Program.cs`, new `.razor` file) restart the server; both browsers
+auto-reload and the phone URL stays the same.
 
 ## Access from your phone (remote)
 
@@ -40,22 +45,14 @@ The chat normally only works on your PC. A **tunnel** creates a temporary link f
 
 ### On the PC (every time you want phone access)
 
-1. In PowerShell, set your API key and start the chat on HTTP (leave this window open):
+1. In Git Bash, run the single start script (leave the window open):
 
-   ```powershell
-   $env:OPENROUTER_API_KEY="sk-or-v1-..."
-   dotnet run --project Agentic.Chat --launch-profile http
+   ```bash
+   bash start-phone.sh
    ```
 
-   Wait until it is listening on `http://localhost:5123`.
-
-2. Open a **second** PowerShell window and start the tunnel:
-
-   ```powershell
-   cloudflared tunnel --url http://localhost:5123
-   ```
-
-3. Copy the printed URL that looks like `https://….trycloudflare.com`.
+2. Wait for the `PHONE LINK` line — copy the `https://….trycloudflare.com` URL.
+3. Open it on your phone. Both the local browser and the phone update live when you edit files.
 
 ### On the phone
 
@@ -67,9 +64,8 @@ The chat normally only works on your PC. A **tunnel** creates a temporary link f
 
 ### When you are done
 
-1. In the tunnel window, press `Ctrl+C` so the phone link stops working.
-2. Optionally stop the chat app the same way in the first window.
-3. Do not leave the tunnel running unattended if you care about API spend.
+1. In the Git Bash window, press `Ctrl+C` — stops both the app and the tunnel together.
+2. Do not leave the tunnel running unattended if you care about API spend.
 
 ## Config
 

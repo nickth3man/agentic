@@ -150,6 +150,8 @@ body {
 
 /* ─── Brand header ─── */
 .chat-brand {
+    position: relative;
+    z-index: 10;
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;

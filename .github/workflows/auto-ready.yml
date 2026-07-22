@@ -3,12 +3,15 @@ name: Auto ready for review
 # When the CI workflow completes successfully on a PR, automatically mark the
 # matching PR as ready for review. Native GitHub has no built-in "auto-ready on
 # green CI" toggle, so this workflow implements it via the workflow_run trigger
-# + the markAsReadyForReview REST endpoint.
+# + the GraphQL markPullRequestReadyForReview mutation.
 #
 # IMPORTANT: workflow_run events ALWAYS run against the workflow file on the
 # default branch (main), regardless of which branch the run is for. This is a
 # GitHub security guarantee. So this file only takes effect after it lands on
 # main — it will NOT trigger for the PR that adds it.
+#
+# Undrafting is GraphQL-only: POST /repos/.../pulls/{n}/ready_for_review returns
+# 404, and github.rest.pulls.markAsReadyForReview is missing from github-script@v7.
 
 on:
   workflow_run:
@@ -16,7 +19,7 @@ on:
     types: [completed]
 
 permissions:
-  pull-requests: write   # required for markAsReadyForReview
+  pull-requests: write   # required for markPullRequestReadyForReview
   contents: read
 
 jobs:
@@ -50,9 +53,12 @@ jobs:
               core.info(`PR #${pr.number} is authored by a bot (${pr.user.login}); leaving as draft.`);
               return;
             }
-            await github.rest.pulls.markAsReadyForReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-            });
+            await github.graphql(
+              `mutation($id: ID!) {
+                markPullRequestReadyForReview(input: {pullRequestId: $id}) {
+                  pullRequest { number isDraft }
+                }
+              }`,
+              { id: pr.node_id },
+            );
             core.info(`PR #${pr.number} marked ready for review (CI green).`);

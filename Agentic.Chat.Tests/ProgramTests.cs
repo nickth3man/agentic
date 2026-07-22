@@ -1,6 +1,8 @@
+using System.Collections;
 using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agentic.Chat.Tests;
@@ -64,6 +66,11 @@ public class ProgramTests
     public void Host_ThrowsWhenOpenRouterSectionMissing()
     {
         using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
+        // WebApplication.CreateBuilder's default environment-variable source binds
+        // `OpenRouter__Key` to the OpenRouter:* config section, so any such var (CI,
+        // dev shell, etc.) would populate the section and silently break the assertion.
+        // Snapshot and clear them for the duration of the test.
+        using var sectionEnvVars = EnvVarScope.ClearPrefix("OpenRouter__");
         using var factory = new SectionMissingFactory();
 
         var ex = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
@@ -122,6 +129,15 @@ public class ProgramTests
         {
             builder.UseEnvironment("Development");
             builder.UseContentRoot(_emptyContentRoot);
+            // Defense in depth against inherited config sources. Program.cs's section-
+            // missing throw fires before Build() so this ConfigureAppConfiguration
+            // callback does not run for the assertion path, but clearing here means a
+            // future refactor that delays the throw would still see an empty section.
+            builder.ConfigureAppConfiguration((_, cfg) =>
+            {
+                cfg.Sources.Clear();
+                cfg.AddInMemoryCollection();
+            });
             builder.ConfigureServices(services =>
             {
                 services.AddHttpClient("OpenRouter")
@@ -178,5 +194,39 @@ public class ProgramTests
         }
 
         public void Dispose() => Environment.SetEnvironmentVariable(_name, _original);
+    }
+
+    /// <summary>
+    /// RAII scope for clearing every environment variable whose name starts with a
+    /// given prefix (e.g. <c>OpenRouter__</c>), restoring each prior value (including
+    /// unset) on Dispose. Used to neutralize config-source contamination from CI /
+    /// dev shells that would otherwise bind into a config section under test.
+    /// </summary>
+    private sealed class EnvVarScope : IDisposable
+    {
+        private readonly Dictionary<string, string?> _snapshot = new();
+
+        private EnvVarScope() { }
+
+        public static EnvVarScope ClearPrefix(string prefix)
+        {
+            var scope = new EnvVarScope();
+            foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            {
+                if (entry.Key is not string key) continue;
+                if (!key.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                scope._snapshot[key] = Environment.GetEnvironmentVariable(key);
+                Environment.SetEnvironmentVariable(key, null);
+            }
+            return scope;
+        }
+
+        public void Dispose()
+        {
+            foreach (var kv in _snapshot)
+            {
+                Environment.SetEnvironmentVariable(kv.Key, kv.Value);
+            }
+        }
     }
 }

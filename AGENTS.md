@@ -164,6 +164,11 @@ agent). Cross-session state lives in a `<!-- agent-state -->` comment on the
 PR, so any agent or human can resume. Portable copies:
 `~/Documents/GitHub/skills/`.
 
+Humans: treat the `<!-- agent-state -->` comment as agent-owned — put requests
+and instructions in normal PR comments instead. Two safe interventions on a
+stuck PR: set its `Status:` line to `needs-human` (agents stop and wait), or
+delete the comment entirely (resets the loop and its attempt budget).
+
 ## Git workflow (PRs on `main`)
 
 `main` is protected: PRs required, no force-push, no deletion. CI runs three

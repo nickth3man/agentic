@@ -769,7 +769,519 @@ body {
     .empty-glyph .spark,
     .chat-bubble,
     .chat-brand,
-    .empty-state {
+    .empty-state,
+    .model-picker-popover,
+    .model-picker-spinner,
+    .model-picker-refresh .is-spinning {
         animation: none !important;
+    }
+}
+
+/* ─── Model picker ───
+   Visual language: extends the existing `.model-chip` aesthetic (teal pill,
+   JetBrains Mono code font) into a clickable trigger, and uses the same
+   frosted-glass treatment as `.composer` and `.chat-stage` for the popover.
+   No new color tokens introduced — everything references Signal Lab vars. */
+
+.model-picker {
+    position: relative;
+    display: inline-flex;
+    max-width: 100%;
+}
+
+/* Trigger button — replaces the static `.model-chip` in the header. */
+.model-picker-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 100%;
+    padding: 0.22rem 0.45rem 0.22rem 0.55rem;
+    border-radius: 0.45rem;
+    background: rgba(13, 124, 124, 0.1);
+    border: 1px solid rgba(13, 124, 124, 0.22);
+    color: var(--teal-deep);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.18s var(--ease-out),
+                border-color 0.18s var(--ease-out),
+                transform 0.12s var(--ease-out);
+}
+
+.model-picker-trigger:hover:not(:disabled) {
+    background: rgba(13, 124, 124, 0.16);
+    border-color: rgba(13, 124, 124, 0.38);
+}
+
+.model-picker-trigger:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.model-picker-trigger.is-open {
+    background: rgba(13, 124, 124, 0.18);
+    border-color: rgba(13, 124, 124, 0.42);
+}
+
+.model-picker-trigger:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.model-picker-trigger:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.model-picker-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 14rem;
+}
+
+.model-picker-chevron {
+    display: inline-flex;
+    align-items: center;
+    color: var(--teal);
+    opacity: 0.75;
+    transition: transform 0.2s var(--ease-out);
+}
+
+.model-picker-chevron svg {
+    width: 0.65rem;
+    height: 0.65rem;
+}
+
+.model-picker-trigger.is-open .model-picker-chevron,
+.model-picker-trigger[aria-expanded="true"] .model-picker-chevron {
+    transform: rotate(180deg);
+}
+
+/* Popover panel — frosted glass, floats above chat content. */
+.model-picker-popover {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 0;
+    width: min(640px, calc(100vw - 2rem));
+    z-index: 50;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    border-radius: 1rem;
+    box-shadow:
+        0 24px 60px rgba(20, 34, 42, 0.16),
+        0 0 0 1px var(--line);
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    overflow: hidden;
+    animation: popover-in 0.18s var(--ease-out) both;
+}
+
+@keyframes popover-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Search row — input + refresh button. */
+.model-picker-search-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(13, 124, 124, 0.05), transparent);
+}
+
+.model-picker-search-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ink-mute);
+    flex-shrink: 0;
+}
+
+.model-picker-search-icon svg {
+    width: 0.95rem;
+    height: 0.95rem;
+}
+
+.model-picker-search {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4rem 0;
+    border: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    color: var(--ink);
+    outline: none;
+}
+
+.model-picker-search::placeholder {
+    color: var(--ink-mute);
+}
+
+/* For browsers that render a clear button on [type=search], keep it tidy. */
+.model-picker-search::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.model-picker-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    flex-shrink: 0;
+    padding: 0;
+    border-radius: 0.5rem;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: background 0.18s var(--ease-out),
+                color 0.18s var(--ease-out),
+                border-color 0.18s var(--ease-out);
+}
+
+.model-picker-refresh:hover:not(:disabled) {
+    background: var(--copper-mist);
+    color: var(--copper);
+    border-color: rgba(196, 107, 46, 0.28);
+}
+
+.model-picker-refresh:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.model-picker-refresh:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.model-picker-refresh svg {
+    width: 0.95rem;
+    height: 0.95rem;
+}
+
+.model-picker-refresh .is-spinning {
+    animation: model-picker-spin 0.9s linear infinite;
+    transform-origin: center;
+}
+
+@keyframes model-picker-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Table container — vertical scroll for long lists, horizontal scroll safety net. */
+.model-picker-table-wrap {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+.model-picker-table-wrap::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.model-picker-table-wrap::-webkit-scrollbar-thumb {
+    background: rgba(61, 83, 96, 0.22);
+    border-radius: 8px;
+}
+
+/* Column-driven table layout so header and body stay aligned. */
+.model-picker-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.model-picker-table colgroup .col-w-provider { width: 92px; }
+.model-picker-table colgroup .col-w-input { width: 78px; }
+.model-picker-table colgroup .col-w-output { width: 78px; }
+.model-picker-table colgroup .col-w-context { width: 60px; }
+.model-picker-table colgroup .col-w-added { width: 78px; }
+
+.model-picker-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(238, 243, 245, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 0;
+    text-align: left;
+    font-weight: 600;
+}
+
+.model-picker-head {
+    display: block;
+    width: 100%;
+    padding: 0.55rem 0.55rem;
+    background: transparent;
+    border: none;
+    color: var(--ink-soft);
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.15s var(--ease-out),
+                background 0.15s var(--ease-out);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.model-picker-head:hover {
+    color: var(--teal-deep);
+    background: rgba(13, 124, 124, 0.06);
+}
+
+.model-picker-head:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: -2px;
+}
+
+.model-picker-head.model-picker-sort-asc,
+.model-picker-head.model-picker-sort-desc {
+    color: var(--teal-deep);
+}
+
+.model-picker-head.model-picker-sort-asc::after {
+    content: " ▲";
+    font-size: 0.58rem;
+}
+
+.model-picker-head.model-picker-sort-desc::after {
+    content: " ▼";
+    font-size: 0.58rem;
+}
+
+/* Body rows — clickable, with hover + selected state. */
+.model-picker-row {
+    cursor: pointer;
+    transition: background 0.12s var(--ease-out);
+    border-bottom: 1px solid rgba(20, 34, 42, 0.05);
+}
+
+.model-picker-row:hover {
+    background: rgba(13, 124, 124, 0.06);
+}
+
+.model-picker-row.is-selected {
+    background: rgba(13, 124, 124, 0.12);
+    box-shadow: inset 3px 0 0 var(--teal);
+}
+
+.model-picker-row:last-child {
+    border-bottom: none;
+}
+
+.model-picker-row td {
+    padding: 0.5rem 0.55rem;
+    font-size: 0.82rem;
+    color: var(--ink);
+    vertical-align: top;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.model-picker-cell-provider {
+    font-weight: 600;
+    color: var(--ink-soft);
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+.model-picker-cell-model {
+    /* Rich cell: name + badges + id stacked/inline. */
+}
+
+.model-picker-name-text {
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 0.84rem;
+}
+
+.model-picker-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+}
+
+.model-picker-badge-free {
+    display: inline-block;
+    padding: 0.04rem 0.35rem;
+    border-radius: 999px;
+    background: var(--copper-mist);
+    color: var(--copper);
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid rgba(196, 107, 46, 0.32);
+    line-height: 1.4;
+}
+
+.model-picker-tag-modality {
+    display: inline-block;
+    padding: 0.04rem 0.32rem;
+    border-radius: 0.25rem;
+    background: rgba(107, 130, 144, 0.14);
+    color: var(--ink-mute);
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: lowercase;
+    line-height: 1.4;
+}
+
+.model-picker-id {
+    display: block;
+    margin-top: 0.15rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--ink-mute);
+    word-break: break-all;
+    line-height: 1.3;
+}
+
+.model-picker-cell-cost,
+.model-picker-cell-context {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--ink-soft);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.model-picker-cell-added {
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* States: loading / error / empty. */
+.model-picker-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 1.6rem 1rem;
+    color: var(--teal-deep);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.model-picker-spinner {
+    display: inline-block;
+    width: 0.9rem;
+    height: 0.9rem;
+    border: 2px solid rgba(13, 124, 124, 0.2);
+    border-top-color: var(--teal);
+    border-radius: 50%;
+    animation: model-picker-spin 0.8s linear infinite;
+}
+
+.model-picker-error {
+    padding: 1.3rem 1rem;
+    text-align: center;
+    color: var(--ink-mute);
+    font-size: 0.85rem;
+}
+
+.model-picker-error p {
+    margin: 0 0 0.6rem;
+    color: var(--danger);
+    font-weight: 500;
+}
+
+.model-picker-retry {
+    padding: 0.32rem 0.85rem;
+    border-radius: 0.45rem;
+    border: 1px solid var(--copper);
+    background: var(--copper-mist);
+    color: var(--copper);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out);
+}
+
+.model-picker-retry:hover:not(:disabled) {
+    background: var(--copper);
+    color: #fff;
+}
+
+.model-picker-retry:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.model-picker-empty {
+    padding: 1.3rem 1rem;
+    text-align: center;
+    color: var(--ink-mute);
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+/* ─── Model picker: responsive ───
+   On narrow viewports (phone via Cloudflare tunnel), the popover detaches from
+   the wrapper and floats near the top of the viewport as a near-full-width
+   panel — this avoids clipping against the chat-brand grid. Output $/M and
+   Added columns are hidden to fit the visible area; the rest of the table
+   remains horizontally scrollable inside the popover for users who want them. */
+@media (max-width: 640px) {
+    .model-picker-popover {
+        position: fixed;
+        top: 4.5rem;
+        left: 0.5rem;
+        right: 0.5rem;
+        width: auto;
+        max-width: none;
+    }
+
+    .model-picker-name {
+        max-width: 9rem;
+    }
+
+    /* Hide Output $/M and Added columns — least-lossy cut for narrow screens.
+       The user still sees Provider, Model, Input $/M, and Context, which is
+       enough to make a selection. Output is often the same shape as Input
+       across providers, and Added is rarely decisive. */
+    .model-picker-table .col-output,
+    .model-picker-table .col-added {
+        display: none;
+    }
+}
+
+@media (max-width: 420px) {
+    /* On very narrow phones, also drop Provider (the model name + id already
+       carries provider info via the `provider/name` slug). Keeps the picker
+       usable down to ~320px viewports. */
+    .model-picker-table .col-provider {
+        display: none;
+    }
+
+    .model-picker-name {
+        max-width: 7rem;
     }
 }

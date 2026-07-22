@@ -1,5 +1,6 @@
 using Agentic.Chat.Components;
 using Agentic.Chat.Services;
+using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,6 +31,9 @@ builder.Services.AddHttpClient("OpenRouter", client =>
     client.Timeout = TimeSpan.FromMinutes(5);
 });
 
+builder.Services.AddSingleton<ModelCatalogService>();
+builder.Services.AddScoped<SelectedModelService>();
+builder.Services.AddScoped<ProtectedLocalStorage>();
 builder.Services.AddScoped<ChatAgentService>();
 
 var app = builder.Build();

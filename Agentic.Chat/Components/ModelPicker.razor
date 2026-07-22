@@ -1,0 +1,518 @@
+@* ModelPicker.razor — searchable/sortable OpenRouter model selector.
+
+   Visual language: replaces the static `.model-chip` in the chat header with a
+   clickable teal pill that opens a frosted-glass popover below it. The popover
+   hosts a search input, a refresh button, a sortable column header row, and a
+   scrollable list of models. Selection persists via SelectedModelService. *@
+
+@using System.Globalization
+@inject ModelCatalogService Catalog
+@inject SelectedModelService SelectedModel
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="model-picker" @ref="_wrapper">
+    <button type="button"
+            class="model-picker-trigger @(IsOpen ? "is-open" : "")"
+            aria-haspopup="dialog"
+            aria-expanded="@IsOpen"
+            aria-label="Select model"
+            disabled="@(IsLoading && AllModels.Count == 0)"
+            @onclick="ToggleAsync">
+        <span class="model-picker-name">@(CurrentModel?.Name ?? "Select a model…")</span>
+        <span class="model-picker-chevron" aria-hidden="true">
+            <svg viewBox="0 0 12 12" fill="none">
+                <path d="M2.5 4.5L6 8l3.5-3.5"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                      stroke-linecap="round"
+                      stroke-linejoin="round" />
+            </svg>
+        </span>
+    </button>
+
+    @if (IsOpen)
+    {
+        <div class="model-picker-popover"
+             role="dialog"
+             aria-label="Select a model"
+             @onkeydown="OnPopoverKeyAsync">
+            <div class="model-picker-search-row">
+                <span class="model-picker-search-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <circle cx="11" cy="11" r="6.2" stroke="currentColor" stroke-width="2" />
+                        <path d="M15.5 15.5L20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </span>
+                <input type="search"
+                       class="model-picker-search"
+                       placeholder="Search by name, provider, or id…"
+                       aria-label="Search models"
+                       value="@SearchText"
+                       @oninput="OnSearchInput"
+                       autocomplete="off"
+                       spellcheck="false"
+                       @ref="_searchInput" />
+                <button type="button"
+                        class="model-picker-refresh"
+                        aria-label="Refresh model list"
+                        disabled="@IsLoading"
+                        @onclick="RefreshAsync">
+                    <svg viewBox="0 0 24 24" fill="none" class="@(IsLoading ? "is-spinning" : "")">
+                        <path d="M4 12a8 8 0 0 1 13.66-5.66L20 8"
+                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M20 4v4h-4"
+                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M20 12a8 8 0 0 1-13.66 5.66L4 16"
+                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M4 20v-4h4"
+                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="model-picker-table-wrap">
+                @if (IsLoading && AllModels.Count == 0)
+                {
+                    <div class="model-picker-loading" role="status">
+                        <span class="model-picker-spinner" aria-hidden="true"></span>
+                        <span>Loading models…</span>
+                    </div>
+                }
+                else if (LoadError is not null)
+                {
+                    <div class="model-picker-error" role="alert">
+                        <p>Couldn't load models.</p>
+                        <button type="button" class="model-picker-retry" disabled="@IsLoading" @onclick="RefreshAsync">
+                            @(IsLoading ? "Retrying…" : "Retry")
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <table class="model-picker-table">
+                        <colgroup>
+                            <col class="col-w-provider" />
+                            <col />
+                            <col class="col-w-input" />
+                            <col class="col-w-output" />
+                            <col class="col-w-context" />
+                            <col class="col-w-added" />
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th class="col-provider">
+                                    <button type="button"
+                                            class="model-picker-head @SortClass(SortCol.Provider)"
+                                            @onclick="() => SortBy(SortCol.Provider)">
+                                        Provider
+                                    </button>
+                                </th>
+                                <th class="col-model">
+                                    <button type="button"
+                                            class="model-picker-head @SortClass(SortCol.Model)"
+                                            @onclick="() => SortBy(SortCol.Model)">
+                                        Model
+                                    </button>
+                                </th>
+                                <th class="col-input">
+                                    <button type="button"
+                                            class="model-picker-head @SortClass(SortCol.InputCost)"
+                                            @onclick="() => SortBy(SortCol.InputCost)">
+                                        Input $/M
+                                    </button>
+                                </th>
+                                <th class="col-output">
+                                    <button type="button"
+                                            class="model-picker-head @SortClass(SortCol.OutputCost)"
+                                            @onclick="() => SortBy(SortCol.OutputCost)">
+                                        Output $/M
+                                    </button>
+                                </th>
+                                <th class="col-context">
+                                    <button type="button"
+                                            class="model-picker-head @SortClass(SortCol.Context)"
+                                            @onclick="() => SortBy(SortCol.Context)">
+                                        Context
+                                    </button>
+                                </th>
+                                <th class="col-added">
+                                    <button type="button"
+                                            class="model-picker-head @SortClass(SortCol.Added)"
+                                            @onclick="() => SortBy(SortCol.Added)">
+                                        Added
+                                    </button>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!SortedAndFiltered.Any())
+                            {
+                                <tr class="model-picker-empty-row">
+                                    <td colspan="6" class="model-picker-empty">
+                                        @(string.IsNullOrWhiteSpace(SearchText)
+                                            ? "No models available."
+                                            : $"No models match \"{SearchText.Trim()}\".")
+                                    </td>
+                                </tr>
+                            }
+                            @foreach (var model in SortedAndFiltered)
+                            {
+                                var isSelected = model.Id == SelectedModel.CurrentModelId;
+                                <tr class="model-picker-row @(isSelected ? "is-selected" : "")"
+                                    aria-selected="@(isSelected ? "true" : "false")"
+                                    @onclick="() => SelectAsync(model.Id)">
+                                    <td class="model-picker-cell-provider col-provider">
+                                        @Capitalize(model.Provider)
+                                    </td>
+                                    <td class="model-picker-cell-model col-model">
+                                        <span class="model-picker-name-text">@model.Name</span>
+                                        <span class="model-picker-badges">
+                                            @if (model.IsFree)
+                                            {
+                                                <span class="model-picker-badge-free">Free</span>
+                                            }
+                                            @if (ModalityTag(model.Modality) is { } tag)
+                                            {
+                                                <span class="model-picker-tag-modality">@tag</span>
+                                            }
+                                            @if (model.SupportsReasoning)
+                                            {
+                                                <span class="model-picker-tag-modality" title="Supports reasoning parameter">reason</span>
+                                            }
+                                        </span>
+                                        <code class="model-picker-id">@model.Id</code>
+                                    </td>
+                                    <td class="model-picker-cell-cost col-input">
+                                        @FormatCost(model.IsFree, model.PromptPerMillionTokens)
+                                    </td>
+                                    <td class="model-picker-cell-cost col-output">
+                                        @FormatCost(model.IsFree, model.CompletionPerMillionTokens)
+                                    </td>
+                                    <td class="model-picker-cell-context col-context">
+                                        @FormatContext(model.ContextLength)
+                                    </td>
+                                    <td class="model-picker-cell-added col-added">
+                                        @FormatAdded(model.Created)
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // ── Element / JS refs ────────────────────────────────────────────────
+    private ElementReference _wrapper;
+    private ElementReference _searchInput;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<ModelPicker>? _dotnetRef;
+    private IJSObjectReference? _cleanupFn;
+
+    // ── Catalog state ────────────────────────────────────────────────────
+    private List<OpenRouterModel> AllModels = new();
+    private Dictionary<string, OpenRouterModel> _byId
+        = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool IsOpen;
+    private bool IsLoading;
+    private Exception? LoadError;
+
+    private string SearchText = string.Empty;
+
+    // ── Sort state ───────────────────────────────────────────────────────
+    private enum SortCol { Provider, Model, InputCost, OutputCost, Context, Added }
+    private enum SortDir { Asc, Desc }
+    private SortCol _sortCol = SortCol.Provider;
+    private SortDir _sortDir = SortDir.Asc;
+
+    // ── Derived ──────────────────────────────────────────────────────────
+    private OpenRouterModel? CurrentModel =>
+        SelectedModel.CurrentModelId is { Length: > 0 } id
+            && _byId.TryGetValue(id, out var m)
+                ? m
+                : null;
+
+    private IEnumerable<OpenRouterModel> SortedAndFiltered
+    {
+        get
+        {
+            IEnumerable<OpenRouterModel> q = AllModels;
+
+            var s = SearchText.Trim();
+            if (s.Length > 0)
+            {
+                var cmp = StringComparison.OrdinalIgnoreCase;
+                q = q.Where(m =>
+                    m.Name.Contains(s, cmp) ||
+                    m.Id.Contains(s, cmp) ||
+                    m.Provider.Contains(s, cmp));
+            }
+
+            var asc = _sortDir == SortDir.Asc;
+            var ord = StringComparer.OrdinalIgnoreCase;
+            q = _sortCol switch
+            {
+                SortCol.Provider => asc
+                    ? q.OrderBy(m => m.Provider, ord).ThenBy(m => m.Name, ord)
+                    : q.OrderByDescending(m => m.Provider, ord).ThenByDescending(m => m.Name, ord),
+                SortCol.Model => asc
+                    ? q.OrderBy(m => m.Name, ord)
+                    : q.OrderByDescending(m => m.Name, ord),
+                SortCol.InputCost => asc
+                    ? q.OrderBy(m => m.PromptPerMillionTokens)
+                    : q.OrderByDescending(m => m.PromptPerMillionTokens),
+                SortCol.OutputCost => asc
+                    ? q.OrderBy(m => m.CompletionPerMillionTokens)
+                    : q.OrderByDescending(m => m.CompletionPerMillionTokens),
+                SortCol.Context => asc
+                    ? q.OrderBy(m => m.ContextLength)
+                    : q.OrderByDescending(m => m.ContextLength),
+                SortCol.Added => asc
+                    ? q.OrderBy(m => m.Created)
+                    : q.OrderByDescending(m => m.Created),
+                _ => q
+            };
+
+            return q;
+        }
+    }
+
+    // ── Lifecycle ────────────────────────────────────────────────────────
+    protected override void OnInitialized()
+    {
+        // Subscribe early so we catch the OnChange fired by our own LoadAsync().
+        SelectedModel.OnChange += HandleSelectedChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Persisted selection load is best-effort — a failure shouldn't block the catalog.
+        try { await SelectedModel.LoadAsync(); }
+        catch { /* swallow: persistence is non-fatal */ }
+
+        await LoadModelsAsync(forceRefresh: false);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Lazy-load the colocated JS module. This is the project's first JS
+        // isolation usage — kept minimal and explicit.
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./Components/ModelPicker.razor.js");
+            _dotnetRef = DotNetObjectReference.Create(this);
+        }
+        catch
+        {
+            // JS isolation failure is non-fatal — popover still opens, just
+            // without click-outside-to-close. Escape and row-select still work.
+        }
+    }
+
+    private void HandleSelectedChanged()
+    {
+        // The event can fire on a non-Blazor thread; marshal onto the renderer.
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    // ── Data loading ─────────────────────────────────────────────────────
+    private async Task LoadModelsAsync(bool forceRefresh)
+    {
+        IsLoading = true;
+        LoadError = null;
+        try
+        {
+            if (forceRefresh) await Catalog.RefreshAsync();
+            var models = await Catalog.GetModelsAsync();
+            AllModels = models
+                .OrderBy(m => m.Provider, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            _byId = AllModels.ToDictionary(
+                m => m.Id, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            LoadError = ex;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private Task RefreshAsync() => LoadModelsAsync(forceRefresh: true);
+
+    // ── Popover open/close ───────────────────────────────────────────────
+    private async Task ToggleAsync()
+    {
+        if (IsOpen) await CloseAsync();
+        else await OpenAsync();
+    }
+
+    private async Task OpenAsync()
+    {
+        IsOpen = true;
+        SearchText = string.Empty; // reset search each time we reopen
+        StateHasChanged();
+        await AttachOutsideClickAsync();
+        // Auto-focus the search input — by the time the await chain completes,
+        // Blazor has flushed the render that put the input in the DOM.
+        try { await _searchInput.FocusAsync(); }
+        catch { /* focus failure is non-fatal */ }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (!IsOpen) return;
+        IsOpen = false;
+        StateHasChanged();
+        await DetachOutsideClickAsync();
+    }
+
+    private async Task SelectAsync(string modelId)
+    {
+        await SelectedModel.SetAsync(modelId);
+        await CloseAsync();
+    }
+
+    private async Task OnPopoverKeyAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && IsOpen) await CloseAsync();
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+        => SearchText = e.Value as string ?? string.Empty;
+
+    private void SortBy(SortCol col)
+    {
+        if (_sortCol == col)
+        {
+            _sortDir = _sortDir == SortDir.Asc ? SortDir.Desc : SortDir.Asc;
+        }
+        else
+        {
+            _sortCol = col;
+            _sortDir = SortDir.Asc;
+        }
+    }
+
+    private string SortClass(SortCol col)
+    {
+        if (_sortCol != col) return string.Empty;
+        return _sortDir == SortDir.Asc
+            ? "model-picker-sort-asc"
+            : "model-picker-sort-desc";
+    }
+
+    // ── JS interop for click-outside ─────────────────────────────────────
+    private async Task AttachOutsideClickAsync()
+    {
+        if (_module is null || _dotnetRef is null || _cleanupFn is not null) return;
+        try
+        {
+            _cleanupFn = await _module.InvokeAsync<IJSObjectReference>(
+                "listenForOutsideClick", _wrapper, _dotnetRef);
+        }
+        catch
+        {
+            // Listener attachment failure is non-fatal.
+        }
+    }
+
+    private async Task DetachOutsideClickAsync()
+    {
+        if (_cleanupFn is null) return;
+        var fn = _cleanupFn;
+        _cleanupFn = null;
+        if (_module is not null)
+        {
+            try { await _module.InvokeVoidAsync("stopListeningForOutsideClick", fn); }
+            catch { /* idempotent teardown */ }
+        }
+        try { await fn.DisposeAsync(); }
+        catch { /* already disposed */ }
+    }
+
+    [JSInvokable]
+    public async Task ClosePopover()
+    {
+        if (!IsOpen) return;
+        IsOpen = false;
+        StateHasChanged();
+        await DetachOutsideClickAsync();
+    }
+
+    // ── Formatting helpers ───────────────────────────────────────────────
+    private static string Capitalize(string slug)
+    {
+        if (string.IsNullOrEmpty(slug)) return slug;
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(slug.ToLowerInvariant());
+    }
+
+    private static string FormatCost(bool isFree, decimal perMillion)
+    {
+        if (isFree) return "Free";
+        if (perMillion <= 0m) return "—";
+        // Up to 4 decimals, no trailing zeros.
+        return $"${perMillion:0.####}/M";
+    }
+
+    private static string FormatContext(long contextLength)
+    {
+        if (contextLength <= 0) return "—";
+        if (contextLength < 1_000) return "<1k";
+        if (contextLength < 1_000_000) return $"{contextLength / 1000}k";
+        var millions = contextLength / 1_000_000m;
+        return millions % 1 == 0
+            ? $"{(long)millions}M"
+            : $"{millions:0.#}M";
+    }
+
+    private static string FormatAdded(DateTimeOffset created)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var delta = now - created;
+        if (delta.TotalSeconds < 0) return "new";
+        if (delta.TotalDays < 1) return "today";
+        if (delta.TotalDays < 7) return $"{(int)delta.TotalDays}d ago";
+        if (delta.TotalDays < 30) return $"{(int)(delta.TotalDays / 7)}w ago";
+        if (delta.TotalDays < 365) return $"{(int)(delta.TotalDays / 30)}mo ago";
+        return created.UtcDateTime.Year.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string? ModalityTag(string? modality)
+    {
+        if (string.IsNullOrEmpty(modality)) return null;
+        if (modality == "text->text") return null;
+        var arrow = modality.IndexOf("->", StringComparison.Ordinal);
+        if (arrow < 0 || arrow + 2 >= modality.Length) return null;
+        var tail = modality[(arrow + 2)..].Trim();
+        if (tail.Length == 0) return null;
+        // Take the first segment if compound ("text+image" -> "image").
+        var plus = tail.IndexOf('+');
+        if (plus > 0) tail = tail[..plus];
+        return Capitalize(tail);
+    }
+
+    // ── Teardown ─────────────────────────────────────────────────────────
+    public async ValueTask DisposeAsync()
+    {
+        SelectedModel.OnChange -= HandleSelectedChanged;
+        _dotnetRef?.Dispose();
+        await DetachOutsideClickAsync();
+        if (_module is not null)
+        {
+            try { await _module.DisposeAsync(); }
+            catch { /* module already gone */ }
+        }
+    }
+}

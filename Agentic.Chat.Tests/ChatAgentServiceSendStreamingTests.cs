@@ -245,7 +245,10 @@ public class ChatAgentServiceSendStreamingTests
 
     private static ChatAgentService CreateService(
         Func<HttpRequestMessage, (string Body, HttpStatusCode Status)>? respond = null,
-        Action<HttpRequestMessage>? captureRequest = null)
+        Action<HttpRequestMessage>? captureRequest = null,
+        string? selectedModelId = null,
+        string? catalogId = "test-model",
+        bool catalogSupportsReasoning = true)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -265,10 +268,40 @@ public class ChatAgentServiceSendStreamingTests
             captureRequest));
 
         var provider = services.BuildServiceProvider();
-        return new ChatAgentService(
-            provider.GetRequiredService<IHttpClientFactory>(),
-            provider.GetRequiredService<IOptions<OpenRouterOptions>>(),
-            provider.GetRequiredService<ILogger<ChatAgentService>>());
+        var factory = provider.GetRequiredService<IHttpClientFactory>();
+        var options = provider.GetRequiredService<IOptions<OpenRouterOptions>>();
+        var logger = provider.GetRequiredService<ILogger<ChatAgentService>>();
+
+        var catalog = new ModelCatalogService(factory);
+        if (catalogId is not null)
+        {
+            catalog.SeedForTest(new[]
+            {
+                new Agentic.Chat.Models.OpenRouterModel(
+                    catalogId,
+                    catalogId,
+                    128_000L,
+                    DateTimeOffset.UtcNow,
+                    "text->text",
+                    new Agentic.Chat.Models.OpenRouterPricing(0.0000025m, 0.00001m),
+                    catalogSupportsReasoning
+                        ? new[] { "tools", "reasoning", "tool_choice" }
+                        : new[] { "tools", "tool_choice" })
+            });
+        }
+
+        // SelectedModelService with a working protected local storage. The model ID
+        // is set via the test seam — making the storage round-trip unnecessary for
+        // tests that just need a deterministic CurrentModelId.
+        var js = TestSupport.NewProtectedJSRuntime();
+        var storage = new Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage(
+            js, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
+        var selection = new SelectedModelService(storage);
+        // SetCurrentModelIdForTest sets IsLoaded=true and raises OnChange, matching
+        // the post-LoadAsync state for both the "stored" and "not stored" branches.
+        selection.SetCurrentModelIdForTest(selectedModelId);
+
+        return new ChatAgentService(factory, options, logger, selection, catalog);
     }
 
     private static async Task<List<ChatDisplayMessage>> Consume(IAsyncEnumerable<ChatDisplayMessage> stream)

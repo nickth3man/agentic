@@ -138,4 +138,67 @@ public class MarkdownRendererTests
     {
         Assert.Equal(string.Empty, MarkdownRenderer.Render(string.Empty));
     }
+
+    // ── link/image URL sanitization (XSS via Markdown link schemes) ─────────
+    // DisableHtml() strips raw HTML but Markdig still generates <a href="...">
+    // from [x](url). Dangerous schemes must be neutralized; safe schemes and
+    // relative/fragment URLs must be preserved.
+
+    [Theory]
+    [InlineData("javascript")]
+    [InlineData("vbscript")]
+    [InlineData("data")]
+    [InlineData("file")]
+    public void Render_DangerousSchemeLink_IsNeutralized(string scheme)
+    {
+        var html = MarkdownRenderer.Render($"[click]({scheme}:alert(1))");
+
+        Assert.DoesNotContain($"{scheme}:", html, StringComparison.OrdinalIgnoreCase);
+        // The href value is blanked, not the whole link removed.
+        Assert.Contains("href=\"\"", html);
+        Assert.Contains("click", html);
+    }
+
+    [Fact]
+    public void Render_DangerousSchemeImage_IsNeutralized()
+    {
+        var html = MarkdownRenderer.Render("![alt](data:text/html,basic)");
+
+        Assert.DoesNotContain("data:", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"\"", html);
+    }
+
+    [Fact]
+    public void Render_JavascriptScheme_CaseAndSpaceInvariant()
+    {
+        // attackers mix case / wedge whitespace past naive filters
+        var html = MarkdownRenderer.Render("[x](JaVaScRiPt:alert(1))");
+
+        Assert.DoesNotContain("javascript:", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Render_AllowedSchemeLinks_ArePreserved()
+    {
+        var md = "[a](https://e.com/x) [b](http://e.com) [c](mailto:x@y.com) [d](tel:+1555)";
+
+        var html = MarkdownRenderer.Render(md);
+
+        Assert.Contains("https://e.com/x", html);
+        Assert.Contains("http://e.com", html);
+        Assert.Contains("mailto:x@y.com", html);
+        Assert.Contains("tel:+1555", html);
+    }
+
+    [Fact]
+    public void Render_RelativeAndFragmentLinks_ArePreserved()
+    {
+        var md = "[top](#section) [home](/home) [rel](page.html)";
+
+        var html = MarkdownRenderer.Render(md);
+
+        Assert.Contains("\"#section\"", html);
+        Assert.Contains("\"/home\"", html);
+        Assert.Contains("\"page.html\"", html);
+    }
 }

@@ -16,10 +16,25 @@ reviews:
   #               argument type checking, typehint checks)
   profile: assertive
 
-  # THE key flag. Default false = only walkthrough summary, no formal review.
-  # True = submit a real PR review with inline annotations + state
-  # (COMMENT / APPROVE / REQUEST_CHANGES).
-  request_changes_workflow: true
+  # Controls the GitHub review STATE CodeRabbit submits (docs.coderabbit.ai/
+  # reference/configuration#param-request-changes-workflow). Inline diff
+  # annotations are preserved either way; only the review state differs:
+  #   false (default) = formal review with state COMMENT. Inline annotations
+  #                     land on the diff but CANNOT block the merge (COMMENT is
+  #                     not a "changes requested" verdict). This keeps CodeRabbit
+  #                     truly advisory, matching AGENTS.md: "AI reviewers ... do
+  #                     not block." Real-world users on false: oven-sh/bun,
+  #                     strapi/strapi, appsmithorg/appsmith.
+  #   true            = review starts as REQUEST_CHANGES, auto-flips to APPROVE
+  #                     only once every comment is resolved AND pre-merge checks
+  #                     pass. While comments are open this BLOCKS the merge under
+  #                     the repo's review-enforcing ruleset — contradicting the
+  #                     "advisory" intent above.
+  # (The earlier comment here claimed false = "summary only, 0 inline comments".
+  #  That was true before CodeRabbit shipped the formal-review feature; the
+  #  changelog entry for request_changes_workflow changed the semantics so false
+  #  now posts a COMMENT-state review with full inline annotations.)
+  request_changes_workflow: false
 
   # We already know what the PR does from the description; skip the redundant
   # high-level summary and the poem to reduce noise.

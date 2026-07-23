@@ -26,7 +26,7 @@ public class ModelCatalogServiceTests
         // Even for empty `data` arrays STJ needs a syntactically valid envelope.
         var sb = new StringBuilder();
         sb.Append("{\"data\":[");
-        for (int i = 0; i < modelsJson.Length; i++)
+        for (var i = 0; i < modelsJson.Length; i++)
         {
             if (i > 0) sb.Append(',');
             sb.Append(modelsJson[i]);
@@ -116,9 +116,22 @@ public class ModelCatalogServiceTests
     }
 
     [Fact]
+    public async Task Dispose_ThenGetModelsAsync_ThrowsWithoutHttpCall()
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var service = BuildService(handler);
+
+        service.Dispose();
+
+        // The cache gate (SemaphoreSlim) is disposed, so the call fails before any HTTP.
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => service.GetModelsAsync());
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Fact]
     public async Task GetModelsAsync_OnFetchFailureWithExistingCache_ReturnsStale_NoThrow()
     {
-        int calls = 0;
+        var calls = 0;
         var handler = new StubHandler((_, _) =>
         {
             var n = Interlocked.Increment(ref calls);
@@ -252,7 +265,7 @@ public class ModelCatalogServiceTests
     {
         // Force the critical-section overlap so two callers race the SemaphoreSlim.
         var gate = new TaskCompletionSource();
-        int calls = 0;
+        var calls = 0;
         var handler = new StubHandler(async (_, ct) =>
         {
             var n = Interlocked.Increment(ref calls);

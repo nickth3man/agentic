@@ -32,29 +32,29 @@ internal static class TestSupport
             switch (identifier)
             {
                 case "localStorage.getItem":
-                {
-                    var key = (string)args![0]!;
-                    if (_store.TryGetValue(key, out var v))
                     {
-                        return new ValueTask<TValue>(result: (TValue)(object)v);
+                        var key = (string)args![0]!;
+                        if (_store.TryGetValue(key, out var v))
+                        {
+                            return new ValueTask<TValue>(result: (TValue)(object)v);
+                        }
+                        return new ValueTask<TValue>(result: default!);
                     }
-                    return new ValueTask<TValue>(result: default!);
-                }
                 case "localStorage.setItem":
-                {
-                    var key = (string)args![0]!;
-                    var value = (string)args![1]!;
-                    _store[key] = value;
-                    // IJSVoidResult is internal; the framework's InvokeVoidAsync wraps
-                    // any TValue return into a completed ValueTask.
-                    return new ValueTask<TValue>(result: default!);
-                }
+                    {
+                        var key = (string)args![0]!;
+                        var value = (string)args![1]!;
+                        _store[key] = value;
+                        // IJSVoidResult is internal; the framework's InvokeVoidAsync wraps
+                        // any TValue return into a completed ValueTask.
+                        return new ValueTask<TValue>(result: default!);
+                    }
                 case "localStorage.removeItem":
-                {
-                    var key = (string)args![0]!;
-                    _store.Remove(key);
-                    return new ValueTask<TValue>(result: default!);
-                }
+                    {
+                        var key = (string)args![0]!;
+                        _store.Remove(key);
+                        return new ValueTask<TValue>(result: default!);
+                    }
                 default:
                     throw new InvalidOperationException($"Unexpected JS interop call: {identifier}");
             }

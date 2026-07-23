@@ -1,7 +1,7 @@
+using System.Net.Http.Headers;
 using Agentic.Chat.Components;
 using Agentic.Chat.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
-using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 

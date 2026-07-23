@@ -14,6 +14,16 @@ public sealed class ChatAgentService
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    // Precompiled logging delegate (CA1848/CA1873): when Information logging is
+    // off, this skips the params-array allocation and the template formatting
+    // that an inline _logger.LogInformation(...) call does unconditionally. (The
+    // argument expression itself — _apiMessages.Count — is still evaluated.)
+    private static readonly Action<ILogger, int, Exception?> LogStreamingStart =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            default,
+            "Streaming chat completion with {MessageCount} message(s) in transcript");
+
     private readonly HttpClient _httpClient;
     private readonly OpenRouterOptions _options;
     private readonly ILogger<ChatAgentService> _logger;
@@ -75,9 +85,7 @@ public sealed class ChatAgentService
             _displayMessages.Add(assistant);
             yield return assistant;
 
-            _logger.LogInformation(
-                "Streaming chat completion with {MessageCount} message(s) in transcript",
-                _apiMessages.Count);
+            LogStreamingStart(_logger, _apiMessages.Count, null);
 
             var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
             var modelInfo = await _modelCatalog

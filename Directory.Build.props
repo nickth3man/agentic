@@ -1,0 +1,32 @@
+<Project>
+
+  <!--
+    Shared build and analysis settings for every project in the repo (issue #29).
+    Only project-specific content stays in each .csproj:
+      Agentic.Chat        — BlazorDisableThrowNavigationException, InternalsVisibleTo, Markdig
+      Agentic.Chat.Tests  — IsPackable, coverlet coverage gate, test packages, FrameworkReference
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- No <LangVersion> pin on purpose: the net10.0 TFM already selects the
+         SDK's default C# version (14). Setting LangVersion=latest would FLOAT
+         with SDK upgrades — silently enabling newer language features, which is
+         the opposite of pinning. Leave it unset so the TFM owns the version. -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Any compiler or analyzer warning fails the build, locally and in CI
+         (the CI format job additionally passes -warnaserror for visibility). -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Microsoft's recommended analyzer subset. Deliberately not "All": that
+         enables rules that conflict with this codebase's conventions (e.g.
+         CA1707 no-underscores vs. the test suite's Method_Name style). -->
+    <AnalysisMode>Recommended</AnalysisMode>
+
+    <!-- Run the IDExxxx code-style rules from .editorconfig during build,
+         not just in the IDE, so TreatWarningsAsErrors gates on them. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

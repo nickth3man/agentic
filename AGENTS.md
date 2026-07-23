@@ -290,18 +290,19 @@ delete the comment entirely (resets the loop and its attempt budget).
 
 ## Git workflow (PRs on `main`)
 
-`main` should be kept clean via PRs (no force-push, no direct pushes, no
-deletion). CI runs four parallel jobs — `format` (dotnet format + `-warnaserror`
-Release build on ubuntu-latest), `test` (xUnit on ubuntu-latest), `start-phone-tests`
-(bash suite on windows-latest; installs `cloudflared` explicitly since it's not
-preinstalled), `playwright-tests` (browser suite on ubuntu-latest). All four
-should pass before merging. AI reviewer checks (CodeRabbit / Sourcery / cubic)
-are advisory and do not block.
-
-> **Note — branch protection is not yet enabled** on `main`
-> (`GET /branches/main/protection` → 404), so none of these checks are formally
-> required by GitHub today; merge gating is by convention. Enabling
-> required-check protection (with all four jobs) is a pending owner action.
+`main` is gated by a repository **ruleset** (the newer GitHub rules engine —
+which is why `GET /branches/main/protection` returns 404; that endpoint only
+covers legacy branch protection). The ruleset enforces: direct pushes blocked,
+PRs required, only `squash` merges allowed, `dismiss_stale_reviews_on_push` on,
+`required_approving_review_count` 0, `required_review_thread_resolution` false,
+and the `test` status check required. CI runs four parallel jobs — `format`
+(dotnet format + `-warnaserror` Release build on ubuntu-latest), `test` (xUnit on
+ubuntu-latest), `start-phone-tests` (bash suite on windows-latest; installs
+`cloudflared` explicitly since it's not preinstalled), `playwright-tests`
+(browser suite on ubuntu-latest). Run all four before merging. AI reviewer checks
+(CodeRabbit / Sourcery / cubic) are configured advisory — CodeRabbit posts
+reviews as `COMMENT`, never `REQUEST_CHANGES` (see `.coderabbit.yaml`) — so they
+cannot block a merge; a human decides.
 
 ```bash
 git checkout -b feat/short-name          # or fix/, chore/, docs/

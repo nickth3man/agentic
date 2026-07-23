@@ -199,10 +199,12 @@ cd tests/playwright && npm install && npx playwright test
 ```
 
 Run `dotnet format` (no flags) to auto-fix any formatting the first job flags —
-it must be a no-op on a clean checkout, so run it before pushing. The first
-three jobs are fast and hermetic — always run them. The Playwright job is
-slower (`npm install` + `npx playwright install chromium`); it's fine to **skip
-it locally and rely on CI** *unless your change touches the reconnect UI,
+it must be a no-op on a clean checkout, so run it before pushing. The `format`
+and `test` jobs are fast and hermetic — always run them. The `start-phone-tests`
+job reaches the network (it provisions a real Cloudflare quick tunnel, up to
+~90s) but is worth running locally when you touch `start-phone.sh`. The Playwright
+job is slower (`npm install` + `npx playwright install chromium`); it's fine to
+**skip it locally and rely on CI** *unless your change touches the reconnect UI,
 `ReconnectModal.*`, or `Chat.razor` rendering*. If you skip it, say so in "How
 tested" — a documented skip, not a silent one.
 
@@ -288,12 +290,18 @@ delete the comment entirely (resets the loop and its attempt budget).
 
 ## Git workflow (PRs on `main`)
 
-`main` is protected: PRs required, no force-push, no deletion. CI runs four
-parallel jobs — `format` (dotnet format + `-warnaserror` Release build on
-ubuntu-latest), `test` (xUnit on ubuntu-latest), `start-phone-tests` (bash suite
-on windows-latest; installs `cloudflared` explicitly since it's not preinstalled),
-`playwright-tests` (browser suite on ubuntu-latest). All four must pass to merge.
-AI reviewer checks (CodeRabbit / Sourcery / cubic) are advisory and do not block.
+`main` should be kept clean via PRs (no force-push, no direct pushes, no
+deletion). CI runs four parallel jobs — `format` (dotnet format + `-warnaserror`
+Release build on ubuntu-latest), `test` (xUnit on ubuntu-latest), `start-phone-tests`
+(bash suite on windows-latest; installs `cloudflared` explicitly since it's not
+preinstalled), `playwright-tests` (browser suite on ubuntu-latest). All four
+should pass before merging. AI reviewer checks (CodeRabbit / Sourcery / cubic)
+are advisory and do not block.
+
+> **Note — branch protection is not yet enabled** on `main`
+> (`GET /branches/main/protection` → 404), so none of these checks are formally
+> required by GitHub today; merge gating is by convention. Enabling
+> required-check protection (with all four jobs) is a pending owner action.
 
 ```bash
 git checkout -b feat/short-name          # or fix/, chore/, docs/

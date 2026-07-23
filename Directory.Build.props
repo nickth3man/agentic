@@ -8,8 +8,10 @@
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <!-- Codifies the SDK's default explicitly so an SDK float can't silently shift language behavior. -->
-    <LangVersion>latest</LangVersion>
+    <!-- No <LangVersion> pin on purpose: the net10.0 TFM already selects the
+         SDK's default C# version (14). Setting LangVersion=latest would FLOAT
+         with SDK upgrades — silently enabling newer language features, which is
+         the opposite of pinning. Leave it unset so the TFM owns the version. -->
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 

@@ -14,8 +14,10 @@ public sealed class ChatAgentService
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    // Precompiled logging delegate (CA1848/CA1873): avoids the params-array and
-    // argument evaluation on the streaming path when Information logging is off.
+    // Precompiled logging delegate (CA1848/CA1873): when Information logging is
+    // off, this skips the params-array allocation and the template formatting
+    // that an inline _logger.LogInformation(...) call does unconditionally. (The
+    // argument expression itself — _apiMessages.Count — is still evaluated.)
     private static readonly Action<ILogger, int, Exception?> LogStreamingStart =
         LoggerMessage.Define<int>(
             LogLevel.Information,

@@ -166,10 +166,26 @@ cleanup() {
 }
 
 # Send all subsequent stdout/stderr to BOTH the inherited destination (terminal,
-# or wherever the caller redirected) AND $SCRIPT_LOG. Agents can run this script
-# with no redirection at all and still recover the full run narrative afterwards
-# from logs/start-phone/<run>/script.log.
-exec > >(tee "$SCRIPT_LOG") 2>&1
+# or wherever the caller redirected) AND $SCRIPT_LOG.
+#
+# TTY-conditional: when stdout is a real terminal (a human running this
+# interactively), mirror to the terminal AND $SCRIPT_LOG via tee. When stdout is
+# NOT a TTY — i.e. an agent backgrounded the script and stdout is the agent
+# tool's capture pipe — write to $SCRIPT_LOG ONLY.
+#
+# Why the split: this script blocks in `wait` (see §8) for its entire lifetime.
+# A `tee` here inherits and holds the caller's stdout pipe open for that whole
+# lifetime, which hangs agent bash tools that block on pipe EOF (the tool call
+# never returns). File-only output in the non-TTY case detaches that pipe so the
+# tool returns promptly, and agents recover the full run narrative from
+# $SCRIPT_LOG regardless. (Agents should still launch with nohup + </dev/null
+# >/dev/null 2>&1 — see AGENTS.md "Run from an agent" — so the server also
+# survives the agent shell session tearing down after the tool returns.)
+if [ -t 1 ]; then
+    exec > >(tee "$SCRIPT_LOG") 2>&1
+else
+    exec >"$SCRIPT_LOG" 2>&1
+fi
 
 # Register the EXIT trap NOW — after the exec redirect (so cleanup output flows
 # to script.log) but BEFORE any check that can call fail() (api_key / prereq /

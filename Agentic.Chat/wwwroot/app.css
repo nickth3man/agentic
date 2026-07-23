@@ -443,6 +443,7 @@ body {
 /* ─── Bubbles ─── */
 .chat-bubble {
     max-width: min(88%, 540px);
+    min-width: 0;
     padding: 0.85rem 1rem 1rem;
     border-radius: var(--radius-bubble);
     animation: bubble-in 0.45s var(--ease-out) both;
@@ -527,10 +528,209 @@ body {
 }
 
 .chat-content {
-    white-space: pre-wrap;
-    word-break: break-word;
+    min-width: 0;
     line-height: 1.55;
     font-size: 0.98rem;
+}
+
+/* Plain-text content (user messages): preserve whitespace + wrap long tokens. */
+.chat-content.is-plain {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Markdown content (assistant messages): normal flow. Blocks (pre/table) scroll
+   internally; `min-width: 0` lets the bubble shrink so those scrolls engage
+   instead of pushing page-level overflow. */
+.chat-content.is-markdown {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* ─── Markdown body (assistant replies) ───
+   Markdig emits sanitized HTML (raw HTML stripped via DisableHtml on the
+   pipeline), injected here as a MarkupString. Styles are scoped to
+   .markdown-body under .chat-bubble.assistant so they never leak into user
+   bubbles, the Thinking <pre>, or the model picker. All sizing is tuned for
+   the bubble (max ~540px): headings are smaller than page-level, code/tables
+   pan inside the bubble rather than widening the page. */
+.chat-bubble.assistant .markdown-body {
+    min-width: 0;
+    color: var(--ink);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+/* Flush first/last block against the bubble padding (no doubled spacing). */
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+
+/* Streaming caret is a trailing sibling of .markdown-body; when the last block
+   is a <pre>/<ul> it lands on its own line, so give it a hair of breathing room. */
+.chat-content.is-markdown .caret {
+    margin-top: 0.2rem;
+}
+
+/* Headings — display font, tight rhythm, kept below the brand voice in size. */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--ink);
+    margin: 1.15em 0 0.45em;
+    letter-spacing: -0.015em;
+}
+
+.markdown-body h1 { font-size: 1.3rem; }
+.markdown-body h2 { font-size: 1.15rem; }
+.markdown-body h3 { font-size: 1.02rem; }
+.markdown-body h4 {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Paragraphs + emphasis. */
+.markdown-body p { margin: 0 0 0.65em; }
+.markdown-body strong { font-weight: 700; color: var(--ink); }
+.markdown-body em { font-style: italic; }
+
+/* Links — teal, underline lifts on hover; long URLs wrap, not overflow. */
+.markdown-body a {
+    color: var(--teal-deep);
+    text-decoration: underline;
+    text-decoration-color: rgba(8, 88, 88, 0.35);
+    text-underline-offset: 2px;
+    word-break: break-word;
+    transition: text-decoration-color 0.15s var(--ease-out);
+}
+.markdown-body a:hover { text-decoration-color: var(--teal-deep); }
+
+/* Lists — teal markers match the brand accent. */
+.markdown-body ul,
+.markdown-body ol {
+    margin: 0 0 0.65em;
+    padding-left: 1.4em;
+}
+.markdown-body li { margin: 0.25em 0; }
+.markdown-body li::marker { color: var(--teal); }
+.markdown-body ul ul,
+.markdown-body ol ol,
+.markdown-body ul ol,
+.markdown-body ol ul { margin: 0.25em 0; }
+
+/* Blockquote — teal accent rule on a soft wash, muted ink. */
+.markdown-body blockquote {
+    margin: 0 0 0.75em;
+    padding: 0.3em 0 0.3em 0.9em;
+    border-left: 3px solid var(--teal);
+    background: linear-gradient(90deg, rgba(13, 124, 124, 0.07), transparent);
+    color: var(--ink-soft);
+    border-radius: 0 0.4rem 0.4rem 0;
+}
+.markdown-body blockquote p:last-child { margin-bottom: 0; }
+
+/* Horizontal rule — quiet divider. */
+.markdown-body hr {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 1.1em 0;
+}
+
+/* Inline code — teal-tinted pill. Inherits mono family from the bubble font stack. */
+.markdown-body code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    padding: 0.1em 0.35em;
+    border-radius: 0.3rem;
+    background: rgba(13, 124, 124, 0.1);
+    color: var(--teal-deep);
+    word-break: break-word;
+}
+
+/* Fenced code blocks — dark ink-teal slab. HORIZONTAL SCROLL LIVES HERE:
+   overflow-x:auto on the <pre> confines long lines to the bubble; combined
+   with min-width:0 up the ancestor chain, the bubble stays capped at max-width
+   and the page never gains a horizontal scrollbar. */
+.markdown-body pre {
+    margin: 0 0 0.75em;
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.6rem;
+    background: #122026;
+    border: 1px solid rgba(13, 124, 124, 0.28);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.markdown-body pre code {
+    display: block;
+    background: transparent;
+    color: #d9ecec;
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    white-space: pre;
+    word-break: normal;
+}
+
+/* Slim scrollbars on the code slab + tables so they don't crowd the bubble. */
+.markdown-body pre::-webkit-scrollbar,
+.markdown-body table::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+.markdown-body pre::-webkit-scrollbar-thumb,
+.markdown-body table::-webkit-scrollbar-thumb {
+    background: rgba(13, 124, 124, 0.4);
+    border-radius: 7px;
+}
+.markdown-body pre::-webkit-scrollbar-track,
+.markdown-body table::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Tables — become their own scroll context so wide grids pan inside the bubble.
+   display:block + overflow-x:auto is the well-worn trick for Markdown tables
+   that have no wrapper element to lean on. */
+.markdown-body table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    border-collapse: collapse;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 0 0.75em;
+    font-size: 0.88rem;
+}
+
+.markdown-body thead {
+    background: rgba(13, 124, 124, 0.08);
+}
+
+.markdown-body th,
+.markdown-body td {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--line);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.markdown-body th {
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.markdown-body tbody tr:nth-child(even) {
+    background: rgba(20, 34, 42, 0.025);
 }
 
 .chat-pending {

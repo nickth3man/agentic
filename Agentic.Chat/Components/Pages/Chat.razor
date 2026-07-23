@@ -1,6 +1,7 @@
 @page "/chat"
 @rendermode InteractiveServer
 @inject ChatAgentService ChatAgent
+@using Microsoft.AspNetCore.Components
 
 <PageTitle>Agentic</PageTitle>
 
@@ -114,7 +115,7 @@
 
                     @if (!string.IsNullOrEmpty(message.Content) || (message.IsStreaming && !string.IsNullOrEmpty(message.Reasoning)))
                     {
-                        <div class="chat-content">
+                        <div class="chat-content @(isUser ? "is-plain" : "is-markdown")">
                             @if (string.IsNullOrEmpty(message.Content) && message.IsStreaming)
                             {
                                 <span class="chat-pending">
@@ -122,9 +123,15 @@
                                     Responding…
                                 </span>
                             }
-                            else
+                            else if (isUser)
                             {
                                 @message.Content
+                            }
+                            else
+                            {
+                                <div class="markdown-body">
+                                    @((MarkupString)MarkdownRenderer.Render(message.Content))
+                                </div>
                                 @if (message.IsStreaming)
                                 {
                                     <span class="caret" aria-hidden="true"></span>

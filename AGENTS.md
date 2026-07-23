@@ -61,12 +61,34 @@ Agents must not run `bash start-phone.sh` in the foreground — the tool call
 blocks forever. The pattern that works (server stays up, tool returns):
 
 ```bash
-bash start-phone.sh &                             # no redirection — the script self-logs
+# Detach fully so THIS tool call returns AND the server outlives the agent shell:
+#   nohup              — ignore SIGHUP, so the server survives the tool shell
+#                        tearing down after the call returns (without it, a
+#                        backgrounded job can die when the agent session ends).
+#   </dev/null         — don't let the script/children read the tool's stdin.
+#   >/dev/null 2>&1    — don't hold the tool's stdout/stderr pipe open. The
+#                        script detects the non-TTY stdout and writes to
+#                        script.log only (see start-phone.sh "TTY-conditional"),
+#                        so nothing anchors the pipe and this call returns at
+#                        the `&` instead of blocking until Ctrl+C.
+nohup bash start-phone.sh </dev/null >/dev/null 2>&1 &
 SCRIPT_PID=$!
-sleep 30                                          # dotnet watch build + tunnel provisioning
-RUN_ID=$(cat logs/start-phone/LATEST)            # most recent run's ID
-grep "PHONE LINK" "logs/start-phone/$RUN_ID/script.log"  # the https://....trycloudflare.com URL
+
+# dotnet watch build + tunnel provisioning takes ~20-40s. Poll the log for the
+# PHONE LINK rather than sleeping blind — returns as soon as the URL is printed.
+RUN_ID=$(cat logs/start-phone/LATEST)
+for i in $(seq 1 60); do
+  grep -q "PHONE LINK" "logs/start-phone/$RUN_ID/script.log" 2>/dev/null && break
+  sleep 1
+done
+grep -A1 "PHONE LINK" "logs/start-phone/$RUN_ID/script.log"   # the https://....trycloudflare.com URL
 ```
+
+> **Do not** launch with a bare `bash start-phone.sh &` and "no redirection".
+> That form (documented in older revisions of this file) anchors the script's
+> `tee` to the tool's stdout pipe for the script's whole lifetime, so the tool
+> call never returns. The `nohup ... </dev/null >/dev/null 2>&1 &` form above is
+> required from agents.
 
 The script writes all output to `logs/start-phone/<run_id>/` automatically:
 - `script.log` — script's own stdout/stderr (banner, status, errors)
@@ -81,6 +103,17 @@ Backgrounded bash jobs inherit SIGINT as *ignored* (POSIX), so INT does nothing;
 the script's INT trap only works in an interactive foreground terminal (real Ctrl+C).
 TERM runs the exact same cleanup: both process trees killed, port 5123 freed,
 `meta.json` finalized with the actual exit reason.
+
+`$SCRIPT_PID` is an MSYS PID and only resolves inside the same bash session that
+launched the script. From a **later** agent tool call (different session) — or if
+`kill -TERM` reports "no such process" — shut down at the Windows level instead:
+
+```bash
+# Find whatever is listening on 5123, then tree-kill it + cloudflared.
+LPID=$(netstat -ano | grep :5123 | grep LISTENING | awk '{print $NF}' | head -1)
+[ -n "$LPID" ] && taskkill //PID "$LPID" //T //F
+taskkill //IM cloudflared.exe //T //F 2>/dev/null || true
+```
 
 Verify shutdown:
 
@@ -102,6 +135,14 @@ Gotchas learned the hard way:
 - If port 5123 is occupied, the script refuses (with the exact `taskkill` command)
   and exits. `dotnet watch` must own the port for the whole session — free stale
   `Agentic.Chat`/`dotnet` listeners yourself before re-running.
+- If an agent tool call that launches the server is **interrupted** (you stop the
+  call, or the call errors out), the script is SIGKILLed and its EXIT cleanup
+  trap does **not** run. `dotnet watch` / `Agentic.Chat` / `cloudflared` are then
+  orphaned — still alive, still holding port 5123, with no `meta.json` written.
+  The next launch either refuses with `port_occupied`, or worse, `dotnet watch`
+  starts but its app crashes with `Failed to bind to address ... address already
+  in use` while the tunnel points at the dead port. After any interrupted run,
+  verify the port is free and taskkill stragglers explicitly before re-launching.
 
 ## Testing
 

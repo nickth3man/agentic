@@ -153,15 +153,18 @@ else
     START_PHONE_TEST_FAIL=$((START_PHONE_TEST_FAIL+1))
   fi
 
-  assert_contains "$OUTPUT" "OPENROUTER_API_KEY is not set" "Error message names the missing env var"
-
-  # meta.json should be written with the right exit_reason
-  RUN_DIR=$(wait_for_meta || true)
-  if [[ -n "$RUN_DIR" ]]; then
-    printf '  \u2713 meta.json written despite early fail (cleanup trap fired)\n'
-    START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))
-    REASON=$(meta_field "$RUN_DIR" "exit_reason")
-    assert_eq "api_key_missing" "$REASON" "meta.json .exit_reason is 'api_key_missing'"
+      # meta.json should be written with the right exit_reason
+      RUN_DIR=$(wait_for_meta || true)
+      if [[ -n "$RUN_DIR" ]]; then
+        printf '  \u2713 meta.json written despite early fail (cleanup trap fired)\n'
+        START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))
+        REASON=$(meta_field "$RUN_DIR" "exit_reason")
+        assert_eq "api_key_missing" "$REASON" "meta.json .exit_reason is 'api_key_missing'"
+        # start-phone.sh logs its narrative to script.log (non-TTY: file-only,
+        # see start-phone.sh "TTY-conditional"), so read the error message from
+        # there rather than from captured stdout (which is empty in non-TTY mode).
+        SCRIPT_LOG_CONTENT=$(cat "$RUN_DIR/script.log" 2>/dev/null || true)
+        assert_contains "$SCRIPT_LOG_CONTENT" "OPENROUTER_API_KEY is not set" "Error message names the missing env var (in script.log)"
     # meta.json .app_pid should be null (script never reached app startup).
     # NOTE: do NOT use jq's `// "MISSING"` fallback here — jq treats JSON null as
     # falsey and would return the fallback. Use plain `.app_pid`; jq -r outputs
@@ -215,14 +218,16 @@ else
         START_PHONE_TEST_FAIL=$((START_PHONE_TEST_FAIL+1))
       fi
 
-      assert_contains "$OUTPUT" "Port 5123 is already occupied" "Error message names port conflict"
-      assert_contains "$OUTPUT" "taskkill"                       "Error suggests taskkill remediation"
-
       # meta.json verification
       RUN_DIR=$(wait_for_meta || true)
       if [[ -n "$RUN_DIR" ]]; then
         REASON=$(meta_field "$RUN_DIR" "exit_reason")
         assert_eq "port_occupied" "$REASON" "meta.json .exit_reason is 'port_occupied'"
+        # start-phone.sh logs its narrative to script.log (non-TTY: file-only),
+        # so read the error message from there rather than from captured stdout.
+        SCRIPT_LOG_CONTENT=$(cat "$RUN_DIR/script.log" 2>/dev/null || true)
+        assert_contains "$SCRIPT_LOG_CONTENT" "Port 5123 is already occupied" "Error message names port conflict (in script.log)"
+        assert_contains "$SCRIPT_LOG_CONTENT" "taskkill"                       "Error suggests taskkill remediation (in script.log)"
       else
         printf '  \u2717 meta.json was not written on port_occupied fail\n'
         START_PHONE_TEST_FAIL=$((START_PHONE_TEST_FAIL+1))

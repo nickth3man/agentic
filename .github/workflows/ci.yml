@@ -7,6 +7,25 @@ on:
     branches: [main]
 
 jobs:
+  # Formatting + static-analysis gate (issue #29). `dotnet format` verifies the
+  # .editorconfig whitespace/style rules; the Release build enforces
+  # TreatWarningsAsErrors + AnalysisMode=Recommended from Directory.Build.props.
+  # A PR introducing a formatting violation or new analyzer warning fails here.
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Verify formatting
+        run: dotnet format --verify-no-changes
+
+      - name: Build with warnings as errors
+        run: dotnet build -warnaserror -c Release
+
   # Existing job: .NET build + xUnit tests.
   test:
     runs-on: ubuntu-latest

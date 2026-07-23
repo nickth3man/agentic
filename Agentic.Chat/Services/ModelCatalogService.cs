@@ -5,7 +5,7 @@ using Agentic.Chat.Models;
 
 namespace Agentic.Chat.Services;
 
-public sealed class ModelCatalogService
+public sealed class ModelCatalogService : IDisposable
 {
     internal static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
 
@@ -112,6 +112,13 @@ public sealed class ModelCatalogService
     {
         _cached = models;
         _cachedAt = DateTimeOffset.UtcNow;
+    }
+
+    // Registered as a singleton, so the DI container calls this once at shutdown.
+    public void Dispose()
+    {
+        _gate.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private async Task<IReadOnlyList<OpenRouterModel>> FetchAsync(CancellationToken ct)

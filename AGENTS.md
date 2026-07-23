@@ -181,10 +181,13 @@ Additional test suites (run as separate CI jobs, not part of `dotnet test`):
 
 ### Run what CI runs (before pushing)
 
-CI has three required jobs (see [Git workflow](#git-workflow-prs-on-main) for the
+CI has four required jobs (see [Git workflow](#git-workflow-prs-on-main) for the
 mapping). Reproduce them locally, in the same order, before you push:
 
 ```bash
+# Job `format` (ubuntu): dotnet format + analyzers (TreatWarningsAsErrors)
+dotnet format --verify-no-changes && dotnet build -warnaserror -c Release
+
 # Job `test` (ubuntu): .NET build + xUnit
 dotnet restore && dotnet build --no-restore -c Release && dotnet test --no-build -c Release
 
@@ -195,7 +198,9 @@ bash -n start-phone.sh && bash tests/start-phone/run-tests.sh
 cd tests/playwright && npm install && npx playwright test
 ```
 
-The first two are fast and hermetic — always run them. The Playwright job is
+Run `dotnet format` (no flags) to auto-fix any formatting the first job flags —
+it must be a no-op on a clean checkout, so run it before pushing. The first
+three jobs are fast and hermetic — always run them. The Playwright job is
 slower (`npm install` + `npx playwright install chromium`); it's fine to **skip
 it locally and rely on CI** *unless your change touches the reconnect UI,
 `ReconnectModal.*`, or `Chat.razor` rendering*. If you skip it, say so in "How
@@ -283,10 +288,11 @@ delete the comment entirely (resets the loop and its attempt budget).
 
 ## Git workflow (PRs on `main`)
 
-`main` is protected: PRs required, no force-push, no deletion. CI runs three
-parallel jobs — `test` (xUnit on ubuntu-latest), `start-phone-tests` (bash suite
+`main` is protected: PRs required, no force-push, no deletion. CI runs four
+parallel jobs — `format` (dotnet format + `-warnaserror` Release build on
+ubuntu-latest), `test` (xUnit on ubuntu-latest), `start-phone-tests` (bash suite
 on windows-latest; installs `cloudflared` explicitly since it's not preinstalled),
-`playwright-tests` (browser suite on ubuntu-latest). All three must pass to merge.
+`playwright-tests` (browser suite on ubuntu-latest). All four must pass to merge.
 AI reviewer checks (CodeRabbit / Sourcery / cubic) are advisory and do not block.
 
 ```bash

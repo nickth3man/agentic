@@ -12,6 +12,22 @@ It runs via `start-phone.sh`, which starts the app with `dotnet watch` (hot relo
 - `start-phone.sh` — one-command Git Bash script: `dotnet watch` (hot reload) on `localhost:5123` + `cloudflared` quick tunnel + clean shutdown. **The only supported way to run the server.**
 - `agentic.slnx` — solution file (XML format, .NET 10 default)
 
+### Where things live
+
+Start here instead of re-deriving the layout each session.
+
+| File | Responsibility | Usually breaks on |
+| --- | --- | --- |
+| `Services/ChatAgentService.cs` | **Core.** Scoped service owning the in-memory transcript, streaming send (`SendStreamingAsync`), SSE delta application (`TryApplyDelta`), and `Reset()` | Async/streaming edits; scoped-lifetime assumptions (state resets on circuit restart) |
+| `Services/ModelCatalogService.cs` | Fetches + 15-min caches the OpenRouter model list | Cache expiry, `IHttpClientFactory` usage, network error handling |
+| `Services/SelectedModelService.cs` | Persists the chosen model via `ProtectedLocalStorage`; raises `OnChange` | Blazor prerender (storage unavailable until interactive); event wiring |
+| `Services/OpenRouterOptions.cs` | Bound config (`BaseUrl`, `Model`, `HttpReferer`, `AppTitle`) | Options binding; a test forbids an API key here |
+| `Models/` | `ChatDisplayMessage`, `OpenRouterModel` DTOs | JSON shape drift vs. the OpenRouter API |
+| `Components/Pages/Chat.razor` | Chat page: renders messages and streaming output | `@key`, render mode, markup rendering, mobile overflow |
+| `Components/ModelPicker.razor` (+`.js`) | Model dropdown UI + JS interop | Dropdown z-index/stacking (see #10), interop disposal |
+| `Components/Layout/ReconnectModal.razor` (+`.js`) | SignalR circuit-reconnect UI; phone auto-refresh on rude-edit restart | `resume-failed` handler; circuit lifecycle |
+| `Program.cs` / `Program.Partial.cs` | Startup, DI registration, options binding | Rude-edit restarts (see hot reload); service lifetimes |
+
 ## Hard rules
 
 1. **Never commit secrets.** `OPENROUTER_API_KEY` lives only as a Windows User
@@ -163,6 +179,42 @@ Additional test suites (run as separate CI jobs, not part of `dotnet test`):
   Run locally with `cd tests/playwright && npm install && npm test`. Auto-starts
   the app via `dotnet run` on port 5123 with a fake `OPENROUTER_API_KEY`.
 
+### Run what CI runs (before pushing)
+
+CI has three required jobs (see [Git workflow](#git-workflow-prs-on-main) for the
+mapping). Reproduce them locally, in the same order, before you push:
+
+```bash
+# Job `test` (ubuntu): .NET build + xUnit
+dotnet restore && dotnet build --no-restore -c Release && dotnet test --no-build -c Release
+
+# Job `start-phone-tests` (windows): bash lifecycle suite
+bash -n start-phone.sh && bash tests/start-phone/run-tests.sh
+
+# Job `playwright-tests` (ubuntu): Blazor reconnect UI
+cd tests/playwright && npm install && npx playwright test
+```
+
+The first two are fast and hermetic — always run them. The Playwright job is
+slower (`npm install` + `npx playwright install chromium`); it's fine to **skip
+it locally and rely on CI** *unless your change touches the reconnect UI,
+`ReconnectModal.*`, or `Chat.razor` rendering*. If you skip it, say so in "How
+tested" — a documented skip, not a silent one.
+
+### Verifying UI changes
+
+Automated suites don't cover visual correctness. For UI work (rendering,
+layout, mobile), "verified" means you actually looked:
+
+1. Run the server headless (see [Run from an agent](#run-from-an-agent--headless-shell-important))
+   and open `http://localhost:5123/chat` (follow the `302`, or use `curl -L`).
+2. Check the acceptance criteria on both surfaces where relevant: local browser
+   **and** the phone via the tunnel URL (mobile overflow/scroll behaves
+   differently). Hot reload makes iterating cheap — in-place edits apply live.
+3. Capture the before/after screenshot the PR template asks for. The Playwright
+   suite can drive a headless browser for a scripted screenshot if you don't
+   have a device handy.
+
 ## AI reviewers
 
 Three AI code reviewers run on every PR: **CodeRabbit**, **Sourcery**, and **cubic**.
@@ -187,6 +239,25 @@ specific concerns; delete the section on PRs where it doesn't apply.
 Don't casually modify `.coderabbit.yaml` or `cubic.yaml` without understanding
 the tradeoffs — see the commit history of those files for context on why each
 flag is set the way it is.
+
+## Dependency updates (Renovate)
+
+**Renovate** manages all dependencies — NuGet, npm, and GitHub Actions are
+auto-detected. Config: `.github/renovate.json5`. (Replaced Dependabot on
+2026-07-22, PRs #48–#50; there is no `dependabot.yml` anymore.)
+
+It is configured for **maximum automation**: it proposes every semver level
+(including majors) the moment a version publishes — no cooldown — and
+**auto-merges each PR via GitHub's native auto-merge once the required CI checks
+are green**. Branch protection is the safety gate: a bump that breaks the build
+or tests never merges, it just sits as an open PR. It also runs lockfile
+maintenance and keeps pinned action digests current, and maintains a single
+Dependency Dashboard issue listing everything it manages.
+
+Because green CI ⇒ auto-merge, the required suites are the only thing standing
+between a dependency bump and `main` — another reason not to weaken them. Don't
+casually edit `renovate.json5`; if bot PRs get noisy, tune throttling there
+rather than disabling checks.
 
 ## Issue → PR workflow (agent skills)
 
@@ -231,6 +302,11 @@ git checkout main && git pull --prune
 ```
 
 - One concern per PR; keep them small.
+- **Conventional Commits.** Commit messages and PR titles use `feat:` / `fix:` /
+  `chore:` / `docs:` (optional scope, imperative mood). Because PRs merge with
+  `--squash`, **the PR title becomes the commit message on `main`** — make it a
+  well-formed, self-contained Conventional Commit line, not "address review" or
+  "fixes".
 - "How tested" needs evidence (test output, HTTP checks), not intentions.
 - Trivial docs/typo fixes may go straight to `main` only if protection allows —
   prefer a PR anyway; it costs a minute.

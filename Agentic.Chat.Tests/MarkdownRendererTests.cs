@@ -70,6 +70,33 @@ public class MarkdownRendererTests
     }
 
     [Fact]
+    public void Render_OrderedList_ProducesOlWithLi()
+    {
+        var html = MarkdownRenderer.Render("1. first\n2. second\n");
+
+        Assert.Contains("<ol>", html);
+        Assert.Contains("<li>first</li>", html);
+        Assert.Contains("<li>second</li>", html);
+    }
+
+    [Fact]
+    public void Render_InlineCode_ProducesCodeElement()
+    {
+        var html = MarkdownRenderer.Render("Use the `dotnet` CLI.");
+
+        Assert.Contains("<code>dotnet</code>", html);
+    }
+
+    [Fact]
+    public void Render_Blockquote_ProducesBlockquoteElement()
+    {
+        var html = MarkdownRenderer.Render("> quoted text");
+
+        Assert.Contains("<blockquote>", html);
+        Assert.Contains("quoted text", html);
+    }
+
+    [Fact]
     public void Render_Heading_ProducesH1()
     {
         var html = MarkdownRenderer.Render("# Title");

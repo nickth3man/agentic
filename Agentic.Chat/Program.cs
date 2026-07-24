@@ -31,6 +31,7 @@ builder.Services.AddHttpClient("OpenRouter", client =>
     client.Timeout = TimeSpan.FromMinutes(5);
 });
 
+builder.Services.AddScoped<IOpenRouterClient, OpenRouterClient>();
 builder.Services.AddSingleton<ModelCatalogService>();
 builder.Services.AddScoped<SelectedModelService>();
 builder.Services.AddScoped<ProtectedLocalStorage>();

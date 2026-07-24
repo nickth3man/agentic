@@ -61,3 +61,14 @@
         transition: none;
     }
 }
+
+/* Stop button — same footprint as .chat-send, distinct danger styling so it
+   reads as an interrupt control while streaming (issue #12). */
+.chat-stop {
+    background: linear-gradient(145deg, #a12828 0%, #7a1d1d 100%);
+    box-shadow: 0 6px 18px rgba(161, 40, 40, 0.3);
+}
+
+.chat-stop:hover:not(:disabled) {
+    filter: brightness(1.08);
+}

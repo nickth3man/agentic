@@ -1,5 +1,6 @@
 @page "/chat"
 @rendermode InteractiveServer
+@implements IDisposable
 @inject ChatAgentService ChatAgent
 @using Microsoft.AspNetCore.Components
 
@@ -185,12 +186,27 @@
                    disabled="@isBusy"
                    autocomplete="off"
                    aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")" />
-            <button type="submit" class="chat-send" disabled="@isBusy" aria-label="Send message">
-                <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M5 12h12M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span class="send-text">Send</span>
-            </button>
+            @if (isBusy)
+            {
+                <button type="button"
+                        class="chat-send chat-stop"
+                        aria-label="Stop response"
+                        @onclick="Cancel">
+                    <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>
+                    </svg>
+                    <span class="send-text">Stop</span>
+                </button>
+            }
+            else
+            {
+                <button type="submit" class="chat-send" aria-label="Send message">
+                    <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M5 12h12M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="send-text">Send</span>
+                </button>
+            }
         </div>
     </form>
 </main>
@@ -202,6 +218,7 @@
     private string statusText = string.Empty;
     private bool _confirmNewChat;
     private ElementReference _composerInput;
+    private CancellationTokenSource? _sendCts;
 
     private static bool ShouldOpenThinking(ChatDisplayMessage message)
         => message.IsStreaming && string.IsNullOrEmpty(message.Content);
@@ -262,6 +279,32 @@
         }
     }
 
+    private void Cancel()
+    {
+        _sendCts?.Cancel();
+    }
+
+    public void Dispose()
+    {
+        _sendCts?.Cancel();
+        _sendCts?.Dispose();
+        _sendCts = null;
+    }
+
+    private CancellationToken BeginSend()
+    {
+        _sendCts?.Dispose();
+        _sendCts = new CancellationTokenSource();
+        return _sendCts.Token;
+    }
+
+    private void EndSend()
+    {
+        isBusy = false;
+        _sendCts?.Dispose();
+        _sendCts = null;
+    }
+
     private async Task SendAsync()
     {
         if (string.IsNullOrWhiteSpace(inputText) || isBusy)
@@ -275,15 +318,21 @@
         _confirmNewChat = false;
         isBusy = true;
         statusText = "Assistant is responding";
+        var ct = BeginSend();
 
         try
         {
-            await foreach (var _ in ChatAgent.SendStreamingAsync(text))
+            await foreach (var _ in ChatAgent.SendStreamingAsync(text, ct))
             {
                 await InvokeAsync(StateHasChanged);
             }
 
             statusText = "Response complete";
+        }
+        catch (OperationCanceledException)
+        {
+            // User-initiated stop (or navigate-away) — not an error banner.
+            statusText = "Response stopped";
         }
         catch (Exception ex)
         {
@@ -292,7 +341,7 @@
         }
         finally
         {
-            isBusy = false;
+            EndSend();
         }
     }
 
@@ -306,15 +355,20 @@
         isBusy = true;
         errorMessage = null;
         statusText = "Retrying";
+        var ct = BeginSend();
 
         try
         {
-            await foreach (var _ in ChatAgent.RetryLastAsync())
+            await foreach (var _ in ChatAgent.RetryLastAsync(ct))
             {
                 await InvokeAsync(StateHasChanged);
             }
 
             statusText = "Response complete";
+        }
+        catch (OperationCanceledException)
+        {
+            statusText = "Response stopped";
         }
         catch (Exception ex)
         {
@@ -323,7 +377,7 @@
         }
         finally
         {
-            isBusy = false;
+            EndSend();
         }
     }
 
@@ -337,15 +391,20 @@
         isBusy = true;
         errorMessage = null;
         statusText = "Regenerating";
+        var ct = BeginSend();
 
         try
         {
-            await foreach (var _ in ChatAgent.RegenerateAsync())
+            await foreach (var _ in ChatAgent.RegenerateAsync(ct))
             {
                 await InvokeAsync(StateHasChanged);
             }
 
             statusText = "Response complete";
+        }
+        catch (OperationCanceledException)
+        {
+            statusText = "Response stopped";
         }
         catch (Exception ex)
         {
@@ -354,7 +413,7 @@
         }
         finally
         {
-            isBusy = false;
+            EndSend();
         }
     }
 }

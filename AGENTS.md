@@ -295,14 +295,15 @@ which is why `GET /branches/main/protection` returns 404; that endpoint only
 covers legacy branch protection). The ruleset enforces: direct pushes blocked,
 PRs required, only `squash` merges allowed, `dismiss_stale_reviews_on_push` on,
 `required_approving_review_count` 0, `required_review_thread_resolution` false,
-and the `test` status check required. CI runs four parallel jobs — `format`
-(dotnet format + `-warnaserror` Release build on ubuntu-latest), `test` (xUnit on
-ubuntu-latest), `start-phone-tests` (bash suite on windows-latest; installs
-`cloudflared` explicitly since it's not preinstalled), `playwright-tests`
-(browser suite on ubuntu-latest). Run all four before merging. AI reviewer checks
-(CodeRabbit / Sourcery / cubic) are configured advisory — CodeRabbit posts
-reviews as `COMMENT`, never `REQUEST_CHANGES` (see `.coderabbit.yaml`) — so they
-cannot block a merge; a human decides.
+and all four CI jobs required as status checks — `format` (dotnet format +
+`-warnaserror` Release build on ubuntu-latest), `test` (xUnit on ubuntu-latest),
+`start-phone-tests` (bash suite on windows-latest; installs `cloudflared`
+explicitly since it's not preinstalled), and `playwright-tests` (browser suite on
+ubuntu-latest). A PR cannot merge until each of the four reports success, so run
+the CI-parity commands above before pushing. AI reviewer checks (CodeRabbit /
+Sourcery / cubic) are configured advisory — CodeRabbit posts reviews as
+`COMMENT`, never `REQUEST_CHANGES` (see `.coderabbit.yaml`) — so they cannot
+block a merge; a human decides.
 
 ```bash
 git checkout -b feat/short-name          # or fix/, chore/, docs/

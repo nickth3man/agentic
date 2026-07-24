@@ -139,7 +139,8 @@ public class ChatAgentServiceModelSelectionTests
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(selectedModelId);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog), fake);
+        return (new ChatAgentService(
+            fake, options, logger, selection, catalog, NullActiveConversationWriter.Instance), fake);
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
@@ -156,3 +157,5 @@ public class ChatAgentServiceModelSelectionTests
             => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
     }
 }
+
+

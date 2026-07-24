@@ -335,7 +335,7 @@ public class ChatAgentServiceTranscriptHygieneTests
         var (service, _) = CreateService();
         Assert.Empty(service.Messages);
 
-        Assert.False(service.TryPopLastCompletedAssistant());
+        Assert.False(service.TryPopLastCompletedAssistant(out _));
     }
 
     [Fact]
@@ -344,7 +344,7 @@ public class ChatAgentServiceTranscriptHygieneTests
         var (service, _) = CreateService();
         service.AddDisplayMessageForTest("user", "hi");
 
-        Assert.False(service.TryPopLastCompletedAssistant());
+        Assert.False(service.TryPopLastCompletedAssistant(out _));
         Assert.Single(service.Messages);
     }
 
@@ -360,7 +360,7 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal(2, service.Messages.Count);
         Assert.True(service.Messages[^1].IsStreaming);
 
-        Assert.False(service.TryPopLastCompletedAssistant());
+        Assert.False(service.TryPopLastCompletedAssistant(out _));
         Assert.Equal(2, service.Messages.Count);
     }
 
@@ -394,7 +394,8 @@ public class ChatAgentServiceTranscriptHygieneTests
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(null);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog), fake);
+        return (new ChatAgentService(
+            fake, options, logger, selection, catalog, NullActiveConversationWriter.Instance), fake);
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
@@ -411,3 +412,5 @@ public class ChatAgentServiceTranscriptHygieneTests
             => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
     }
 }
+
+

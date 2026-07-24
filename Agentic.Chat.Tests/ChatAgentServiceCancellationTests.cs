@@ -174,7 +174,7 @@ public class ChatAgentServiceCancellationTests
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(null);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog), fake);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, NullActiveConversationWriter.Instance), fake);
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)

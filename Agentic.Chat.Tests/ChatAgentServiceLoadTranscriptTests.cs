@@ -164,12 +164,10 @@ public class ChatAgentServiceLoadTranscriptTests
         }
 
         Assert.NotNull(fake.LastRequest);
-        // Prior whitespace assistant must not enter the API transcript; the new
-        // turn's assistant response ("next") is expected after the follow-up user.
-        Assert.DoesNotContain(
-            fake.LastRequest!.Messages,
-            m => m.Role == "assistant" && string.IsNullOrWhiteSpace(m.Content) && m.Reasoning is null);
-        Assert.Contains(fake.LastRequest.Messages, m => m.Role == "assistant" && m.Content == "next");
+        // LastRequest is the outbound API transcript (before the new assistant is appended).
+        Assert.DoesNotContain(fake.LastRequest!.Messages, m => m.Role == "assistant");
+        Assert.Equal("follow-up", service.Messages[^2].Content);
+        Assert.Equal("next", service.Messages[^1].Content);
     }
 
     [Fact]

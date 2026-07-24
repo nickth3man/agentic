@@ -1,12 +1,8 @@
-using System.Net;
-using System.Text;
-using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Agentic.Chat.Tests;
@@ -24,67 +20,55 @@ public class ChatAgentServiceModelSelectionTests
     [Fact]
     public async Task SendAsync_UsesSelectedModelId_WhenSet()
     {
-        string? capturedBody = null;
-        var service = BuildService(
-            captured: body => capturedBody = body,
+        var (service, fake) = BuildService(
             selectedModelId: "anthropic/claude-3.5-sonnet",
             catalogModels: new[] { ("anthropic/claude-3.5-sonnet", true) });
 
         await Consume(service.SendStreamingAsync("hi"));
 
-        Assert.NotNull(capturedBody);
-        using var doc = JsonDocument.Parse(capturedBody!);
-        Assert.Equal("anthropic/claude-3.5-sonnet", doc.RootElement.GetProperty("model").GetString());
+        Assert.NotNull(fake.LastRequest);
+        Assert.Equal("anthropic/claude-3.5-sonnet", fake.LastRequest!.Model);
     }
 
     [Fact]
     public async Task SendAsync_FallsBackToOptionsModel_WhenSelectionNotLoaded()
     {
-        string? capturedBody = null;
-        var service = BuildService(
-            captured: body => capturedBody = body,
+        var (service, fake) = BuildService(
             selectedModelId: null,
             catalogModels: new[] { (DefaultModel, true) });
 
         await Consume(service.SendStreamingAsync("hi"));
 
-        using var doc = JsonDocument.Parse(capturedBody!);
-        Assert.Equal(DefaultModel, doc.RootElement.GetProperty("model").GetString());
+        Assert.NotNull(fake.LastRequest);
+        Assert.Equal(DefaultModel, fake.LastRequest!.Model);
     }
 
     [Fact]
     public async Task SendAsync_IncludesReasoning_WhenModelSupportsIt()
     {
-        string? capturedBody = null;
-        var service = BuildService(
-            captured: body => capturedBody = body,
+        var (service, fake) = BuildService(
             selectedModelId: null,
             catalogModels: new[] { (DefaultModel, true) });
 
         await Consume(service.SendStreamingAsync("hi"));
 
-        Assert.Contains("\"reasoning\"", capturedBody!);
-        using var doc = JsonDocument.Parse(capturedBody!);
-        Assert.True(doc.RootElement.TryGetProperty("reasoning", out var reasoning));
-        Assert.True(reasoning.GetProperty("enabled").GetBoolean());
-        Assert.False(reasoning.GetProperty("exclude").GetBoolean());
+        Assert.NotNull(fake.LastRequest);
+        Assert.NotNull(fake.LastRequest!.Reasoning);
+        Assert.True(fake.LastRequest.Reasoning!.Enabled);
+        Assert.False(fake.LastRequest.Reasoning.Exclude);
     }
 
     [Fact]
     public async Task SendAsync_OmitsReasoning_WhenModelDoesNotSupportIt()
     {
-        string? capturedBody = null;
-        var service = BuildService(
-            captured: body => capturedBody = body,
+        var (service, fake) = BuildService(
             selectedModelId: null,
             catalogModels: new[] { (DefaultModel, false) });
 
         await Consume(service.SendStreamingAsync("hi"));
 
-        Assert.NotNull(capturedBody);
-        using var doc = JsonDocument.Parse(capturedBody!);
-        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _),
-            "reasoning key must be absent when the catalog says the model doesn't support it.");
+        Assert.NotNull(fake.LastRequest);
+        Assert.Null(fake.LastRequest!.Reasoning);
     }
 
     [Fact]
@@ -92,18 +76,15 @@ public class ChatAgentServiceModelSelectionTests
     {
         // Catalog returns null for the requested id (e.g. fallback default that isn't
         // present in the seeded list), so reasoning must NOT be included.
-        string? capturedBody = null;
-        var service = BuildService(
-            captured: body => capturedBody = body,
+        var (service, fake) = BuildService(
             selectedModelId: null,
             catalogModels: Array.Empty<(string, bool)>());
 
         await Consume(service.SendStreamingAsync("hi"));
 
-        Assert.NotNull(capturedBody);
-        using var doc = JsonDocument.Parse(capturedBody!);
-        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
-        Assert.Equal(DefaultModel, doc.RootElement.GetProperty("model").GetString());
+        Assert.NotNull(fake.LastRequest);
+        Assert.Null(fake.LastRequest!.Reasoning);
+        Assert.Equal(DefaultModel, fake.LastRequest.Model);
     }
 
     [Fact]
@@ -111,48 +92,32 @@ public class ChatAgentServiceModelSelectionTests
     {
         // Even if the catalog does not know about the selected id, we honor the
         // user's selection — the request still uses that id, just without reasoning.
-        string? capturedBody = null;
-        var service = BuildService(
-            captured: body => capturedBody = body,
+        var (service, fake) = BuildService(
             selectedModelId: "newvendor/unknown-experimental",
             catalogModels: new[] { (DefaultModel, true) });
 
         await Consume(service.SendStreamingAsync("hi"));
 
-        Assert.NotNull(capturedBody);
-        using var doc = JsonDocument.Parse(capturedBody!);
-        Assert.Equal("newvendor/unknown-experimental", doc.RootElement.GetProperty("model").GetString());
-        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
+        Assert.NotNull(fake.LastRequest);
+        Assert.Equal("newvendor/unknown-experimental", fake.LastRequest!.Model);
+        Assert.Null(fake.LastRequest.Reasoning);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
 
-    private static ChatAgentService BuildService(
-        Action<string>? captured,
+    private static (ChatAgentService Service, FakeOpenRouterClient Client) BuildService(
         string? selectedModelId,
         (string Id, bool SupportsReasoning)[] catalogModels)
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.Configure<OpenRouterOptions>(o =>
+        var fake = new FakeOpenRouterClient();
+        var options = Options.Create(new OpenRouterOptions
         {
-            o.BaseUrl = "https://test.local/";
-            o.Model = DefaultModel;
+            BaseUrl = "https://test.local/",
+            Model = DefaultModel
         });
+        var logger = NullLogger<ChatAgentService>.Instance;
 
-        services.AddHttpClient("OpenRouter", client => client.BaseAddress = new Uri("https://test.local/"))
-            .ConfigurePrimaryHttpMessageHandler(() => new StubHandler(req =>
-            {
-                captured?.Invoke(req.Content?.ReadAsStringAsync().GetAwaiter().GetResult()!);
-                return (SseBody("[DONE]"), HttpStatusCode.OK);
-            }));
-
-        var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<IHttpClientFactory>();
-        var opts = provider.GetRequiredService<IOptions<OpenRouterOptions>>();
-        var logger = provider.GetRequiredService<ILogger<ChatAgentService>>();
-
-        var catalog = new ModelCatalogService(factory);
+        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
         // Always seed (even with an empty list) so FindByIdAsync returns null on a
         // populated but empty cache, instead of triggering a real /models fetch
         // through the test's HTTP handler.
@@ -174,41 +139,20 @@ public class ChatAgentServiceModelSelectionTests
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(selectedModelId);
 
-        return new ChatAgentService(factory, opts, logger, selection, catalog);
+        return (new ChatAgentService(fake, options, logger, selection, catalog), fake);
     }
 
-    private static async Task<List<ChatDisplayMessage>> Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
+    private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
     {
-        var list = new List<ChatDisplayMessage>();
-        await foreach (var m in stream) list.Add(m);
-        return list;
-    }
-
-    private static string SseBody(params string[] payloads)
-    {
-        var sb = new StringBuilder();
-        foreach (var p in payloads) sb.Append("data: ").Append(p).Append("\n\n");
-        return sb.ToString();
-    }
-
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, (string Body, HttpStatusCode Status)> _respond;
-
-        public StubHandler(Func<HttpRequestMessage, (string Body, HttpStatusCode Status)> respond)
+        await foreach (var _ in stream)
         {
-            _respond = respond;
+            /* drain */
         }
+    }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var (body, status) = _respond(request);
-            var msg = new HttpResponseMessage(status)
-            {
-                Content = new StringContent(body, Encoding.UTF8, "text/event-stream")
-            };
-            return Task.FromResult(msg);
-        }
+    private sealed class UnusedHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name)
+            => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
     }
 }

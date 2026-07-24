@@ -1,22 +1,23 @@
-using System.Net;
-using System.Text;
 using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Agentic.Chat.Tests;
 
 public class ChatAgentServiceResetTests
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
     [Fact]
     public async Task Reset_AfterCompletedSend_ClearsDisplayMessages()
     {
-        var service = CreateService();
+        var (service, _) = CreateService();
         await Consume(service.SendStreamingAsync("hello"));
         Assert.Equal(2, service.Messages.Count);
 
@@ -28,23 +29,14 @@ public class ChatAgentServiceResetTests
     [Fact]
     public async Task Reset_AfterCompletedSend_NextRequestHasOnlySystemAndUser()
     {
-        string? capturedBody = null;
-        var service = CreateService(
-            respond: _ => (SseBody("[DONE]"), HttpStatusCode.OK),
-            captureRequest: r =>
-            {
-                capturedBody = r.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
-            });
+        var (service, fake) = CreateService();
 
         await Consume(service.SendStreamingAsync("first"));
         service.Reset();
-        capturedBody = null;
 
         await Consume(service.SendStreamingAsync("second"));
 
-        Assert.NotNull(capturedBody);
-        using var doc = JsonDocument.Parse(capturedBody!);
-        var messages = doc.RootElement.GetProperty("messages");
+        var messages = RequestMessages(fake);
         Assert.Equal(2, messages.GetArrayLength());
         Assert.Equal("system", messages[0].GetProperty("role").GetString());
         Assert.Equal("You are a helpful chat agent.", messages[0].GetProperty("content").GetString());
@@ -55,13 +47,7 @@ public class ChatAgentServiceResetTests
     [Fact]
     public async Task Reset_WhenEmpty_LeavesDisplayEmpty_AndNextSendIsSystemPlusUser()
     {
-        string? capturedBody = null;
-        var service = CreateService(
-            respond: _ => (SseBody("[DONE]"), HttpStatusCode.OK),
-            captureRequest: r =>
-            {
-                capturedBody = r.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
-            });
+        var (service, fake) = CreateService();
 
         Assert.Empty(service.Messages);
         service.Reset();
@@ -69,9 +55,7 @@ public class ChatAgentServiceResetTests
 
         await Consume(service.SendStreamingAsync("hi"));
 
-        Assert.NotNull(capturedBody);
-        using var doc = JsonDocument.Parse(capturedBody!);
-        var messages = doc.RootElement.GetProperty("messages");
+        var messages = RequestMessages(fake);
         Assert.Equal(2, messages.GetArrayLength());
         Assert.Equal("system", messages[0].GetProperty("role").GetString());
         Assert.Equal("user", messages[1].GetProperty("role").GetString());
@@ -81,11 +65,7 @@ public class ChatAgentServiceResetTests
     [Fact]
     public async Task Reset_WhileStreaming_IsNoOp_ThenClearsAfterComplete()
     {
-        var body = SseBody(
-            "{\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}",
-            "{\"choices\":[{\"delta\":{\"content\":\", world\"}}]}",
-            "[DONE]");
-        var service = CreateService(respond: _ => (body, HttpStatusCode.OK));
+        var (service, _) = CreateService(new StreamDelta("Hello", null));
 
         await using var enumerator = service.SendStreamingAsync("hi").GetAsyncEnumerator();
         Assert.True(await enumerator.MoveNextAsync());
@@ -106,31 +86,17 @@ public class ChatAgentServiceResetTests
 
     // ── helpers ──────────────────────────────────────────────────────────
 
-    private static ChatAgentService CreateService(
-        Func<HttpRequestMessage, (string Body, HttpStatusCode Status)>? respond = null,
-        Action<HttpRequestMessage>? captureRequest = null)
+    private static (ChatAgentService Service, FakeOpenRouterClient Client) CreateService(
+        params StreamDelta[] deltas)
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.Configure<OpenRouterOptions>(o =>
+        var fake = new FakeOpenRouterClient(deltas);
+        var options = Options.Create(new OpenRouterOptions
         {
-            o.BaseUrl = "https://test.local/";
-            o.Model = "test-model";
+            BaseUrl = "https://test.local/",
+            Model = "test-model"
         });
-        services.AddHttpClient("OpenRouter", client =>
-        {
-            client.BaseAddress = new Uri("https://test.local/");
-        })
-        .ConfigurePrimaryHttpMessageHandler(() => new StubHandler(
-            respond ?? (_ => (SseBody("[DONE]"), HttpStatusCode.OK)),
-            captureRequest));
-
-        var provider = services.BuildServiceProvider();
-        var factory = provider.GetRequiredService<IHttpClientFactory>();
-        var options = provider.GetRequiredService<IOptions<OpenRouterOptions>>();
-        var logger = provider.GetRequiredService<ILogger<ChatAgentService>>();
-
-        var catalog = new ModelCatalogService(factory);
+        var logger = NullLogger<ChatAgentService>.Instance;
+        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
         catalog.SeedForTest(new[]
         {
             new OpenRouterModel(
@@ -148,7 +114,17 @@ public class ChatAgentServiceResetTests
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(null);
 
-        return new ChatAgentService(factory, options, logger, selection, catalog);
+        return (new ChatAgentService(fake, options, logger, selection, catalog), fake);
+    }
+
+    private static JsonElement RequestMessages(FakeOpenRouterClient fake)
+    {
+        Assert.NotNull(fake.LastRequest);
+        var json = JsonSerializer.Serialize(
+            fake.LastRequest,
+            JsonOptions);
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.GetProperty("messages").Clone();
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
@@ -159,37 +135,9 @@ public class ChatAgentServiceResetTests
         }
     }
 
-    private static string SseBody(params string[] payloads)
+    private sealed class UnusedHttpClientFactory : IHttpClientFactory
     {
-        var sb = new StringBuilder();
-        foreach (var p in payloads) sb.Append("data: ").Append(p).Append("\n\n");
-        return sb.ToString();
-    }
-
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, (string Body, HttpStatusCode Status)> _respond;
-        private readonly Action<HttpRequestMessage>? _capture;
-
-        public StubHandler(
-            Func<HttpRequestMessage, (string Body, HttpStatusCode Status)> respond,
-            Action<HttpRequestMessage>? capture)
-        {
-            _respond = respond;
-            _capture = capture;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _capture?.Invoke(request);
-            var (body, status) = _respond(request);
-            return Task.FromResult(new HttpResponseMessage(status)
-            {
-                Content = new StringContent(body, Encoding.UTF8, "text/event-stream")
-            });
-        }
+        public HttpClient CreateClient(string name)
+            => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
     }
 }

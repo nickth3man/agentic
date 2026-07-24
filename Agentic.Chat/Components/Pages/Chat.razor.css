@@ -1,0 +1,63 @@
+/* ─── Message affordances: error state + Retry/Regenerate actions ───
+   Scoped CSS for Chat.razor — Blazor rewrites these selectors to target
+   only the Chat page's elements, so the bare class names below are safe
+   to share with .app.css. All values reuse the Signal Lab design tokens
+   defined in :root there. The new styles are intentionally small: the
+   danger tint and the pill button are the only additions, and both
+   match the existing patterns (.chat-error toast, .new-chat-btn). */
+
+/* Error bubble — soft danger tint that reads as an error state without
+   overpowering the content (which is already a terse "(Error 503: …)"
+   sentence from the service layer). The background echoes the .chat-error
+   toast for visual cohesion; the danger-tinted border keeps the state
+   legible at a glance. */
+.chat-bubble.is-error {
+    background: var(--danger-bg);
+    border-color: rgba(161, 40, 40, 0.4);
+}
+
+/* Per-message action button (Retry / Regenerate). Small pill, matches the
+   shape and weight of the existing .new-chat-btn in the header so the
+   page reads as one button family. Sits beneath the bubble content via
+   margin-top (the bubble itself is flex/block, so the button flows below
+   the .chat-content block). */
+.msg-action-btn {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 0.55rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid var(--line);
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.msg-action-btn:hover:not(:disabled) {
+    color: var(--teal-deep);
+    border-color: rgba(13, 124, 124, 0.35);
+    background: rgba(13, 124, 124, 0.08);
+}
+
+.msg-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.msg-action-btn:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+/* Honor the user's reduced-motion preference (matches the existing
+   @media block in app.css). */
+@media (prefers-reduced-motion: reduce) {
+    .msg-action-btn {
+        transition: none;
+    }
+}

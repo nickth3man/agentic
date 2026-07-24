@@ -124,6 +124,7 @@ public class ChatAgentServiceSendStreamingTests
         Assert.StartsWith("(Error 400:", assistant.Content);
         Assert.Contains("rate limited", assistant.Content);
         Assert.False(assistant.IsStreaming);
+        Assert.True(assistant.IsError);
     }
 
     [Fact]
@@ -143,6 +144,7 @@ public class ChatAgentServiceSendStreamingTests
         // Slice between the known prefix and trailing ")"; should be body[..300] + ellipsis.
         var inner = assistant.Content[prefix.Length..^suffix.Length];
         Assert.Equal(body[..300] + "\u2026", inner);
+        Assert.True(assistant.IsError);
     }
 
     [Fact]

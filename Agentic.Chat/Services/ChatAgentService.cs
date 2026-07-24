@@ -147,14 +147,14 @@ public sealed class ChatAgentService
             var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
 
             // Capture cancel/error into locals — C# forbids yield inside a try that has a catch.
-            // A pre-cancelled token is honored either by FindByIdAsync (cache-miss WaitAsync)
-            // or by StreamChatAsync (ThrowIfCancellationRequested on first MoveNext). The
-            // catalog cache-hit path skips its CT checks, so StreamChatAsync is the backstop.
+            // Catalog cache-hit skips its own CT checks, so we ThrowIfCancellationRequested
+            // before FindByIdAsync; mid-stream cancel is caught around MoveNextAsync.
             OpenRouterException? openRouterException = null;
             OperationCanceledException? canceledException = null;
             OpenRouterModel? modelInfo = null;
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 modelInfo = await _modelCatalog
                     .FindByIdAsync(modelId, cancellationToken)
                     .ConfigureAwait(false);
@@ -219,6 +219,7 @@ public sealed class ChatAgentService
             {
                 FinalizeCancelledAssistant(assistant);
                 yield return assistant;
+                // Re-throw so Chat.razor can announce "Response stopped" without an error banner.
                 ExceptionDispatchInfo.Capture(canceledException).Throw();
             }
 
@@ -278,7 +279,7 @@ public sealed class ChatAgentService
         // Display-only marker — MUST NOT enter the API transcript.
         assistant.Content = string.IsNullOrEmpty(apiContent)
             ? "(stopped)"
-            : apiContent + "\n\n(stopped)";
+            : apiContent + " (stopped)";
     }
 
     // Pops the trailing error assistant from the display list, if any. Used by the Retry

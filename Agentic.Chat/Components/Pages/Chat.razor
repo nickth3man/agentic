@@ -85,10 +85,12 @@
                 </div>
             }
 
-            @foreach (var message in ChatAgent.Messages)
+            @for (var i = 0; i < ChatAgent.Messages.Count; i++)
             {
+                var message = ChatAgent.Messages[i];
                 var isUser = message.Role == "user";
-                <article class="chat-bubble @(isUser ? "user" : "assistant") @(message.IsStreaming ? "is-streaming" : "")"
+                var isLast = i == ChatAgent.Messages.Count - 1;
+                <article class="chat-bubble @(isUser ? "user" : "assistant") @(message.IsStreaming ? "is-streaming" : "") @(message.IsError ? "is-error" : "")"
                          aria-label="@(isUser ? "You" : "Assistant")">
                     <div class="bubble-meta">
                         <span class="avatar @(isUser ? "avatar-you" : "avatar-agent")" aria-hidden="true">
@@ -138,6 +140,28 @@
                                 }
                             }
                         </div>
+                    }
+
+                    @if (message.IsError && !isBusy)
+                    {
+                        <button type="button"
+                                class="msg-action-btn"
+                                disabled="@isBusy"
+                                aria-label="Retry last message"
+                                @onclick="RetryAsync">
+                            Retry
+                        </button>
+                    }
+
+                    @if (isLast && !isUser && !message.IsStreaming && !message.IsError && !isBusy)
+                    {
+                        <button type="button"
+                                class="msg-action-btn"
+                                disabled="@isBusy"
+                                aria-label="Regenerate response"
+                                @onclick="RegenerateAsync">
+                            Regenerate
+                        </button>
                     }
                 </article>
             }
@@ -255,6 +279,68 @@
         try
         {
             await foreach (var _ in ChatAgent.SendStreamingAsync(text))
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+
+            statusText = "Response complete";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            statusText = string.Empty;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task RetryAsync()
+    {
+        if (isBusy)
+        {
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = null;
+        statusText = "Retrying";
+
+        try
+        {
+            await foreach (var _ in ChatAgent.RetryLastAsync())
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+
+            statusText = "Response complete";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            statusText = string.Empty;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task RegenerateAsync()
+    {
+        if (isBusy)
+        {
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = null;
+        statusText = "Regenerating";
+
+        try
+        {
+            await foreach (var _ in ChatAgent.RegenerateAsync())
             {
                 await InvokeAsync(StateHasChanged);
             }

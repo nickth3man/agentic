@@ -47,6 +47,14 @@ public sealed class ChatAgentService
 
     public IReadOnlyList<ChatDisplayMessage> Messages => _displayMessages;
 
+    // Test-only: lets unit tests seed display-list states the public API can't
+    // produce on its own (e.g. a trailing user message — normal sends always pair
+    // user with an assistant placeholder). Exposed via InternalsVisibleTo.
+    internal void AddDisplayMessageForTest(string role, string content)
+    {
+        _displayMessages.Add(new ChatDisplayMessage { Role = role, Content = content });
+    }
+
     public void Reset()
     {
         if (_streamActive)
@@ -59,26 +67,72 @@ public sealed class ChatAgentService
         _apiMessages.Add(new ApiChatMessage("system", SystemPrompt, null));
     }
 
-    public async IAsyncEnumerable<ChatDisplayMessage> SendStreamingAsync(
+    // Send a new user turn and stream the assistant response.
+    public IAsyncEnumerable<ChatDisplayMessage> SendStreamingAsync(
         string userText,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(userText);
+        CancellationToken cancellationToken = default)
+        => StreamTurnAsync(TurnKind.Send, userText, cancellationToken);
 
+    // Retry the most recent failed turn: drop the error placeholder and re-stream the
+    // assistant for the last user turn (already in the transcript — not re-added, so a
+    // retry never compounds the user message). No-op (empty stream) if the last message
+    // isn't an error assistant.
+    public IAsyncEnumerable<ChatDisplayMessage> RetryLastAsync(CancellationToken cancellationToken = default)
+        => StreamTurnAsync(TurnKind.Retry, null, cancellationToken);
+
+    // Regenerate the last completed assistant turn: pop it from the display list and the
+    // API transcript, then re-stream. No-op (empty stream) if the last message isn't a
+    // completed (non-error, non-streaming) assistant.
+    public IAsyncEnumerable<ChatDisplayMessage> RegenerateAsync(CancellationToken cancellationToken = default)
+        => StreamTurnAsync(TurnKind.Regenerate, null, cancellationToken);
+
+    // The single async iterator backing all three public entry points. Parameterizing on
+    // TurnKind (rather than consuming a nested helper iterator) keeps this as ONE state
+    // machine — nested async iterators generate compiler branches that can't reach 100%
+    // branch coverage. Validation for Send runs on first enumeration (matching the prior
+    // async-iterator semantics); Retry/Regenerate pop their target eagerly here and
+    // yield-break (no-op) when the precondition fails.
+    //
+    // C# forbids yield inside a try that has a catch, so MoveNextAsync is advanced
+    // manually and OpenRouterException is captured into a local — the outer try has only
+    // a finally so yield is permitted.
+    //
+    // Transcript invariant: the assistant entry is appended to _apiMessages ONLY when the
+    // stream completed cleanly AND produced real content/reasoning. The "(No response
+    // content returned.)" placeholder and error states never enter the API transcript.
+    private async IAsyncEnumerable<ChatDisplayMessage> StreamTurnAsync(
+        TurnKind kind,
+        string? userText,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         _streamActive = true;
         try
         {
-            var trimmed = userText.Trim();
-            _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
-            _apiMessages.Add(new ApiChatMessage("user", trimmed, null));
-
-            var assistant = new ChatDisplayMessage
+            if (kind == TurnKind.Send)
             {
-                Role = "assistant",
-                IsStreaming = true
-            };
+                ArgumentException.ThrowIfNullOrWhiteSpace(userText);
+                var trimmed = userText!.Trim();
+                _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
+                _apiMessages.Add(new ApiChatMessage("user", trimmed, null));
+            }
+            else if (kind == TurnKind.Retry)
+            {
+                if (!TryPopErrorPlaceholder())
+                {
+                    yield break;
+                }
+            }
+            else
+            {
+                if (!TryPopLastCompletedAssistant())
+                {
+                    yield break;
+                }
+            }
+
+            var assistant = new ChatDisplayMessage { Role = "assistant", IsStreaming = true };
             _displayMessages.Add(assistant);
-            yield return assistant;
+            yield return assistant; // placeholder, before any traffic
 
             LogStreamingStart(_logger, _apiMessages.Count, null);
 
@@ -95,11 +149,7 @@ public sealed class ChatAgentService
                     ? new ReasoningRequest(Enabled: true, Exclude: false)
                     : null);
 
-            var completed = false;
             OpenRouterException? openRouterException = null;
-            // C# does not permit yield returns inside a try block with a catch clause.
-            // Advance the client enumerator manually so exception handling preserves
-            // per-delta yields and the completed-flag finalization behavior.
             var enumerator = _client
                 .StreamChatAsync(request, cancellationToken)
                 .GetAsyncEnumerator(cancellationToken);
@@ -120,7 +170,6 @@ public sealed class ChatAgentService
 
                     if (!hasNext)
                     {
-                        completed = true;
                         break;
                     }
 
@@ -139,33 +188,84 @@ public sealed class ChatAgentService
             if (openRouterException is not null)
             {
                 assistant.IsStreaming = false;
+                assistant.IsError = true;
                 assistant.Content = $"(Error {openRouterException.StatusCode}: {Truncate(openRouterException.Body, 300)})";
                 yield return assistant;
+                yield break;
             }
 
-            if (completed)
+            assistant.IsStreaming = false;
+
+            var hadRealContent = !string.IsNullOrWhiteSpace(assistant.Content)
+                || !string.IsNullOrWhiteSpace(assistant.Reasoning);
+            if (hadRealContent)
             {
-                assistant.IsStreaming = false;
-
-                if (string.IsNullOrWhiteSpace(assistant.Content) &&
-                    string.IsNullOrWhiteSpace(assistant.Reasoning))
-                {
-                    assistant.Content = "(No response content returned.)";
-                }
-
-                // Keep assistant content (+ reasoning when present) in the API transcript for multi-turn continuity.
                 _apiMessages.Add(new ApiChatMessage(
                     "assistant",
                     assistant.Content,
                     string.IsNullOrWhiteSpace(assistant.Reasoning) ? null : assistant.Reasoning));
-
-                yield return assistant;
             }
+            else
+            {
+                // Display-only placeholder — MUST NOT enter the API transcript.
+                assistant.Content = "(No response content returned.)";
+            }
+
+            yield return assistant;
         }
         finally
         {
             _streamActive = false;
         }
+    }
+
+    // Pops the trailing error assistant from the display list, if any. Used by the Retry
+    // path. Does NOT touch _apiMessages — error placeholders were never appended.
+    internal bool TryPopErrorPlaceholder()
+    {
+        if (_displayMessages.Count == 0)
+        {
+            return false;
+        }
+
+        var last = _displayMessages[^1];
+        if (last.Role != "assistant" || !last.IsError)
+        {
+            return false;
+        }
+
+        _displayMessages.RemoveAt(_displayMessages.Count - 1);
+        return true;
+    }
+
+    // Pops the trailing completed (non-error, non-streaming) assistant from the display
+    // list and, when present, the matching assistant entry from the API transcript. Used
+    // by the Regenerate path. The transcript-pop is guarded on Role == "assistant": a
+    // completed assistant that was an empty-response placeholder has NO transcript entry
+    // (the last transcript entry is its user turn), so the guard preserves that user turn.
+    internal bool TryPopLastCompletedAssistant()
+    {
+        if (_displayMessages.Count == 0)
+        {
+            return false;
+        }
+
+        var last = _displayMessages[^1];
+        if (last.Role != "assistant" || last.IsError || last.IsStreaming)
+        {
+            return false;
+        }
+
+        _displayMessages.RemoveAt(_displayMessages.Count - 1);
+        // _apiMessages always holds at least the system message, so [^1] is safe.
+        // Guard on Role == "assistant": a completed assistant that was an empty-response
+        // placeholder has NO transcript entry (the last entry is its user turn), so we
+        // only pop when the last transcript entry really is the assistant turn.
+        if (_apiMessages[^1].Role == "assistant")
+        {
+            _apiMessages.RemoveAt(_apiMessages.Count - 1);
+        }
+        return true;
     }
 
     private static bool ApplyDelta(StreamDelta delta, ChatDisplayMessage assistant)
@@ -189,4 +289,12 @@ public sealed class ChatAgentService
 
     internal static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..max] + "…";
+
+    // Discriminates the three streaming entry points inside the single shared iterator.
+    private enum TurnKind
+    {
+        Send,
+        Retry,
+        Regenerate
+    }
 }

@@ -67,15 +67,29 @@ internal static class TestSupport
 
 internal sealed class FakeOpenRouterClient : IOpenRouterClient
 {
-    private readonly IReadOnlyList<StreamDelta> _deltas;
-    private readonly Exception? _exception;
+    // Per-call scripted responses (FIFO). The single-response ctor enqueues a
+    // single response; multi-call tests (retry/regenerate/multi-send) enqueue
+    // one per expected call so a single service instance can answer differently
+    // across send/retry/regenerate.
+    private readonly Queue<FakeResponse> _responses = new();
 
     public ChatCompletionRequest? LastRequest { get; private set; }
 
+    public int CallCount { get; private set; }
+
+    public IReadOnlyList<FakeResponse> RemainingResponses => _responses.ToArray();
+
     public FakeOpenRouterClient(IEnumerable<StreamDelta>? deltas = null, Exception? exception = null)
     {
-        _deltas = deltas?.ToList() ?? [];
-        _exception = exception;
+        _responses.Enqueue(new FakeResponse(deltas?.ToList() ?? [], exception));
+    }
+
+    public FakeOpenRouterClient(params FakeResponse[] responses)
+    {
+        foreach (var r in responses)
+        {
+            _responses.Enqueue(r);
+        }
     }
 
     public async IAsyncEnumerable<StreamDelta> StreamChatAsync(
@@ -86,14 +100,25 @@ internal sealed class FakeOpenRouterClient : IOpenRouterClient
         // Snapshot the transcript at the call boundary; ChatAgentService appends the
         // completed assistant message to its live list after the client returns.
         LastRequest = request with { Messages = request.Messages.ToList() };
-        if (_exception is not null)
+        CallCount++;
+        var response = _responses.Count > 0
+            ? _responses.Dequeue()
+            : new FakeResponse([], null);
+        if (response.Exception is not null)
         {
-            throw _exception;
+            throw response.Exception;
         }
-        foreach (var delta in _deltas)
+        foreach (var delta in response.Deltas)
         {
             cancellationToken.ThrowIfCancellationRequested();
             yield return delta;
         }
+    }
+
+    public sealed record FakeResponse(IReadOnlyList<StreamDelta> Deltas, Exception? Exception)
+    {
+        public static FakeResponse Ok(params StreamDelta[] deltas) => new(deltas, null);
+
+        public static FakeResponse Err(Exception ex) => new([], ex);
     }
 }

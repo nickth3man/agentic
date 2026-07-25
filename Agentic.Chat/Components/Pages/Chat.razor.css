@@ -99,6 +99,40 @@
     outline-offset: 2px;
 }
 
+/* Context is estimated from the complete local transcript. When it exceeds the
+   active model's working budget, the divider marks messages retained on screen
+   but omitted from the API request. */
+.context-meter {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.14rem 0.4rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink-mute);
+    font-family: var(--font-body);
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.context-trim-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0.75rem 0;
+    color: var(--ink-mute);
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.context-trim-divider::before,
+.context-trim-divider::after {
+    height: 1px;
+    flex: 1;
+    background: var(--line);
+    content: "";
+}
+
 /* ─── Copy controls ─── */
 .message-copy-btn {
     display: inline-flex;

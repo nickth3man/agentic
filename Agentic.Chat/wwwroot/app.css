@@ -864,17 +864,27 @@ body {
     letter-spacing: 0.02em;
 }
 
+.think-duration {
+    margin-left: auto;
+    color: var(--ink-mute);
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
 .thinking-text {
     margin: 0 0 0.35rem;
     padding: 0.55rem 0.25rem 0.35rem;
     border-top: 1px dashed rgba(13, 124, 124, 0.22);
+    box-sizing: border-box;
+    max-width: 100%;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: break-word;
     font-family: var(--font-mono);
     font-size: 0.76rem;
     line-height: 1.5;
     color: var(--ink-soft);
-    max-height: 240px;
+    max-height: 40vh;
+    overflow-x: hidden;
     overflow-y: auto;
 }
 

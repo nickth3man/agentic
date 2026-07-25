@@ -329,7 +329,7 @@
 
             statusText = "Response complete";
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex) when (ex.CancellationToken == ct)
         {
             // User-initiated stop (or navigate-away) — not an error banner.
             statusText = "Response stopped";
@@ -366,7 +366,7 @@
 
             statusText = "Response complete";
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex) when (ex.CancellationToken == ct)
         {
             statusText = "Response stopped";
         }
@@ -402,7 +402,7 @@
 
             statusText = "Response complete";
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex) when (ex.CancellationToken == ct)
         {
             statusText = "Response stopped";
         }

@@ -43,3 +43,15 @@ export function stopListeningForOutsideClick(cleanupFn) {
         cleanupFn();
     }
 }
+
+// Focusing a search box on a touch-first device opens the virtual keyboard and
+// obscures most of the picker. Fine-pointer desktops retain the fast keyboard flow.
+export function shouldAutoFocusSearch() {
+    return !window.matchMedia('(any-pointer: coarse)').matches &&
+        navigator.maxTouchPoints === 0;
+}
+
+export function scrollActiveModelIntoView() {
+    document.querySelector('.model-picker-row.is-active')
+        ?.scrollIntoView({ block: 'nearest' });
+}

@@ -50,6 +50,7 @@ builder.Services.AddDbContext<ChatDbContext>(options =>
 builder.Services.AddScoped<IOpenRouterClient, OpenRouterClient>();
 builder.Services.AddSingleton<ModelCatalogService>();
 builder.Services.AddScoped<SelectedModelService>();
+builder.Services.AddScoped<ModelPickerPreferencesService>();
 builder.Services.AddScoped<SystemPromptService>();
 builder.Services.AddScoped<ChatSettingsService>();
 builder.Services.AddScoped<ProtectedLocalStorage>();

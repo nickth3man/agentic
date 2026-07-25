@@ -1,258 +1,405 @@
 @page "/chat"
 @rendermode InteractiveServer
 @inject ChatAgentService ChatAgent
+@inject ConversationService Conversations
+@implements IDisposable
 @using Microsoft.AspNetCore.Components
 
 <PageTitle>Agentic</PageTitle>
 
-<main class="chat-page">
-    <div class="chat-atmosphere" aria-hidden="true">
-        <div class="orb orb-a"></div>
-        <div class="orb orb-b"></div>
-        <div class="orb orb-c"></div>
-        <div class="grid-wash"></div>
-    </div>
+<div class="chat-shell @(_sidebarOpen ? "sidebar-open" : null)">
+    <div class="sidebar-backdrop" @onclick="CloseSidebar" aria-hidden="@(!_sidebarOpen)"></div>
 
-    <header class="chat-brand">
-        <div class="brand-mark" aria-hidden="true">
-            <span class="ring ring-1"></span>
-            <span class="ring ring-2"></span>
-            <span class="core"></span>
+    <aside class="chat-sidebar" aria-label="Conversations" id="chat-sidebar">
+        <div class="sidebar-header">
+            <h2 class="sidebar-title">Chats</h2>
+            <button type="button"
+                    class="sidebar-close"
+                    @onclick="CloseSidebar"
+                    aria-label="Close conversation list">
+                ×
+            </button>
         </div>
-        <div class="brand-copy">
-            <h1 class="brand-name">Agentic</h1>
-            <div class="chat-subtitle">
-                Multi-turn via OpenRouter
-                <ModelPicker />
-            </div>
-        </div>
-        <div class="chat-header-actions">
-            <SystemPromptSettings />
-            @if (_confirmNewChat)
+
+        <button type="button"
+                class="sidebar-new"
+                disabled="@isBusy"
+                @onclick="OnSidebarNewChatAsync">
+            New chat
+        </button>
+
+        <ul class="sidebar-list" role="list">
+            @foreach (var conversation in Conversations.Conversations)
             {
-                <div class="new-chat-confirm" role="group" aria-label="Confirm clear conversation"
-                     @onkeydown="OnNewChatConfirmKeyDown">
-                    <button type="button"
-                            class="new-chat-btn is-confirm"
-                            disabled="@isBusy"
-                            @onclick="ConfirmNewChatAsync">
-                        Clear?
-                    </button>
-                    <button type="button"
-                            class="new-chat-cancel"
-                            disabled="@isBusy"
-                            @onclick="CancelNewChatConfirm">
-                        Cancel
-                    </button>
-                </div>
+                var isActive = conversation.Id == Conversations.ActiveConversationId;
+                <li class="sidebar-item @(isActive ? "is-active" : null)">
+                    @if (_renamingId == conversation.Id)
+                    {
+                        <form class="sidebar-rename-form" @onsubmit="ConfirmRenameAsync" @onsubmit:preventDefault>
+                            <input class="sidebar-rename-input"
+                                   @bind="_renameText"
+                                   @bind:event="oninput"
+                                   aria-label="Rename conversation"
+                                   maxlength="200" />
+                            <button type="submit" class="sidebar-icon-btn" aria-label="Save name">✓</button>
+                            <button type="button" class="sidebar-icon-btn" @onclick="CancelRename" aria-label="Cancel rename">×</button>
+                        </form>
+                    }
+                    else if (_deleteConfirmId == conversation.Id)
+                    {
+                        <div class="sidebar-delete-confirm" role="group" aria-label="Confirm delete">
+                            <span class="sidebar-delete-label">Delete?</span>
+                            <button type="button" class="sidebar-icon-btn danger" disabled="@isBusy" @onclick="() => ConfirmDeleteAsync(conversation.Id)">Yes</button>
+                            <button type="button" class="sidebar-icon-btn" disabled="@isBusy" @onclick="CancelDelete">No</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <button type="button"
+                                class="sidebar-item-main"
+                                disabled="@isBusy"
+                                @onclick="() => SwitchConversationAsync(conversation.Id)">
+                            <span class="sidebar-item-title">@conversation.Title</span>
+                        </button>
+                        <div class="sidebar-item-actions">
+                            <button type="button"
+                                    class="sidebar-icon-btn"
+                                    disabled="@isBusy"
+                                    aria-label="Rename conversation"
+                                    @onclick="() => BeginRename(conversation)">
+                                ✎
+                            </button>
+                            <button type="button"
+                                    class="sidebar-icon-btn danger"
+                                    disabled="@isBusy"
+                                    aria-label="Delete conversation"
+                                    @onclick="() => BeginDelete(conversation.Id)">
+                                ⌫
+                            </button>
+                        </div>
+                    }
+                </li>
             }
-            else
-            {
+        </ul>
+    </aside>
+
+    <main class="chat-page">
+        <div class="chat-atmosphere" aria-hidden="true">
+            <div class="orb orb-a"></div>
+            <div class="orb orb-b"></div>
+            <div class="orb orb-c"></div>
+            <div class="grid-wash"></div>
+        </div>
+
+        <header class="chat-brand">
+            <button type="button"
+                    class="sidebar-toggle"
+                    @onclick="ToggleSidebar"
+                    aria-expanded="@_sidebarOpen"
+                    aria-controls="chat-sidebar"
+                    aria-label="Open conversation list">
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+            </button>
+            <div class="brand-mark" aria-hidden="true">
+                <span class="ring ring-1"></span>
+                <span class="ring ring-2"></span>
+                <span class="core"></span>
+            </div>
+            <div class="brand-copy">
+                <h1 class="brand-name">Agentic</h1>
+                <div class="chat-subtitle">
+                    Multi-turn via OpenRouter
+                    <ModelPicker />
+                </div>
+            </div>
+            <div class="chat-header-actions">
+                <SystemPromptSettings />
                 <button type="button"
                         class="new-chat-btn"
                         disabled="@isBusy"
-                        @onclick="OnNewChatClickAsync"
+                        @onclick="OnSidebarNewChatAsync"
                         aria-label="New chat">
                     New chat
                 </button>
-            }
-            <div class="live-badge @(isBusy ? "is-live" : "")" aria-hidden="true">
-                <span class="live-dot"></span>
-                <span class="live-label">@(isBusy ? "Streaming" : "Ready")</span>
+                <div class="live-badge @(isBusy ? "is-live" : "")" aria-hidden="true">
+                    <span class="live-dot"></span>
+                    <span class="live-label">@(isBusy ? "Streaming" : "Ready")</span>
+                </div>
+            </div>
+        </header>
+
+        <div id="chat-status" class="visually-hidden" aria-live="polite" aria-atomic="true">
+            @statusText
+        </div>
+
+        <div class="chat-stage">
+            <div class="chat-messages" role="log" aria-relevant="additions" aria-busy="@isBusy">
+                @if (!ChatAgent.Messages.Any())
+                {
+                    <div class="empty-state">
+                        <div class="empty-glyph" aria-hidden="true">
+                            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 40c0-11 9-20 20-20s20 9 20 20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                                <circle cx="22" cy="28" r="2.5" fill="currentColor"/>
+                                <circle cx="42" cy="28" r="2.5" fill="currentColor"/>
+                                <path d="M24 46h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                                <path class="spark" d="M48 14l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" fill="currentColor"/>
+                            </svg>
+                        </div>
+                        <p class="empty-title">Start a signal</p>
+                        <p class="empty-body">Ask anything. Reasoning streams into Thinking as the model works.</p>
+                    </div>
+                }
+
+                @for (var i = 0; i < ChatAgent.Messages.Count; i++)
+                {
+                    var message = ChatAgent.Messages[i];
+                    var isUser = message.Role == "user";
+                    var isLast = i == ChatAgent.Messages.Count - 1;
+                    <article class="chat-bubble @(isUser ? "user" : "assistant") @(message.IsStreaming ? "is-streaming" : "") @(message.IsError ? "is-error" : "")"
+                             aria-label="@(isUser ? "You" : "Assistant")">
+                        <div class="bubble-meta">
+                            <span class="avatar @(isUser ? "avatar-you" : "avatar-agent")" aria-hidden="true">
+                                @(isUser ? "Y" : "A")
+                            </span>
+                            <div class="chat-role">@(isUser ? "You" : "Assistant")</div>
+                        </div>
+
+                        @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || (message.IsStreaming && string.IsNullOrEmpty(message.Content))))
+                        {
+                            <details class="thinking-panel @(message.IsStreaming && string.IsNullOrEmpty(message.Content) ? "is-active" : "")"
+                                     open="@ShouldOpenThinking(message)">
+                                <summary>
+                                    <span class="think-pulse" aria-hidden="true">
+                                        <span></span><span></span><span></span>
+                                    </span>
+                                    <span class="think-label">
+                                        @(message.IsStreaming && string.IsNullOrEmpty(message.Content) ? "Thinking…" : "Thinking")
+                                    </span>
+                                </summary>
+                                <pre class="thinking-text">@(string.IsNullOrEmpty(message.Reasoning) ? "…" : message.Reasoning)</pre>
+                            </details>
+                        }
+
+                        @if (!string.IsNullOrEmpty(message.Content) || (message.IsStreaming && !string.IsNullOrEmpty(message.Reasoning)))
+                        {
+                            <div class="chat-content @(isUser ? "is-plain" : "is-markdown")">
+                                @if (string.IsNullOrEmpty(message.Content) && message.IsStreaming)
+                                {
+                                    <span class="chat-pending">
+                                        <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                                        Responding…
+                                    </span>
+                                }
+                                else if (isUser)
+                                {
+                                    @message.Content
+                                }
+                                else
+                                {
+                                    <div class="markdown-body">
+                                        @((MarkupString)MarkdownRenderer.Render(message.Content))
+                                    </div>
+                                    @if (message.IsStreaming)
+                                    {
+                                        <span class="caret" aria-hidden="true"></span>
+                                    }
+                                }
+                            </div>
+                        }
+
+                        @if (message.IsError && !isBusy)
+                        {
+                            <button type="button"
+                                    class="msg-action-btn"
+                                    disabled="@isBusy"
+                                    aria-label="Retry last message"
+                                    @onclick="RetryAsync">
+                                Retry
+                            </button>
+                        }
+
+                        @if (isLast && !isUser && !message.IsStreaming && !message.IsError && !isBusy)
+                        {
+                            <button type="button"
+                                    class="msg-action-btn"
+                                    disabled="@isBusy"
+                                    aria-label="Regenerate response"
+                                    @onclick="RegenerateAsync">
+                                Regenerate
+                            </button>
+                        }
+                    </article>
+                }
             </div>
         </div>
-    </header>
 
-    <div id="chat-status" class="visually-hidden" aria-live="polite" aria-atomic="true">
-        @statusText
-    </div>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div id="chat-error" class="chat-error" role="alert">@errorMessage</div>
+        }
 
-    <div class="chat-stage">
-        <div class="chat-messages" role="log" aria-relevant="additions" aria-busy="@isBusy">
-            @if (!ChatAgent.Messages.Any())
-            {
-                <div class="empty-state">
-                    <div class="empty-glyph" aria-hidden="true">
-                        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 40c0-11 9-20 20-20s20 9 20 20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-                            <circle cx="22" cy="28" r="2.5" fill="currentColor"/>
-                            <circle cx="42" cy="28" r="2.5" fill="currentColor"/>
-                            <path d="M24 46h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-                            <path class="spark" d="M48 14l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z" fill="currentColor"/>
+        <form class="chat-form" @onsubmit="SendAsync" @onsubmit:preventDefault>
+            <div class="composer">
+                <label class="visually-hidden" for="chat-input">Message</label>
+                <input id="chat-input"
+                       @ref="_composerInput"
+                       @bind="inputText"
+                       @bind:event="oninput"
+                       class="chat-input"
+                       placeholder="Type a message…"
+                       disabled="@isBusy"
+                       autocomplete="off"
+                       aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")" />
+                @if (isBusy)
+                {
+                    <button type="button"
+                            class="chat-send chat-stop"
+                            aria-label="Stop response"
+                            @onclick="Cancel">
+                        <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>
                         </svg>
-                    </div>
-                    <p class="empty-title">Start a signal</p>
-                    <p class="empty-body">Ask anything. Reasoning streams into Thinking as the model works.</p>
-                </div>
-            }
-
-            @for (var i = 0; i < ChatAgent.Messages.Count; i++)
-            {
-                var message = ChatAgent.Messages[i];
-                var isUser = message.Role == "user";
-                var isLast = i == ChatAgent.Messages.Count - 1;
-                <article class="chat-bubble @(isUser ? "user" : "assistant") @(message.IsStreaming ? "is-streaming" : "") @(message.IsError ? "is-error" : "")"
-                         aria-label="@(isUser ? "You" : "Assistant")">
-                    <div class="bubble-meta">
-                        <span class="avatar @(isUser ? "avatar-you" : "avatar-agent")" aria-hidden="true">
-                            @(isUser ? "Y" : "A")
-                        </span>
-                        <div class="chat-role">@(isUser ? "You" : "Assistant")</div>
-                    </div>
-
-                    @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || (message.IsStreaming && string.IsNullOrEmpty(message.Content))))
-                    {
-                        <details class="thinking-panel @(message.IsStreaming && string.IsNullOrEmpty(message.Content) ? "is-active" : "")"
-                                 open="@ShouldOpenThinking(message)">
-                            <summary>
-                                <span class="think-pulse" aria-hidden="true">
-                                    <span></span><span></span><span></span>
-                                </span>
-                                <span class="think-label">
-                                    @(message.IsStreaming && string.IsNullOrEmpty(message.Content) ? "Thinking…" : "Thinking")
-                                </span>
-                            </summary>
-                            <pre class="thinking-text">@(string.IsNullOrEmpty(message.Reasoning) ? "…" : message.Reasoning)</pre>
-                        </details>
-                    }
-
-                    @if (!string.IsNullOrEmpty(message.Content) || (message.IsStreaming && !string.IsNullOrEmpty(message.Reasoning)))
-                    {
-                        <div class="chat-content @(isUser ? "is-plain" : "is-markdown")">
-                            @if (string.IsNullOrEmpty(message.Content) && message.IsStreaming)
-                            {
-                                <span class="chat-pending">
-                                    <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
-                                    Responding…
-                                </span>
-                            }
-                            else if (isUser)
-                            {
-                                @message.Content
-                            }
-                            else
-                            {
-                                <div class="markdown-body">
-                                    @((MarkupString)MarkdownRenderer.Render(message.Content))
-                                </div>
-                                @if (message.IsStreaming)
-                                {
-                                    <span class="caret" aria-hidden="true"></span>
-                                }
-                            }
-                        </div>
-                    }
-
-                    @if (message.IsError && !isBusy)
-                    {
-                        <button type="button"
-                                class="msg-action-btn"
-                                disabled="@isBusy"
-                                aria-label="Retry last message"
-                                @onclick="RetryAsync">
-                            Retry
-                        </button>
-                    }
-
-                    @if (isLast && !isUser && !message.IsStreaming && !message.IsError && !isBusy)
-                    {
-                        <button type="button"
-                                class="msg-action-btn"
-                                disabled="@isBusy"
-                                aria-label="Regenerate response"
-                                @onclick="RegenerateAsync">
-                            Regenerate
-                        </button>
-                    }
-                </article>
-            }
-        </div>
-    </div>
-
-    @if (!string.IsNullOrEmpty(errorMessage))
-    {
-        <div id="chat-error" class="chat-error" role="alert">@errorMessage</div>
-    }
-
-    <form class="chat-form" @onsubmit="SendAsync" @onsubmit:preventDefault>
-        <div class="composer">
-            <label class="visually-hidden" for="chat-input">Message</label>
-            <input id="chat-input"
-                   @ref="_composerInput"
-                   @bind="inputText"
-                   @bind:event="oninput"
-                   class="chat-input"
-                   placeholder="Type a message…"
-                   disabled="@isBusy"
-                   autocomplete="off"
-                   aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")" />
-            <button type="submit" class="chat-send" disabled="@isBusy" aria-label="Send message">
-                <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M5 12h12M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span class="send-text">Send</span>
-            </button>
-        </div>
-    </form>
-</main>
+                        <span class="send-text">Stop</span>
+                    </button>
+                }
+                else
+                {
+                    <button type="submit" class="chat-send" aria-label="Send message">
+                        <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M5 12h12M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="send-text">Send</span>
+                    </button>
+                }
+            </div>
+        </form>
+    </main>
+</div>
 
 @code {
     private string inputText = string.Empty;
     private bool isBusy;
     private string? errorMessage;
     private string statusText = string.Empty;
-    private bool _confirmNewChat;
     private ElementReference _composerInput;
+    private bool _sidebarOpen;
+    private bool _initialized;
+    private Guid? _renamingId;
+    private string _renameText = string.Empty;
+    private Guid? _deleteConfirmId;
+    private CancellationTokenSource? _sendCts;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _initialized)
+        {
+            return;
+        }
+
+        _initialized = true;
+        Conversations.OnChange += OnConversationsChanged;
+        await Conversations.InitializeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _sendCts?.Cancel();
+        _sendCts?.Dispose();
+        _sendCts = null;
+        Conversations.OnChange -= OnConversationsChanged;
+    }
+
+    private void OnConversationsChanged()
+        => _ = InvokeAsync(StateHasChanged);
 
     private static bool ShouldOpenThinking(ChatDisplayMessage message)
         => message.IsStreaming && string.IsNullOrEmpty(message.Content);
 
-    private async Task OnNewChatClickAsync()
+    private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
+
+    private void CloseSidebar() => _sidebarOpen = false;
+
+    private async Task OnSidebarNewChatAsync()
     {
         if (isBusy)
         {
             return;
         }
 
-        if (!ChatAgent.Messages.Any())
-        {
-            await PerformResetAsync();
-            return;
-        }
-
-        _confirmNewChat = true;
-    }
-
-    private async Task ConfirmNewChatAsync()
-    {
-        if (isBusy)
-        {
-            return;
-        }
-
-        await PerformResetAsync();
-    }
-
-    private void CancelNewChatConfirm()
-    {
-        _confirmNewChat = false;
-    }
-
-    private void OnNewChatConfirmKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Escape")
-        {
-            _confirmNewChat = false;
-        }
-    }
-
-    private async Task PerformResetAsync()
-    {
-        ChatAgent.Reset();
-        _confirmNewChat = false;
+        await Conversations.NewChatAsync();
+        _sidebarOpen = false;
+        _renamingId = null;
+        _deleteConfirmId = null;
         errorMessage = null;
         statusText = string.Empty;
-        await InvokeAsync(StateHasChanged);
+        await FocusComposerAsync();
+    }
+
+    private async Task SwitchConversationAsync(Guid id)
+    {
+        if (isBusy)
+        {
+            return;
+        }
+
+        await Conversations.SwitchAsync(id);
+        _sidebarOpen = false;
+        _renamingId = null;
+        _deleteConfirmId = null;
+        errorMessage = null;
+        await FocusComposerAsync();
+    }
+
+    private void BeginRename(ConversationListItem conversation)
+    {
+        _renamingId = conversation.Id;
+        _renameText = conversation.Title;
+        _deleteConfirmId = null;
+    }
+
+    private void CancelRename()
+    {
+        _renamingId = null;
+        _renameText = string.Empty;
+    }
+
+    private async Task ConfirmRenameAsync()
+    {
+        if (_renamingId is not Guid id || string.IsNullOrWhiteSpace(_renameText))
+        {
+            CancelRename();
+            return;
+        }
+
+        await Conversations.RenameAsync(id, _renameText);
+        CancelRename();
+    }
+
+    private void BeginDelete(Guid id)
+    {
+        _deleteConfirmId = id;
+        _renamingId = null;
+    }
+
+    private void CancelDelete() => _deleteConfirmId = null;
+
+    private async Task ConfirmDeleteAsync(Guid id)
+    {
+        if (isBusy)
+        {
+            return;
+        }
+
+        await Conversations.DeleteAsync(id);
+        _deleteConfirmId = null;
+    }
+
+    private async Task FocusComposerAsync()
+    {
         try
         {
             await _composerInput.FocusAsync();
@@ -261,6 +408,25 @@
         {
             /* focus failure is non-fatal */
         }
+    }
+
+    private void Cancel()
+    {
+        _sendCts?.Cancel();
+    }
+
+    private CancellationToken BeginSend()
+    {
+        _sendCts?.Dispose();
+        _sendCts = new CancellationTokenSource();
+        return _sendCts.Token;
+    }
+
+    private void EndSend()
+    {
+        isBusy = false;
+        _sendCts?.Dispose();
+        _sendCts = null;
     }
 
     private async Task SendAsync()
@@ -273,27 +439,33 @@
         var text = inputText;
         inputText = string.Empty;
         errorMessage = null;
-        _confirmNewChat = false;
         isBusy = true;
         statusText = "Assistant is responding";
+        var ct = BeginSend();
 
         try
         {
-            await foreach (var _ in ChatAgent.SendStreamingAsync(text))
+            await foreach (var _ in ChatAgent.SendStreamingAsync(text, ct))
             {
                 await InvokeAsync(StateHasChanged);
             }
 
+            await Conversations.RefreshAfterTurnAsync();
             statusText = "Response complete";
+        }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == ct)
+        {
+            statusText = "Response stopped";
         }
         catch (Exception ex)
         {
             errorMessage = ex.Message;
             statusText = string.Empty;
+            try { await Conversations.RefreshAfterTurnAsync(); } catch { }
         }
         finally
         {
-            isBusy = false;
+            EndSend();
         }
     }
 
@@ -307,24 +479,31 @@
         isBusy = true;
         errorMessage = null;
         statusText = "Retrying";
+        var ct = BeginSend();
 
         try
         {
-            await foreach (var _ in ChatAgent.RetryLastAsync())
+            await foreach (var _ in ChatAgent.RetryLastAsync(ct))
             {
                 await InvokeAsync(StateHasChanged);
             }
 
+            await Conversations.RefreshAfterTurnAsync();
             statusText = "Response complete";
+        }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == ct)
+        {
+            statusText = "Response stopped";
         }
         catch (Exception ex)
         {
             errorMessage = ex.Message;
             statusText = string.Empty;
+            try { await Conversations.RefreshAfterTurnAsync(); } catch { }
         }
         finally
         {
-            isBusy = false;
+            EndSend();
         }
     }
 
@@ -338,24 +517,31 @@
         isBusy = true;
         errorMessage = null;
         statusText = "Regenerating";
+        var ct = BeginSend();
 
         try
         {
-            await foreach (var _ in ChatAgent.RegenerateAsync())
+            await foreach (var _ in ChatAgent.RegenerateAsync(ct))
             {
                 await InvokeAsync(StateHasChanged);
             }
 
+            await Conversations.RefreshAfterTurnAsync();
             statusText = "Response complete";
+        }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == ct)
+        {
+            statusText = "Response stopped";
         }
         catch (Exception ex)
         {
             errorMessage = ex.Message;
             statusText = string.Empty;
+            try { await Conversations.RefreshAfterTurnAsync(); } catch { }
         }
         finally
         {
-            isBusy = false;
+            EndSend();
         }
     }
 }

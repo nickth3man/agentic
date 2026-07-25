@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
 using Agentic.Chat.Components;
+using Agentic.Chat.Data;
 using Agentic.Chat.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,14 +33,31 @@ builder.Services.AddHttpClient("OpenRouter", client =>
     client.Timeout = TimeSpan.FromMinutes(5);
 });
 
+// Conversation store (issue #13): local SQLite file under App_Data — path only,
+// never a credentialed connection string.
+var connectionString = ChatDatabase.GetConnectionString(builder.Environment.ContentRootPath);
+
+builder.Services.AddDbContext<ChatDbContext>(options =>
+    options.UseSqlite(connectionString));
+
 builder.Services.AddScoped<IOpenRouterClient, OpenRouterClient>();
 builder.Services.AddSingleton<ModelCatalogService>();
 builder.Services.AddScoped<SelectedModelService>();
 builder.Services.AddScoped<SystemPromptService>();
 builder.Services.AddScoped<ProtectedLocalStorage>();
+builder.Services.AddScoped<ConversationPersistence>();
+builder.Services.AddScoped<IActiveConversationWriter>(sp =>
+    sp.GetRequiredService<ConversationPersistence>());
 builder.Services.AddScoped<ChatAgentService>();
+builder.Services.AddScoped<ConversationService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
+    db.Database.EnsureCreated();
+}
 
 if (!app.Environment.IsDevelopment())
 {

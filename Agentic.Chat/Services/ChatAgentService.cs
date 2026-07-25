@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using Agentic.Chat.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -7,47 +8,62 @@ namespace Agentic.Chat.Services;
 
 public sealed class ChatAgentService
 {
-    // Precompiled logging delegate (CA1848/CA1873): when Information logging is
-    // off, this skips the params-array allocation and the template formatting
-    // that an inline _logger.LogInformation(...) call does unconditionally. (The
-    // argument expression itself — _apiMessages.Count — is still evaluated.)
     private static readonly Action<ILogger, int, Exception?> LogStreamingStart =
         LoggerMessage.Define<int>(
             LogLevel.Information,
             default,
             "Streaming chat completion with {MessageCount} message(s) in transcript");
 
+    internal const string EmptyResponsePlaceholder = "(No response content returned.)";
     private readonly IOpenRouterClient _client;
     private readonly OpenRouterOptions _options;
     private readonly ILogger<ChatAgentService> _logger;
     private readonly SelectedModelService _selectedModelService;
     private readonly ModelCatalogService _modelCatalog;
     private readonly SystemPromptService _systemPromptService;
+    private readonly IActiveConversationWriter _conversationWriter;
     private readonly List<ChatDisplayMessage> _displayMessages = [];
     private readonly List<ApiChatMessage> _apiMessages = [];
     private bool _streamActive;
 
+    /// <summary>
+    /// Creates the scoped chat agent with a leading system message resolved from
+    /// the UI override, then options, then <see cref="OpenRouterOptions.DefaultSystemPrompt"/>.
+    /// </summary>
     public ChatAgentService(
         IOpenRouterClient client,
         IOptions<OpenRouterOptions> options,
         ILogger<ChatAgentService> logger,
         SelectedModelService selectedModelService,
         ModelCatalogService modelCatalog,
-        SystemPromptService systemPromptService)
+        SystemPromptService systemPromptService,
+        IActiveConversationWriter conversationWriter)
     {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(selectedModelService);
+        ArgumentNullException.ThrowIfNull(modelCatalog);
+        ArgumentNullException.ThrowIfNull(systemPromptService);
+        ArgumentNullException.ThrowIfNull(conversationWriter);
+
         _client = client;
         _options = options.Value;
         _logger = logger;
         _selectedModelService = selectedModelService;
         _modelCatalog = modelCatalog;
         _systemPromptService = systemPromptService;
+        _conversationWriter = conversationWriter;
         _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
     }
 
     public IReadOnlyList<ChatDisplayMessage> Messages => _displayMessages;
 
-    // Test-only: lets unit tests inspect the API transcript (including the leading
-    // system message) without going through a full send. Exposed via InternalsVisibleTo.
+    public bool IsStreamActive => _streamActive;
+
+    // Test-only: exposes the API transcript so cancellation/hygiene tests can assert
+    // display-only markers (e.g. "(stopped)") never leak into model-visible history.
+    // Exposed via InternalsVisibleTo.
     internal IReadOnlyList<ApiChatMessage> ApiMessagesForTest => _apiMessages;
 
     // Test-only: lets unit tests seed display-list states the public API can't
@@ -58,6 +74,51 @@ public sealed class ChatAgentService
         _displayMessages.Add(new ChatDisplayMessage { Role = role, Content = content });
     }
 
+    public void LoadTranscript(IReadOnlyList<ChatDisplayMessage> messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+
+        if (_streamActive)
+        {
+            return;
+        }
+
+        _displayMessages.Clear();
+        _apiMessages.Clear();
+        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
+
+        foreach (var message in messages)
+        {
+            var copy = new ChatDisplayMessage
+            {
+                Role = message.Role,
+                Content = message.Content,
+                Reasoning = message.Reasoning,
+                IsStreaming = false,
+                IsError = message.IsError
+            };
+            _displayMessages.Add(copy);
+
+            if (copy.Role == "user")
+            {
+                _apiMessages.Add(new ApiChatMessage("user", copy.Content, null));
+            }
+            else if (copy.Role == "assistant"
+                && !copy.IsError
+                && HasApiVisibleContent(copy.Content, copy.Reasoning))
+            {
+                _apiMessages.Add(new ApiChatMessage(
+                    "assistant",
+                    copy.Content,
+                    string.IsNullOrWhiteSpace(copy.Reasoning) ? null : copy.Reasoning));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clears the display and API transcripts and reseeds the leading system message
+    /// from the current prompt resolution. No-op while a stream is active.
+    /// </summary>
     public void Reset()
     {
         if (_streamActive)
@@ -70,10 +131,12 @@ public sealed class ChatAgentService
         _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
     }
 
-    // When the transcript is idle (no display messages), refresh the system entry so a
-    // newly loaded or applied UI prompt takes effect without mid-conversation surgery.
-    // No-op while streaming or once the user has started a conversation — the next
-    // Reset()/New chat picks up the configured prompt then.
+    /// <summary>
+    /// When the transcript is idle (no display messages), refreshes the system entry so a
+    /// newly loaded or applied UI prompt takes effect without mid-conversation surgery.
+    /// No-op while streaming or once the user has started a conversation — the next
+    /// Reset()/New chat picks up the configured prompt then.
+    /// </summary>
     public void RefreshSystemMessageIfIdle()
     {
         if (_streamActive || _displayMessages.Count > 0)
@@ -109,33 +172,12 @@ public sealed class ChatAgentService
         CancellationToken cancellationToken = default)
         => StreamTurnAsync(TurnKind.Send, userText, cancellationToken);
 
-    // Retry the most recent failed turn: drop the error placeholder and re-stream the
-    // assistant for the last user turn (already in the transcript — not re-added, so a
-    // retry never compounds the user message). No-op (empty stream) if the last message
-    // isn't an error assistant.
     public IAsyncEnumerable<ChatDisplayMessage> RetryLastAsync(CancellationToken cancellationToken = default)
         => StreamTurnAsync(TurnKind.Retry, null, cancellationToken);
 
-    // Regenerate the last completed assistant turn: pop it from the display list and the
-    // API transcript, then re-stream. No-op (empty stream) if the last message isn't a
-    // completed (non-error, non-streaming) assistant.
     public IAsyncEnumerable<ChatDisplayMessage> RegenerateAsync(CancellationToken cancellationToken = default)
         => StreamTurnAsync(TurnKind.Regenerate, null, cancellationToken);
 
-    // The single async iterator backing all three public entry points. Parameterizing on
-    // TurnKind (rather than consuming a nested helper iterator) keeps this as ONE state
-    // machine — nested async iterators generate compiler branches that can't reach 100%
-    // branch coverage. Validation for Send runs on first enumeration (matching the prior
-    // async-iterator semantics); Retry/Regenerate pop their target eagerly here and
-    // yield-break (no-op) when the precondition fails.
-    //
-    // C# forbids yield inside a try that has a catch, so MoveNextAsync is advanced
-    // manually and OpenRouterException is captured into a local — the outer try has only
-    // a finally so yield is permitted.
-    //
-    // Transcript invariant: the assistant entry is appended to _apiMessages ONLY when the
-    // stream completed cleanly AND produced real content/reasoning. The "(No response
-    // content returned.)" placeholder and error states never enter the API transcript.
     private async IAsyncEnumerable<ChatDisplayMessage> StreamTurnAsync(
         TurnKind kind,
         string? userText,
@@ -150,6 +192,11 @@ public sealed class ChatAgentService
                 var trimmed = userText!.Trim();
                 _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
                 _apiMessages.Add(new ApiChatMessage("user", trimmed, null));
+
+                var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
+                await _conversationWriter
+                    .OnUserMessageCommittedAsync(trimmed, modelId, cancellationToken)
+                    .ConfigureAwait(false);
             }
             else if (kind == TurnKind.Retry)
             {
@@ -160,80 +207,117 @@ public sealed class ChatAgentService
             }
             else
             {
-                if (!TryPopLastCompletedAssistant())
+                if (!TryPopLastCompletedAssistant(out var wasPersisted))
                 {
                     yield break;
+                }
+
+                if (wasPersisted)
+                {
+                    await _conversationWriter
+                        .OnLastAssistantRemovedAsync(cancellationToken)
+                        .ConfigureAwait(false);
                 }
             }
 
             var assistant = new ChatDisplayMessage { Role = "assistant", IsStreaming = true };
             _displayMessages.Add(assistant);
-            yield return assistant; // placeholder, before any traffic
+            yield return assistant;
 
             LogStreamingStart(_logger, _apiMessages.Count, null);
 
-            var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
-            var modelInfo = await _modelCatalog
-                .FindByIdAsync(modelId, cancellationToken)
-                .ConfigureAwait(false);
+            var modelIdForRequest = _selectedModelService.CurrentModelId ?? _options.Model;
 
-            var request = new ChatCompletionRequest(
-                modelId,
-                _apiMessages,
-                Stream: true,
-                Reasoning: modelInfo?.SupportsReasoning == true
-                    ? new ReasoningRequest(Enabled: true, Exclude: false)
-                    : null);
-
-            OpenRouterException? openRouterException = null;
-            var enumerator = _client
-                .StreamChatAsync(request, cancellationToken)
-                .GetAsyncEnumerator(cancellationToken);
+            // Catalog cache-hit skips its own CT checks, so we ThrowIfCancellationRequested
+            // before FindByIdAsync; mid-stream cancel is caught around MoveNextAsync.
+            OpenRouterModel? modelInfo = null;
+            OperationCanceledException? canceledException = null;
             try
             {
-                while (true)
+                cancellationToken.ThrowIfCancellationRequested();
+                modelInfo = await _modelCatalog
+                    .FindByIdAsync(modelIdForRequest, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex)
+            {
+                canceledException = ex;
+            }
+
+            if (canceledException is null)
+            {
+                var request = new ChatCompletionRequest(
+                    modelIdForRequest,
+                    _apiMessages,
+                    Stream: true,
+                    Reasoning: modelInfo?.SupportsReasoning == true
+                        ? new ReasoningRequest(Enabled: true, Exclude: false)
+                        : null);
+
+                OpenRouterException? openRouterException = null;
+                var enumerator = _client
+                    .StreamChatAsync(request, cancellationToken)
+                    .GetAsyncEnumerator(cancellationToken);
+                try
                 {
-                    bool hasNext;
-                    try
+                    while (true)
                     {
-                        hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
-                    }
-                    catch (OpenRouterException ex)
-                    {
-                        openRouterException = ex;
-                        break;
-                    }
+                        bool hasNext;
+                        try
+                        {
+                            hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                        }
+                        catch (OpenRouterException ex)
+                        {
+                            openRouterException = ex;
+                            break;
+                        }
+                        catch (OperationCanceledException ex)
+                        {
+                            canceledException = ex;
+                            break;
+                        }
 
-                    if (!hasNext)
-                    {
-                        break;
-                    }
+                        if (!hasNext)
+                        {
+                            break;
+                        }
 
-                    var delta = enumerator.Current;
-                    if (ApplyDelta(delta, assistant))
-                    {
-                        yield return assistant;
+                        var delta = enumerator.Current;
+                        if (ApplyDelta(delta, assistant))
+                        {
+                            yield return assistant;
+                        }
                     }
                 }
-            }
-            finally
-            {
-                await enumerator.DisposeAsync().ConfigureAwait(false);
-            }
+                finally
+                {
+                    await enumerator.DisposeAsync().ConfigureAwait(false);
+                }
 
-            if (openRouterException is not null)
+                if (openRouterException is not null)
+                {
+                    assistant.IsStreaming = false;
+                    assistant.IsError = true;
+                    assistant.Content = $"(Error {openRouterException.StatusCode}: {Truncate(openRouterException.Body, 300)})";
+                    yield return assistant;
+                    yield break;
+                }
+            } // end canceledException is null guard
+
+            if (canceledException is not null)
             {
-                assistant.IsStreaming = false;
-                assistant.IsError = true;
-                assistant.Content = $"(Error {openRouterException.StatusCode}: {Truncate(openRouterException.Body, 300)})";
+                FinalizeCancelledAssistant(assistant);
                 yield return assistant;
-                yield break;
+                // Re-throw so Chat.razor can announce "Response stopped" without an error banner.
+                ExceptionDispatchInfo.Capture(canceledException).Throw();
             }
 
             assistant.IsStreaming = false;
 
             var hadRealContent = !string.IsNullOrWhiteSpace(assistant.Content)
                 || !string.IsNullOrWhiteSpace(assistant.Reasoning);
+
             if (hadRealContent)
             {
                 _apiMessages.Add(new ApiChatMessage(
@@ -243,9 +327,15 @@ public sealed class ChatAgentService
             }
             else
             {
-                // Display-only placeholder — MUST NOT enter the API transcript.
-                assistant.Content = "(No response content returned.)";
+                assistant.Content = EmptyResponsePlaceholder;
             }
+
+            await _conversationWriter
+                .OnAssistantFinalizedAsync(
+                    assistant.Content,
+                    string.IsNullOrWhiteSpace(assistant.Reasoning) ? null : assistant.Reasoning,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             yield return assistant;
         }
@@ -255,8 +345,39 @@ public sealed class ChatAgentService
         }
     }
 
-    // Pops the trailing error assistant from the display list, if any. Used by the Retry
-    // path. Does NOT touch _apiMessages — error placeholders were never appended.
+    // User-initiated stop (or navigate-away cancel): keep whatever partial tokens
+    // already arrived, append them to the API transcript WITHOUT the display-only
+    // "(stopped)" marker, persist partial content to the conversation store,
+    // and clear IsStreaming so the UI unlocks cleanly.
+    private void FinalizeCancelledAssistant(ChatDisplayMessage assistant)
+    {
+        assistant.IsStreaming = false;
+
+        var apiContent = assistant.Content;
+        var apiReasoning = assistant.Reasoning;
+        var hadPartial = !string.IsNullOrWhiteSpace(apiContent)
+            || !string.IsNullOrWhiteSpace(apiReasoning);
+        if (hadPartial)
+        {
+            _apiMessages.Add(new ApiChatMessage(
+                "assistant",
+                apiContent,
+                string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning));
+
+            // Fire-and-forget: persist partial content with a non-cancellable token
+            // so a late cancellation doesn't lose the completed response.
+            _ = _conversationWriter.OnAssistantFinalizedAsync(
+                apiContent,
+                string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning,
+                CancellationToken.None);
+        }
+
+        // Display-only marker — MUST NOT enter the API transcript.
+        assistant.Content = string.IsNullOrEmpty(apiContent)
+            ? "(stopped)"
+            : apiContent + " (stopped)";
+    }
+
     internal bool TryPopErrorPlaceholder()
     {
         if (_displayMessages.Count == 0)
@@ -274,13 +395,10 @@ public sealed class ChatAgentService
         return true;
     }
 
-    // Pops the trailing completed (non-error, non-streaming) assistant from the display
-    // list and, when present, the matching assistant entry from the API transcript. Used
-    // by the Regenerate path. The transcript-pop is guarded on Role == "assistant": a
-    // completed assistant that was an empty-response placeholder has NO transcript entry
-    // (the last transcript entry is its user turn), so the guard preserves that user turn.
-    internal bool TryPopLastCompletedAssistant()
+    internal bool TryPopLastCompletedAssistant(out bool wasPersisted)
     {
+        wasPersisted = false;
+
         if (_displayMessages.Count == 0)
         {
             return false;
@@ -292,15 +410,17 @@ public sealed class ChatAgentService
             return false;
         }
 
+        // Determine whether this assistant was persisted to the conversation store.
+        // Empty-response placeholders and assistants with no API-visible content are
+        // display-only and never saved to SQLite.
+        wasPersisted = HasApiVisibleContent(last.Content, last.Reasoning ?? string.Empty);
+
         _displayMessages.RemoveAt(_displayMessages.Count - 1);
-        // _apiMessages always holds at least the system message, so [^1] is safe.
-        // Guard on Role == "assistant": a completed assistant that was an empty-response
-        // placeholder has NO transcript entry (the last entry is its user turn), so we
-        // only pop when the last transcript entry really is the assistant turn.
         if (_apiMessages[^1].Role == "assistant")
         {
             _apiMessages.RemoveAt(_apiMessages.Count - 1);
         }
+
         return true;
     }
 
@@ -323,10 +443,20 @@ public sealed class ChatAgentService
         return changed;
     }
 
+    internal static bool HasApiVisibleContent(string content, string reasoning)
+    {
+        if (!string.IsNullOrWhiteSpace(reasoning))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(content)
+            && !string.Equals(content, EmptyResponsePlaceholder, StringComparison.Ordinal);
+    }
+
     internal static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..max] + "…";
 
-    // Discriminates the three streaming entry points inside the single shared iterator.
     private enum TurnKind
     {
         Send,

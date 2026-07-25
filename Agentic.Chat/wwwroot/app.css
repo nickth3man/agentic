@@ -153,7 +153,7 @@ body {
     position: relative;
     z-index: 10;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto auto 1fr auto;
     align-items: center;
     gap: 0.85rem;
     padding: 0.35rem 0.15rem;
@@ -1009,12 +1009,12 @@ body {
     }
 
     .chat-brand {
-        grid-template-columns: auto 1fr;
+        grid-template-columns: auto auto 1fr;
         grid-template-rows: auto auto;
     }
 
     .chat-header-actions {
-        grid-column: 2;
+        grid-column: 2 / -1;
         justify-self: start;
     }
 

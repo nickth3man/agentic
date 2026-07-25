@@ -2,6 +2,7 @@
 
    Presets fill the textarea; the textarea stays editable. Persistence mirrors
    SelectedModelService via SystemPromptService + ProtectedLocalStorage.
+   The "Default" preset clears the UI override so OpenRouter:SystemPrompt wins.
    Changes apply to the next conversation (Reset/New chat); when the transcript
    is empty, RefreshSystemMessageIfIdle updates the in-memory system entry now. *@
 
@@ -32,7 +33,7 @@
              aria-label="System prompt settings">
             <div class="settings-popover-header">
                 <h2 class="settings-title">System prompt</h2>
-                <p class="settings-hint">Applies to the next conversation (New chat).</p>
+                <p class="settings-hint">Applies to the next conversation (New chat). Default uses appsettings.</p>
             </div>
 
             <label class="settings-label" for="system-prompt-preset">Preset</label>
@@ -51,6 +52,7 @@
             <textarea id="system-prompt-text"
                       class="settings-textarea"
                       rows="6"
+                      maxlength="@SystemPromptService.MaxPromptLength"
                       spellcheck="true"
                       @bind="_draft"
                       @bind:event="oninput"
@@ -120,19 +122,31 @@
 
     private void SyncDraftFromService()
     {
-        _draft = !string.IsNullOrWhiteSpace(SystemPrompt.CurrentPrompt)
-            ? SystemPrompt.CurrentPrompt!
-            : (!string.IsNullOrWhiteSpace(Options.Value.SystemPrompt)
-                ? Options.Value.SystemPrompt
-                : OpenRouterOptions.DefaultSystemPrompt);
+        if (string.IsNullOrWhiteSpace(SystemPrompt.CurrentPrompt))
+        {
+            _draft = EffectiveConfigPrompt();
+            _selectedPreset = "Default";
+            return;
+        }
 
+        _draft = SystemPrompt.CurrentPrompt!;
         _selectedPreset = MatchPresetName(_draft) ?? string.Empty;
     }
+
+    private string EffectiveConfigPrompt()
+        => !string.IsNullOrWhiteSpace(Options.Value.SystemPrompt)
+            ? Options.Value.SystemPrompt.Trim()
+            : OpenRouterOptions.DefaultSystemPrompt;
 
     private static string? MatchPresetName(string prompt)
     {
         foreach (var preset in SystemPromptService.Presets)
         {
+            if (preset.Prompt is null)
+            {
+                continue;
+            }
+
             if (string.Equals(preset.Prompt, prompt, StringComparison.Ordinal))
             {
                 return preset.Name;
@@ -177,14 +191,25 @@
 
         var preset = SystemPromptService.Presets
             .FirstOrDefault(p => p.Name == _selectedPreset);
-        if (preset is not null)
+        if (preset is null)
         {
-            _draft = preset.Prompt;
+            return;
         }
+
+        _draft = preset.Prompt is null
+            ? EffectiveConfigPrompt()
+            : preset.Prompt;
     }
 
     private void OnDraftChanged()
     {
+        if (string.IsNullOrWhiteSpace(SystemPrompt.CurrentPrompt)
+            && string.Equals(_draft.Trim(), EffectiveConfigPrompt(), StringComparison.Ordinal))
+        {
+            _selectedPreset = "Default";
+            return;
+        }
+
         _selectedPreset = MatchPresetName(_draft) ?? string.Empty;
     }
 
@@ -198,7 +223,17 @@
         _isSaving = true;
         try
         {
-            await SystemPrompt.SetAsync(_draft.Trim());
+            var preset = SystemPromptService.Presets
+                .FirstOrDefault(p => p.Name == _selectedPreset);
+            if (preset is not null && preset.Prompt is null)
+            {
+                await SystemPrompt.ClearAsync();
+            }
+            else
+            {
+                await SystemPrompt.SetAsync(_draft.Trim());
+            }
+
             ChatAgent.RefreshSystemMessageIfIdle();
             IsOpen = false;
         }

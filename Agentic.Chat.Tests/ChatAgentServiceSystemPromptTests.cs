@@ -86,9 +86,8 @@ public class ChatAgentServiceSystemPromptTests
         // this conversation stays "Idle refresh prompt."
         var messages = fake.LastRequest!.Messages;
         Assert.Equal("Idle refresh prompt.", messages[0].Content);
-        Assert.Equal(3, messages.Count); // system + user hi + assistant + wait
-        // Last request is for "second": system + hi + assistant reply + second user
-        Assert.True(messages.Count >= 3);
+        // Empty fake deltas => no assistant API entry: system + user "hi" + user "second".
+        Assert.Equal(3, messages.Count);
         Assert.Equal("system", messages[0].Role);
         Assert.Equal("Idle refresh prompt.", messages[0].Content);
     }
@@ -141,14 +140,16 @@ public class ChatAgentServiceSystemPromptTests
     }
 
     [Fact]
-    public void Presets_IncludeDefaultMatchingOptionsConstant()
+    public void Presets_DefaultHasNullPrompt_MeaningClearOverride()
     {
         var defaults = SystemPromptService.Presets
             .Where(p => p.Name == "Default")
             .ToList();
 
         Assert.Single(defaults);
-        Assert.Equal(OpenRouterOptions.DefaultSystemPrompt, defaults[0].Prompt);
+        Assert.Null(defaults[0].Prompt);
+        Assert.True(defaults[0].ClearsOverride);
+        Assert.Contains(SystemPromptService.Presets, p => !p.ClearsOverride);
         Assert.True(SystemPromptService.Presets.Count >= 4);
     }
 
@@ -190,10 +191,10 @@ public class ChatAgentServiceSystemPromptTests
         var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(null);
-        var systemPrompt = new SystemPromptService(storage);
+        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(uiPrompt);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt), fake, systemPrompt);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance), fake, systemPrompt);
     }
 
     private static string FirstSystemContent(FakeOpenRouterClient fake)

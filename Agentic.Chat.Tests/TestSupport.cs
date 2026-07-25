@@ -26,6 +26,8 @@ internal static class TestSupport
 
         public IReadOnlyDictionary<string, string> Store => _store;
 
+        public void ClearStore() => _store.Clear();
+
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
             => InvokeAsync<TValue>(identifier, CancellationToken.None, args);
 

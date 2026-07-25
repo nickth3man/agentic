@@ -138,10 +138,10 @@ public class ChatAgentServiceModelSelectionTests
         var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(selectedModelId);
-        var systemPrompt = new SystemPromptService(storage);
+        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(null);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt), fake);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance), fake);
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
@@ -158,3 +158,5 @@ public class ChatAgentServiceModelSelectionTests
             => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
     }
 }
+
+

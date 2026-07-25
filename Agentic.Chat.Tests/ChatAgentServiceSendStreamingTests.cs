@@ -174,7 +174,7 @@ public class ChatAgentServiceSendStreamingTests
     }
 
     [Fact]
-    public async Task CancelledToken_ThrowsOperationCanceled()
+    public async Task CancelledToken_FinalizesThenThrowsOperationCanceled()
     {
         var service = CreateService();
         using var cts = new CancellationTokenSource();
@@ -182,6 +182,146 @@ public class ChatAgentServiceSendStreamingTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => Consume(service.SendStreamingAsync("hi", cts.Token)));
+
+        // Service finalizes before rethrowing — display unlocked, marker only.
+        Assert.Equal(2, service.Messages.Count);
+        Assert.False(service.Messages[1].IsStreaming);
+        Assert.Equal("(stopped)", service.Messages[1].Content);
+    }
+
+    [Fact]
+    public async Task CancelAfterPartialContent_PersistsPartialAssistantAndRethrows()
+    {
+        var service = CreateService(
+        [
+            new StreamDelta("partial", null),
+            new StreamDelta(" more", null)
+        ]);
+        using var cts = new CancellationTokenSource();
+
+        await using var enumerator = service
+            .SendStreamingAsync("hi", cts.Token)
+            .GetAsyncEnumerator();
+
+        // Placeholder assistant
+        Assert.True(await enumerator.MoveNextAsync());
+        // First content delta applied
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.Equal("partial", enumerator.Current.Content);
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            while (await enumerator.MoveNextAsync())
+            {
+            }
+        });
+
+        Assert.Equal(2, service.Messages.Count);
+        Assert.Equal("assistant", service.Messages[1].Role);
+        Assert.Equal("partial (stopped)", service.Messages[1].Content);
+        Assert.False(service.Messages[1].IsStreaming);
+        Assert.False(service.Messages[1].IsError);
+    }
+
+    [Fact]
+    public async Task CancelAfterPartialReasoning_PersistsReasoningAndRethrows()
+    {
+        var service = CreateService(
+        [
+            new StreamDelta(null, "thinking…"),
+            new StreamDelta("answer", null)
+        ]);
+        using var cts = new CancellationTokenSource();
+
+        await using var enumerator = service
+            .SendStreamingAsync("hi", cts.Token)
+            .GetAsyncEnumerator();
+
+        Assert.True(await enumerator.MoveNextAsync()); // placeholder
+        Assert.True(await enumerator.MoveNextAsync()); // reasoning delta
+        Assert.Equal("thinking…", enumerator.Current.Reasoning);
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            while (await enumerator.MoveNextAsync())
+            {
+            }
+        });
+
+        Assert.Equal(2, service.Messages.Count);
+        Assert.Equal("thinking…", service.Messages[1].Reasoning);
+        Assert.False(service.Messages[1].IsStreaming);
+    }
+
+    [Fact]
+    public async Task CancelBeforeAnyContent_RemovesEmptyAssistantAndRethrows()
+    {
+        var service = CreateService(
+        [
+            new StreamDelta("never-delivered", null)
+        ]);
+        using var cts = new CancellationTokenSource();
+
+        await using var enumerator = service
+            .SendStreamingAsync("hi", cts.Token)
+            .GetAsyncEnumerator();
+
+        // Placeholder only — cancel before any content delta is applied.
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.True(enumerator.Current.IsStreaming);
+        Assert.Equal(string.Empty, enumerator.Current.Content);
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            while (await enumerator.MoveNextAsync())
+            {
+            }
+        });
+
+        // Empty assistant placeholder replaced with "(stopped)" marker; user turn remains.
+        Assert.Equal(2, service.Messages.Count);
+        Assert.Equal("user", service.Messages[0].Role);
+        Assert.Equal("(stopped)", service.Messages[1].Content);
+        Assert.False(service.Messages[1].IsStreaming);
+        Assert.False(service.IsStreamActive);
+    }
+
+    [Fact]
+    public async Task CancelAfterReasoningOnly_PersistsPartialReasoningAndRethrows()
+    {
+        var service = CreateService(
+        [
+            new StreamDelta(null, "thinking…"),
+            new StreamDelta("answer", null)
+        ]);
+        using var cts = new CancellationTokenSource();
+
+        await using var enumerator = service
+            .SendStreamingAsync("hi", cts.Token)
+            .GetAsyncEnumerator();
+
+        Assert.True(await enumerator.MoveNextAsync()); // placeholder
+        Assert.True(await enumerator.MoveNextAsync()); // reasoning delta
+        Assert.Equal("thinking…", enumerator.Current.Reasoning);
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            while (await enumerator.MoveNextAsync())
+            {
+            }
+        });
+
+        Assert.Equal(2, service.Messages.Count);
+        Assert.Equal("thinking…", service.Messages[1].Reasoning);
+        Assert.False(service.Messages[1].IsStreaming);
     }
 
     // ---------- helpers ----------
@@ -224,10 +364,10 @@ public class ChatAgentServiceSendStreamingTests
         var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(selectedModelId);
-        var systemPrompt = new SystemPromptService(storage);
+        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(null);
 
-        return new ChatAgentService(fakeClient, options, logger, selection, catalog, systemPrompt);
+        return new ChatAgentService(fakeClient, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance);
     }
 
     private static async Task<List<ChatDisplayMessage>> Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
@@ -243,3 +383,5 @@ public class ChatAgentServiceSendStreamingTests
             => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
     }
 }
+
+

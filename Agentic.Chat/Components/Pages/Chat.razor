@@ -242,6 +242,19 @@
         }
 
         <form class="chat-form" @onsubmit="SendAsync" @onsubmit:preventDefault>
+            @if (_queuedText is not null)
+            {
+                <div class="queued-chip" role="status">
+                    <span class="queued-label">Queued</span>
+                    <span class="queued-preview">@QueuedPreview(_queuedText)</span>
+                    <button type="button"
+                            class="queued-cancel"
+                            aria-label="Cancel queued message"
+                            @onclick="CancelQueued">
+                        ×
+                    </button>
+                </div>
+            }
             <div class="composer">
                 <label class="visually-hidden" for="chat-input">Message</label>
                 <input id="chat-input"
@@ -250,7 +263,6 @@
                        @bind:event="oninput"
                        class="chat-input"
                        placeholder="Type a message…"
-                       disabled="@isBusy"
                        autocomplete="off"
                        aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")" />
                 @if (isBusy)
@@ -284,9 +296,11 @@
     private bool isBusy;
     private string? errorMessage;
     private string statusText = string.Empty;
+    private string? _queuedText;
     private ElementReference _composerInput;
     private bool _sidebarOpen;
     private bool _initialized;
+    private bool _disposed;
     private Guid? _renamingId;
     private string _renameText = string.Empty;
     private Guid? _deleteConfirmId;
@@ -307,6 +321,8 @@
 
     public void Dispose()
     {
+        _disposed = true;
+        _queuedText = null;
         _sendCts?.Cancel();
         _sendCts?.Dispose();
         _sendCts = null;
@@ -334,6 +350,7 @@
         _sidebarOpen = false;
         _renamingId = null;
         _deleteConfirmId = null;
+        _queuedText = null;
         errorMessage = null;
         statusText = string.Empty;
         await FocusComposerAsync();
@@ -350,6 +367,7 @@
         _sidebarOpen = false;
         _renamingId = null;
         _deleteConfirmId = null;
+        _queuedText = null;
         errorMessage = null;
         await FocusComposerAsync();
     }
@@ -429,19 +447,48 @@
         _sendCts = null;
     }
 
+    private static string QueuedPreview(string text)
+    {
+        const int max = 48;
+        var trimmed = text.Trim();
+        return trimmed.Length <= max ? trimmed : trimmed[..max] + "\u2026";
+    }
+
+    private void CancelQueued()
+    {
+        _queuedText = null;
+        statusText = isBusy ? "Assistant is responding" : string.Empty;
+    }
+
     private async Task SendAsync()
     {
-        if (string.IsNullOrWhiteSpace(inputText) || isBusy)
+        if (string.IsNullOrWhiteSpace(inputText))
         {
             return;
         }
 
-        var text = inputText;
+        var text = inputText.Trim();
         inputText = string.Empty;
+
+        if (isBusy)
+        {
+            // One pending message max — a later Enter replaces the chip contents.
+            _queuedText = text;
+            statusText = "Message queued";
+            await FocusComposerAsync();
+            return;
+        }
+
+        await SendCoreAsync(text);
+    }
+
+    private async Task SendCoreAsync(string text)
+    {
         errorMessage = null;
         isBusy = true;
         statusText = "Assistant is responding";
         var ct = BeginSend();
+        await FocusComposerAsync();
 
         try
         {
@@ -465,8 +512,35 @@
         }
         finally
         {
-            EndSend();
+            await FinishSendAsync();
         }
+    }
+
+    /// <summary>
+    /// End the current send without opening a race window: if a message is queued
+    /// and the circuit is still alive, hand off while <c>isBusy</c> stays true.
+    /// Otherwise clear busy and restore focus. Never drain after dispose.
+    /// </summary>
+    private async Task FinishSendAsync()
+    {
+        if (_disposed)
+        {
+            _queuedText = null;
+            EndSend();
+            return;
+        }
+
+        if (_queuedText is { } queued)
+        {
+            _queuedText = null;
+            // Keep isBusy true across the handoff so a concurrent Enter cannot
+            // start a second stream while we await the nested send.
+            await SendCoreAsync(queued);
+            return;
+        }
+
+        EndSend();
+        await FocusComposerAsync();
     }
 
     private async Task RetryAsync()
@@ -480,6 +554,7 @@
         errorMessage = null;
         statusText = "Retrying";
         var ct = BeginSend();
+        await FocusComposerAsync();
 
         try
         {
@@ -503,7 +578,7 @@
         }
         finally
         {
-            EndSend();
+            await FinishSendAsync();
         }
     }
 
@@ -518,6 +593,7 @@
         errorMessage = null;
         statusText = "Regenerating";
         var ct = BeginSend();
+        await FocusComposerAsync();
 
         try
         {
@@ -541,7 +617,7 @@
         }
         finally
         {
-            EndSend();
+            await FinishSendAsync();
         }
     }
 }

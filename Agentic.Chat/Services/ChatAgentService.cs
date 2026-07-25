@@ -14,6 +14,12 @@ public sealed class ChatAgentService
             default,
             "Streaming chat completion with {MessageCount} message(s) in transcript");
 
+    private static readonly Action<ILogger, Exception?> LogCancelPersistFailed =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            default,
+            "Failed to persist partial assistant after cancel; continuing with stop UX");
+
     internal const string EmptyResponsePlaceholder = "(No response content returned.)";
     private readonly IOpenRouterClient _client;
     private readonly OpenRouterOptions _options;
@@ -183,6 +189,12 @@ public sealed class ChatAgentService
         string? userText,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        if (_streamActive)
+        {
+            throw new InvalidOperationException(
+                "A stream is already in progress. Wait for it to finish or cancel it before starting another.");
+        }
+
         _streamActive = true;
         try
         {
@@ -307,7 +319,9 @@ public sealed class ChatAgentService
 
             if (canceledException is not null)
             {
-                FinalizeCancelledAssistant(assistant);
+                // Await persistence before rethrowing so Chat.razor's queue drain
+                // cannot commit the next user turn ahead of this partial assistant.
+                await FinalizeCancelledAssistantAsync(assistant).ConfigureAwait(false);
                 yield return assistant;
                 // Re-throw so Chat.razor can announce "Response stopped" without an error banner.
                 ExceptionDispatchInfo.Capture(canceledException).Throw();
@@ -349,7 +363,7 @@ public sealed class ChatAgentService
     // already arrived, append them to the API transcript WITHOUT the display-only
     // "(stopped)" marker, persist partial content to the conversation store,
     // and clear IsStreaming so the UI unlocks cleanly.
-    private void FinalizeCancelledAssistant(ChatDisplayMessage assistant)
+    private async Task FinalizeCancelledAssistantAsync(ChatDisplayMessage assistant)
     {
         assistant.IsStreaming = false;
 
@@ -364,12 +378,21 @@ public sealed class ChatAgentService
                 apiContent,
                 string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning));
 
-            // Fire-and-forget: persist partial content with a non-cancellable token
-            // so a late cancellation doesn't lose the completed response.
-            _ = _conversationWriter.OnAssistantFinalizedAsync(
-                apiContent,
-                string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning,
-                CancellationToken.None);
+            // Await with a non-cancellable token so Stop/dispose cancel doesn't
+            // drop the partial response, and so queued follow-ups cannot persist
+            // a user turn before this assistant row lands. Persist failures must
+            // not replace the OCE — Chat.razor still needs "Response stopped".
+            try
+            {
+                await _conversationWriter.OnAssistantFinalizedAsync(
+                    apiContent,
+                    string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogCancelPersistFailed(_logger, ex);
+            }
         }
 
         // Display-only marker — MUST NOT enter the API transcript.

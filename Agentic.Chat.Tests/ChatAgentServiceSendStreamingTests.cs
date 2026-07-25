@@ -324,6 +324,108 @@ public class ChatAgentServiceSendStreamingTests
         Assert.False(service.Messages[1].IsStreaming);
     }
 
+    [Fact]
+    public async Task CancelWithPartialContent_AwaitsAssistantFinalizationBeforeRethrow()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writer = new RecordingConversationWriter(gate);
+        var service = CreateService(
+            [
+                new StreamDelta("partial answer", null),
+                new StreamDelta(" more", null)
+            ],
+            conversationWriter: writer);
+        using var cts = new CancellationTokenSource();
+
+        await using var enumerator = service
+            .SendStreamingAsync("hi", cts.Token)
+            .GetAsyncEnumerator();
+
+        Assert.True(await enumerator.MoveNextAsync()); // placeholder
+        Assert.True(await enumerator.MoveNextAsync()); // first content delta
+        Assert.Equal("partial answer", enumerator.Current.Content);
+
+        cts.Cancel();
+
+        // Next MoveNext enters cancel finalization and blocks on the gate.
+        var moveTask = enumerator.MoveNextAsync().AsTask();
+        await writer.FinalizationStarted;
+        Assert.False(writer.AssistantFinalizedCompleted);
+        Assert.False(moveTask.IsCompleted);
+
+        gate.SetResult();
+        Assert.True(await moveTask); // stopped assistant yielded after persist
+        Assert.True(writer.AssistantFinalizedCompleted);
+        Assert.Equal("partial answer (stopped)", enumerator.Current.Content);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            while (await enumerator.MoveNextAsync())
+            {
+            }
+        });
+
+        Assert.Contains("assistant-finalized", writer.Events);
+        Assert.False(service.IsStreamActive);
+    }
+
+    [Fact]
+    public async Task CancelWithPartialContent_PersistFailure_StillRethrowsCancellation()
+    {
+        var writer = new RecordingConversationWriter(failFinalization: true);
+        var service = CreateService(
+            [
+                new StreamDelta("partial answer", null),
+                new StreamDelta(" more", null)
+            ],
+            conversationWriter: writer);
+        using var cts = new CancellationTokenSource();
+
+        await using var enumerator = service
+            .SendStreamingAsync("hi", cts.Token)
+            .GetAsyncEnumerator();
+
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.Equal("partial answer", enumerator.Current.Content);
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            while (await enumerator.MoveNextAsync())
+            {
+            }
+        });
+
+        Assert.Equal("partial answer (stopped)", service.Messages[1].Content);
+        Assert.False(service.IsStreamActive);
+    }
+
+    [Fact]
+    public async Task ConcurrentSend_WhileStreamActive_ThrowsInvalidOperation()
+    {
+        var service = CreateService([new StreamDelta("hello", null)]);
+
+        await using var enumerator = service.SendStreamingAsync("first").GetAsyncEnumerator();
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.True(service.IsStreamActive);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Consume(service.SendStreamingAsync("second")));
+        Assert.Contains("already in progress", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        while (await enumerator.MoveNextAsync())
+        {
+        }
+
+        Assert.False(service.IsStreamActive);
+        Assert.Equal(2, service.Messages.Count);
+        Assert.Equal("user", service.Messages[0].Role);
+        Assert.Equal("first", service.Messages[0].Content);
+        Assert.Equal("assistant", service.Messages[1].Role);
+        Assert.Equal("hello", service.Messages[1].Content);
+    }
+
     // ---------- helpers ----------
 
     private static ChatAgentService CreateService(
@@ -331,7 +433,8 @@ public class ChatAgentServiceSendStreamingTests
         Exception? exception = null,
         string? selectedModelId = null,
         string? catalogId = "test-model",
-        bool catalogSupportsReasoning = true)
+        bool catalogSupportsReasoning = true,
+        IActiveConversationWriter? conversationWriter = null)
     {
         var fakeClient = new FakeOpenRouterClient(deltas, exception);
         var options = Options.Create(new OpenRouterOptions
@@ -367,7 +470,14 @@ public class ChatAgentServiceSendStreamingTests
         var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(null);
 
-        return new ChatAgentService(fakeClient, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance);
+        return new ChatAgentService(
+            fakeClient,
+            options,
+            logger,
+            selection,
+            catalog,
+            systemPrompt,
+            conversationWriter ?? NullActiveConversationWriter.Instance);
     }
 
     private static async Task<List<ChatDisplayMessage>> Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
@@ -375,6 +485,57 @@ public class ChatAgentServiceSendStreamingTests
         var list = new List<ChatDisplayMessage>();
         await foreach (var m in stream) list.Add(m);
         return list;
+    }
+
+    private sealed class RecordingConversationWriter : IActiveConversationWriter
+    {
+        private readonly TaskCompletionSource? _blockFinalization;
+        private readonly bool _failFinalization;
+        private readonly TaskCompletionSource _finalizationStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public RecordingConversationWriter(
+            TaskCompletionSource? blockFinalization = null,
+            bool failFinalization = false)
+        {
+            _blockFinalization = blockFinalization;
+            _failFinalization = failFinalization;
+        }
+
+        public List<string> Events { get; } = [];
+        public bool AssistantFinalizedCompleted { get; private set; }
+        public Task FinalizationStarted => _finalizationStarted.Task;
+
+        public Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default)
+        {
+            Events.Add("user-committed");
+            return Task.CompletedTask;
+        }
+
+        public async Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default)
+        {
+            Events.Add("assistant-finalized-started");
+            _finalizationStarted.TrySetResult();
+
+            if (_failFinalization)
+            {
+                throw new InvalidOperationException("persist failed");
+            }
+
+            if (_blockFinalization is not null)
+            {
+                await _blockFinalization.Task;
+            }
+
+            AssistantFinalizedCompleted = true;
+            Events.Add("assistant-finalized");
+        }
+
+        public Task OnLastAssistantRemovedAsync(CancellationToken cancellationToken = default)
+        {
+            Events.Add("assistant-removed");
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class UnusedHttpClientFactory : IHttpClientFactory

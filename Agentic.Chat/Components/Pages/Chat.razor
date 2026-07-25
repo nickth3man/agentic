@@ -242,6 +242,19 @@
         }
 
         <form class="chat-form" @onsubmit="SendAsync" @onsubmit:preventDefault>
+            @if (_queuedText is not null)
+            {
+                <div class="queued-chip" role="status">
+                    <span class="queued-label">Queued</span>
+                    <span class="queued-preview">@QueuedPreview(_queuedText)</span>
+                    <button type="button"
+                            class="queued-cancel"
+                            aria-label="Cancel queued message"
+                            @onclick="CancelQueued">
+                        ×
+                    </button>
+                </div>
+            }
             <div class="composer">
                 <label class="visually-hidden" for="chat-input">Message</label>
                 <input id="chat-input"
@@ -283,6 +296,7 @@
     private bool isBusy;
     private string? errorMessage;
     private string statusText = string.Empty;
+    private string? _queuedText;
     private ElementReference _composerInput;
     private bool _sidebarOpen;
     private bool _initialized;
@@ -333,6 +347,7 @@
         _sidebarOpen = false;
         _renamingId = null;
         _deleteConfirmId = null;
+        _queuedText = null;
         errorMessage = null;
         statusText = string.Empty;
         await FocusComposerAsync();
@@ -349,6 +364,7 @@
         _sidebarOpen = false;
         _renamingId = null;
         _deleteConfirmId = null;
+        _queuedText = null;
         errorMessage = null;
         await FocusComposerAsync();
     }
@@ -428,15 +444,43 @@
         _sendCts = null;
     }
 
+    private static string QueuedPreview(string text)
+    {
+        const int max = 48;
+        var trimmed = text.Trim();
+        return trimmed.Length <= max ? trimmed : trimmed[..max] + "\u2026";
+    }
+
+    private void CancelQueued()
+    {
+        _queuedText = null;
+        statusText = isBusy ? "Assistant is responding" : string.Empty;
+    }
+
     private async Task SendAsync()
     {
-        if (string.IsNullOrWhiteSpace(inputText) || isBusy)
+        if (string.IsNullOrWhiteSpace(inputText))
         {
             return;
         }
 
-        var text = inputText;
+        var text = inputText.Trim();
         inputText = string.Empty;
+
+        if (isBusy)
+        {
+            // One pending message max — a later Enter replaces the chip contents.
+            _queuedText = text;
+            statusText = "Message queued";
+            await FocusComposerAsync();
+            return;
+        }
+
+        await SendCoreAsync(text);
+    }
+
+    private async Task SendCoreAsync(string text)
+    {
         errorMessage = null;
         isBusy = true;
         statusText = "Assistant is responding";
@@ -467,7 +511,19 @@
         {
             EndSend();
             await FocusComposerAsync();
+            await DrainQueueAsync();
         }
+    }
+
+    private async Task DrainQueueAsync()
+    {
+        if (_queuedText is not { } queued)
+        {
+            return;
+        }
+
+        _queuedText = null;
+        await SendCoreAsync(queued);
     }
 
     private async Task RetryAsync()
@@ -507,6 +563,7 @@
         {
             EndSend();
             await FocusComposerAsync();
+            await DrainQueueAsync();
         }
     }
 
@@ -547,6 +604,7 @@
         {
             EndSend();
             await FocusComposerAsync();
+            await DrainQueueAsync();
         }
     }
 }

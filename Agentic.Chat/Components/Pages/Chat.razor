@@ -9,6 +9,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 
 <PageTitle>Agentic</PageTitle>
+<script type="module" src="@Assets["Components/Pages/Chat.razor.js"]"></script>
 
 <div class="chat-shell @(_sidebarOpen ? "sidebar-open" : null)">
     <div class="sidebar-backdrop" @onclick="CloseSidebar" aria-hidden="@(!_sidebarOpen)"></div>
@@ -305,14 +306,14 @@
                     <div class="composer-image-warning" role="status">@_imageCapabilityWarning</div>
                 }
                 <label class="visually-hidden" for="chat-input">Message</label>
-                <input id="chat-input"
-                       @ref="_composerInput"
-                       @bind="inputText"
-                       @bind:event="oninput"
-                       class="chat-input"
-                       placeholder="Type a message…"
-                       autocomplete="off"
-                       aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")" />
+                <textarea id="chat-input"
+                          @ref="_composerInput"
+                          @bind="inputText"
+                          @bind:event="oninput"
+                          class="chat-input"
+                          rows="1"
+                          placeholder="Type a message…"
+                          aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")"></textarea>
                 @if (isBusy)
                 {
                     <button type="button"

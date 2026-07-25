@@ -4,7 +4,46 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#10191d" />
     <base href="/" />
+    <script>
+        (() => {
+            const key = "agentic-theme";
+            const theme = localStorage.getItem(key);
+            if (theme === "light" || theme === "dark") {
+                document.documentElement.dataset.theme = theme;
+            }
+            window.agenticTheme = {
+                set(theme) {
+                    if (theme === "auto") {
+                        localStorage.removeItem(key);
+                        delete document.documentElement.dataset.theme;
+                    } else {
+                        localStorage.setItem(key, theme);
+                        document.documentElement.dataset.theme = theme;
+                    }
+                },
+                get() {
+                    return localStorage.getItem(key) ?? "auto";
+                },
+                cycle(button) {
+                    const themes = ["auto", "light", "dark"];
+                    const theme = themes[(themes.indexOf(this.get()) + 1) % themes.length];
+                    this.set(theme);
+                    this.render(button);
+                },
+                render(button) {
+                    const theme = this.get();
+                    button.dataset.theme = theme;
+                    button.setAttribute("aria-label", `Theme: ${theme}. Activate to change.`);
+                    button.textContent = theme === "auto" ? "Theme: Auto" : `Theme: ${theme[0].toUpperCase()}${theme.slice(1)}`;
+                }
+            };
+            document.addEventListener("DOMContentLoaded", () =>
+                document.querySelectorAll(".theme-toggle").forEach(button => window.agenticTheme.render(button)));
+        })();
+    </script>
     <ResourcePreloader />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

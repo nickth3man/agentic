@@ -101,7 +101,8 @@ public sealed class ChatAgentService
                 Reasoning = message.Reasoning,
                 IsStreaming = false,
                 IsError = message.IsError,
-                ImageDataUrl = message.ImageDataUrl
+                ImageDataUrl = message.ImageDataUrl,
+                Usage = message.Usage
             };
             _displayMessages.Add(copy);
 
@@ -311,6 +312,8 @@ public sealed class ChatAgentService
 
             assistant.IsStreaming = false;
 
+            FinalizeUsage(assistant, modelInfo);
+
             // Any non-whitespace content/reasoning counts here — including a literal
             // EmptyResponsePlaceholder string from the model. HasApiVisibleContent
             // excludes that placeholder (persistence/regenerate), so do not reuse it.
@@ -328,7 +331,7 @@ public sealed class ChatAgentService
             }
 
             await _conversationWriter
-                .OnAssistantFinalizedAsync(assistant.Content, reasoning, cancellationToken)
+                .OnAssistantFinalizedAsync(assistant.Content, reasoning, assistant.Usage, cancellationToken)
                 .ConfigureAwait(false);
 
             yield return assistant;
@@ -410,6 +413,7 @@ public sealed class ChatAgentService
                 await _conversationWriter.OnAssistantFinalizedAsync(
                     apiContent,
                     reasoning,
+                    assistant.Usage,
                     CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -486,7 +490,36 @@ public sealed class ChatAgentService
             changed = true;
         }
 
+        if (delta.Usage is not null)
+        {
+            assistant.Usage = delta.Usage;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    internal static void FinalizeUsage(ChatDisplayMessage assistant, OpenRouterModel? modelInfo)
+    {
+        if (assistant.Usage is null)
+        {
+            return;
+        }
+
+        var usage = assistant.Usage;
+        if (usage.Cost is null && modelInfo is not null)
+        {
+            var estimated = usage.PromptTokens * modelInfo.Pricing.PromptPerToken
+                + usage.CompletionTokens * modelInfo.Pricing.CompletionPerToken;
+            usage = usage with { Cost = estimated };
+        }
+
+        if (modelInfo is { IsFree: true } && usage.Cost.GetValueOrDefault() == 0m)
+        {
+            usage = usage with { IsFree = true, Cost = 0m };
+        }
+
+        assistant.Usage = usage;
     }
 
     internal static bool HasApiVisibleContent(string content, string? reasoning)

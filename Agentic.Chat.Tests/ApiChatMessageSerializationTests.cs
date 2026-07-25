@@ -11,6 +11,20 @@ public class ApiChatMessageSerializationTests
     };
 
     [Fact]
+    public void UserWithImage_RejectsEmptyText()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            ApiChatMessage.UserWithImage("  ", "data:image/jpeg;base64,abc"));
+    }
+
+    [Fact]
+    public void UserWithImage_RejectsEmptyImageUrl()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            ApiChatMessage.UserWithImage("hello", " "));
+    }
+
+    [Fact]
     public void UserWithImage_SerializesMultipartOpenAiShape()
     {
         var message = ApiChatMessage.UserWithImage(

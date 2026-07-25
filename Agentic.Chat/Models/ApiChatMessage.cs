@@ -15,12 +15,16 @@ public sealed record ApiChatMessage(
     public string TextContent => Content.GetDisplayText();
 
     public static ApiChatMessage UserWithImage(string text, string imageDataUrl)
-        => new(
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        ArgumentException.ThrowIfNullOrWhiteSpace(imageDataUrl);
+
+        return new(
             "user",
             ApiChatMessageContent.FromParts(
             [
-                new ApiContentPart("text", text, null),
-                new ApiContentPart("image_url", null, new ApiImageUrl(imageDataUrl))
+                new ApiContentPart(ApiChatMessageContent.TextPartType, text, null),
+                new ApiContentPart(ApiChatMessageContent.ImageUrlPartType, null, new ApiImageUrl(imageDataUrl))
             ]),
             null);
-}
+    }

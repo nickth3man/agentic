@@ -33,5 +33,5 @@ public sealed record OpenRouterModel(
         SupportedParameters.Contains("reasoning", StringComparer.OrdinalIgnoreCase);
 
     public bool SupportsImageInput =>
-        Modality.Contains("image", StringComparison.OrdinalIgnoreCase);
+        (Modality ?? string.Empty).Contains("image", StringComparison.OrdinalIgnoreCase);
 }

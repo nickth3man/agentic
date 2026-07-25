@@ -4,7 +4,6 @@
 @inject ConversationService Conversations
 @inject ModelCatalogService ModelCatalog
 @inject SelectedModelService SelectedModel
-@inject IJSRuntime JS
 @implements IDisposable
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
@@ -119,6 +118,10 @@
                 </div>
             </div>
             <div class="chat-header-actions">
+                @if (!string.IsNullOrEmpty(_sessionUsage))
+                {
+                    <div class="conversation-usage" aria-label="Conversation cost">@_sessionUsage</div>
+                }
                 <SystemPromptSettings />
                 <button type="button"
                         class="new-chat-btn"
@@ -240,6 +243,13 @@
                                 Regenerate
                             </button>
                         }
+
+                        @if (!isUser && !message.IsStreaming && !message.IsError && message.Usage is not null)
+                        {
+                            <div class="msg-usage" aria-label="Token usage">
+                                @UsageFormatter.FormatMessageFooter(message.Usage)
+                            </div>
+                        }
                     </article>
                 }
             </div>
@@ -267,17 +277,15 @@
             <div class="composer">
                 @if (_modelSupportsImage)
                 {
-                    <InputFile id="chat-image-input"
-                               class="visually-hidden"
-                               accept="image/*"
-                               OnChange="OnImageSelectedAsync" />
-                    <button type="button"
-                            class="composer-attach"
-                            aria-label="Attach image"
-                            disabled="@isBusy"
-                            @onclick="OpenImagePicker">
+                    <label class="composer-attach" aria-label="Attach image">
                         📷
-                    </button>
+                        <InputFile @key="_inputFileKey"
+                                   id="chat-image-input"
+                                   class="visually-hidden"
+                                   accept="image/*"
+                                   disabled="@isBusy"
+                                   OnChange="OnImageSelectedAsync" />
+                    </label>
                 }
                 @if (_stagedImageDataUrl is not null)
                 {
@@ -347,6 +355,9 @@
     private bool _modelSupportsImage;
     private string? _stagedImageDataUrl;
     private string? _imageCapabilityWarning;
+    private string? _queuedImageDataUrl;
+    private int _inputFileKey;
+    private string _sessionUsage = string.Empty;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -361,6 +372,7 @@
         await SelectedModel.LoadAsync();
         await UpdateModelCapabilitiesAsync();
         await Conversations.InitializeAsync();
+        RefreshSessionUsage();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -378,8 +390,15 @@
     private void OnSelectedModelChanged()
         => _ = InvokeAsync(async () =>
         {
-            await UpdateModelCapabilitiesAsync();
-            StateHasChanged();
+            try
+            {
+                await UpdateModelCapabilitiesAsync();
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+            }
         });
 
     private async Task UpdateModelCapabilitiesAsync()
@@ -395,15 +414,15 @@
         }
 
         var model = await ModelCatalog.FindByIdAsync(modelId);
+        if (!string.Equals(SelectedModel.CurrentModelId, modelId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         _modelSupportsImage = model?.SupportsImageInput == true;
         _imageCapabilityWarning = !_modelSupportsImage && _stagedImageDataUrl is not null
             ? "This model does not support images. Remove the attachment or choose a vision model."
             : null;
-    }
-
-    private async Task OpenImagePicker()
-    {
-        await JS.InvokeVoidAsync("eval", "document.getElementById('chat-image-input')?.click()");
     }
 
     private async Task OnImageSelectedAsync(InputFileChangeEventArgs e)
@@ -445,10 +464,17 @@
     {
         _stagedImageDataUrl = null;
         _imageCapabilityWarning = null;
+        _inputFileKey++;
     }
 
     private void OnConversationsChanged()
-        => _ = InvokeAsync(StateHasChanged);
+    {
+        RefreshSessionUsage();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshSessionUsage()
+        => _sessionUsage = UsageFormatter.FormatConversationTotal(ChatAgent.Messages);
 
     private static bool ShouldOpenThinking(ChatDisplayMessage message)
         => message.IsStreaming && string.IsNullOrEmpty(message.Content);
@@ -575,6 +601,7 @@
     private void CancelQueued()
     {
         _queuedText = null;
+        _queuedImageDataUrl = null;
         statusText = isBusy ? "Assistant is responding" : string.Empty;
     }
 
@@ -594,17 +621,18 @@
         var text = string.IsNullOrWhiteSpace(inputText) ? "What's in this image?" : inputText.Trim();
         var image = _stagedImageDataUrl;
         inputText = string.Empty;
-        _stagedImageDataUrl = null;
-        _imageCapabilityWarning = null;
 
         if (isBusy)
         {
             _queuedText = text;
+            _queuedImageDataUrl = image;
             statusText = "Message queued";
             await FocusComposerAsync();
             return;
         }
 
+        _stagedImageDataUrl = null;
+        _imageCapabilityWarning = null;
         await SendCoreAsync(text, image);
     }
 
@@ -623,16 +651,19 @@
         if (_disposed)
         {
             _queuedText = null;
+            _queuedImageDataUrl = null;
             EndSend();
             return;
         }
 
         if (_queuedText is { } queued)
         {
+            var queuedImage = _queuedImageDataUrl;
             _queuedText = null;
+            _queuedImageDataUrl = null;
             // Keep isBusy true across the handoff so a concurrent Enter cannot
             // start a second stream while we await the nested send.
-            await SendCoreAsync(queued);
+            await SendCoreAsync(queued, queuedImage);
             return;
         }
 
@@ -678,6 +709,7 @@
             }
 
             await Conversations.RefreshAfterTurnAsync();
+            RefreshSessionUsage();
             statusText = "Response complete";
         }
         catch (OperationCanceledException ex) when (ex.CancellationToken == ct)

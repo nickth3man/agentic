@@ -256,6 +256,8 @@ public class ChatAgentServiceLoadTranscriptTests
         Assert.Equal("user", user.Role);
         Assert.False(user.Content.IsText);
         Assert.Equal("look", user.Content.Parts[0].Text);
+        Assert.Equal("image_url", user.Content.Parts[1].Type);
+        Assert.Equal("data:image/jpeg;base64,abc", user.Content.Parts[1].ImageUrl!.Url);
     }
 
     private static ChatAgentService CreateService(params StreamDelta[] deltas)

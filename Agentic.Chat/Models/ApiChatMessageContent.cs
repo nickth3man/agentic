@@ -6,9 +6,14 @@ namespace Agentic.Chat.Models;
 [JsonConverter(typeof(ApiChatMessageContentJsonConverter))]
 public readonly struct ApiChatMessageContent : IEquatable<ApiChatMessageContent>
 {
-    private readonly object _value;
+    internal const string TextPartType = "text";
+    internal const string ImageUrlPartType = "image_url";
+
+    private readonly object? _value;
 
     private ApiChatMessageContent(object value) => _value = value;
+
+    private bool IsDefault => _value is null;
 
     public bool IsText => _value is string;
 
@@ -32,7 +37,7 @@ public readonly struct ApiChatMessageContent : IEquatable<ApiChatMessageContent>
             throw new ArgumentException("Multipart content requires at least one part.", nameof(parts));
         }
 
-        return new ApiChatMessageContent(parts);
+        return new ApiChatMessageContent(parts.ToList());
     }
 
     public static implicit operator ApiChatMessageContent(string text) => FromText(text);
@@ -44,19 +49,51 @@ public readonly struct ApiChatMessageContent : IEquatable<ApiChatMessageContent>
             return Text;
         }
 
-        return Parts.FirstOrDefault(p => p.Type == "text")?.Text ?? string.Empty;
+        return Parts.FirstOrDefault(p => p.Type == TextPartType)?.Text ?? string.Empty;
     }
 
     public bool Equals(ApiChatMessageContent other)
-        => IsText == other.IsText
+    {
+        if (IsDefault)
+        {
+            return other.IsDefault;
+        }
+
+        if (other.IsDefault)
+        {
+            return false;
+        }
+
+        return IsText == other.IsText
             && (IsText
                 ? string.Equals(Text, other.Text, StringComparison.Ordinal)
                 : Parts.SequenceEqual(other.Parts));
+    }
 
     public override bool Equals(object? obj) => obj is ApiChatMessageContent other && Equals(other);
 
     public override int GetHashCode()
-        => IsText ? Text.GetHashCode(StringComparison.Ordinal) : Parts.Count;
+    {
+        if (_value is null)
+        {
+            return 0;
+        }
+
+        if (IsText)
+        {
+            return Text.GetHashCode(StringComparison.Ordinal);
+        }
+
+        var hash = new HashCode();
+        foreach (var part in Parts)
+        {
+            hash.Add(part.Type, StringComparer.Ordinal);
+            hash.Add(part.Text, StringComparer.Ordinal);
+            hash.Add(part.ImageUrl?.Url, StringComparer.Ordinal);
+        }
+
+        return hash.ToHashCode();
+    }
 
     public static bool operator ==(ApiChatMessageContent left, ApiChatMessageContent right) => left.Equals(right);
 

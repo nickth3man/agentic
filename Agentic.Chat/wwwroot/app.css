@@ -896,7 +896,7 @@ body {
 
 .composer {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.5rem;
     padding: 0.4rem 0.4rem 0.4rem 0.85rem;
     border-radius: 1.15rem;
@@ -914,13 +914,19 @@ body {
 .chat-input {
     flex: 1;
     min-width: 0;
+    min-height: calc(1.5em + 1.4rem);
+    max-height: calc(6 * 1.5em + 1.4rem);
     padding: 0.7rem 0.35rem;
     border: none;
     background: transparent;
     font-family: var(--font-body);
     font-size: 1rem;
+    line-height: 1.5;
     color: var(--ink);
     outline: none;
+    resize: none;
+    overflow-y: auto;
+    field-sizing: content;
 }
 
 .chat-input::placeholder {

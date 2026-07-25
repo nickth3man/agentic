@@ -203,7 +203,7 @@ public class ChatAgentServiceSendStreamingTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => Consume(service.SendStreamingAsync("hi", cts.Token)));
+            () => Consume(service.SendStreamingAsync("hi", cancellationToken: cts.Token)));
 
         // Service finalizes before rethrowing — display unlocked, marker only.
         Assert.Equal(2, service.Messages.Count);
@@ -222,7 +222,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         // Placeholder assistant
@@ -258,7 +258,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync()); // placeholder
@@ -289,7 +289,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         // Placeholder only — cancel before any content delta is applied.
@@ -325,7 +325,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync()); // placeholder
@@ -360,7 +360,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync()); // placeholder
@@ -404,7 +404,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync());
@@ -421,6 +421,28 @@ public class ChatAgentServiceSendStreamingTests
 
         Assert.Equal("partial answer (stopped)", service.Messages[1].Content);
         Assert.False(service.IsStreamActive);
+    }
+
+    [Fact]
+    public async Task SendWithImage_AddsMultipartUserMessageToApiTranscript()
+    {
+        var fake = new FakeOpenRouterClient([new StreamDelta("looks like a cat", null)]);
+        var service = CreateServiceWithClient(fake);
+
+        await Consume(service.SendStreamingAsync(
+            "What is this?",
+            "data:image/jpeg;base64,abc123"));
+
+        Assert.NotNull(fake.LastRequest);
+        var user = fake.LastRequest!.Messages[1];
+        Assert.Equal("user", user.Role);
+        Assert.False(user.Content.IsText);
+        Assert.Equal(2, user.Content.Parts.Count);
+        Assert.Equal("text", user.Content.Parts[0].Type);
+        Assert.Equal("What is this?", user.Content.Parts[0].Text);
+        Assert.Equal("image_url", user.Content.Parts[1].Type);
+        Assert.Equal("data:image/jpeg;base64,abc123", user.Content.Parts[1].ImageUrl!.Url);
+        Assert.Equal("data:image/jpeg;base64,abc123", service.Messages[0].ImageDataUrl);
     }
 
     [Fact]
@@ -629,7 +651,11 @@ public class ChatAgentServiceSendStreamingTests
         public bool AssistantFinalizedCompleted { get; private set; }
         public Task FinalizationStarted => _finalizationStarted.Task;
 
-        public Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default)
+        public Task OnUserMessageCommittedAsync(
+            string content,
+            string modelId,
+            string? imageDataUrl = null,
+            CancellationToken cancellationToken = default)
         {
             Events.Add("user-committed");
             return Task.CompletedTask;

@@ -14,6 +14,8 @@ public sealed class Message
 
     public string? Reasoning { get; set; }
 
+    public string? ImageDataUrl { get; set; }
+
     public int? UsagePromptTokens { get; set; }
 
     public int? UsageCompletionTokens { get; set; }

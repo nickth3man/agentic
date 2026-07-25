@@ -17,6 +17,9 @@ public sealed class ChatDisplayMessage
     // to the API transcript.
     public bool IsError { get; set; }
 
+    /// <summary>Data URL thumbnail for a user-sent image (display only).</summary>
+    public string? ImageDataUrl { get; set; }
+
     /// <summary>
     /// Token/cost accounting from the final SSE usage chunk. Populated only after the
     /// stream completes — never while <see cref="IsStreaming"/> is true.

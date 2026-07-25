@@ -181,6 +181,43 @@ public class ConversationStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RoundTrip_PersistsUserImage()
+    {
+        await _conversations.InitializeAsync();
+
+        await foreach (var _ in _chat.SendStreamingAsync(
+            "What is this?",
+            "data:image/jpeg;base64,abc123"))
+        {
+        }
+
+        await _conversations.RefreshAfterTurnAsync();
+        var conversationId = _conversations.ActiveConversationId!.Value;
+
+        var reloadPersistence = new ConversationPersistence(_db);
+        var reloadChat = new ChatAgentService(
+            new FakeOpenRouterClient(),
+            Options.Create(new OpenRouterOptions { BaseUrl = "https://test.local/", Model = "test-model" }),
+            NullLogger<ChatAgentService>.Instance,
+            new SelectedModelService(new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider())),
+            new ModelCatalogService(new UnusedHttpClientFactory()),
+            new SystemPromptService(new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider()), NullLogger<SystemPromptService>.Instance),
+            reloadPersistence);
+        var reloadConversations = new ConversationService(
+            _db,
+            reloadChat,
+            reloadPersistence,
+            new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider()));
+        await reloadConversations.SwitchAsync(conversationId);
+
+        var user = reloadChat.Messages.Single(m => m.Role == "user");
+        Assert.Equal("data:image/jpeg;base64,abc123", user.ImageDataUrl);
+        var apiUser = reloadChat.ApiMessagesForTest.Single(m => m.Role == "user");
+        Assert.False(apiUser.Content.IsText);
+        Assert.Equal("data:image/jpeg;base64,abc123", apiUser.Content.Parts[1].ImageUrl!.Url);
+    }
+
+    [Fact]
     public void AutoTitle_ShortMessage_ReturnsTrimmedFullText()
     {
         Assert.Equal("Hello world", ConversationTitle.FromFirstUserMessage("  Hello world  "));

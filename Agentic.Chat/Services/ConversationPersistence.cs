@@ -6,7 +6,11 @@ namespace Agentic.Chat.Services;
 
 public interface IActiveConversationWriter
 {
-    Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default);
+    Task OnUserMessageCommittedAsync(
+        string content,
+        string modelId,
+        string? imageDataUrl = null,
+        CancellationToken cancellationToken = default);
     Task OnAssistantFinalizedAsync(
         string content,
         string? reasoning,
@@ -18,7 +22,11 @@ public interface IActiveConversationWriter
 public sealed class NullActiveConversationWriter : IActiveConversationWriter
 {
     public static NullActiveConversationWriter Instance { get; } = new();
-    public Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task OnUserMessageCommittedAsync(
+        string content,
+        string modelId,
+        string? imageDataUrl = null,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task OnAssistantFinalizedAsync(
         string content,
         string? reasoning,
@@ -32,7 +40,11 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
     private readonly ChatDbContext _db = db;
     public Guid? ActiveConversationId { get; set; }
 
-    public async Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default)
+    public async Task OnUserMessageCommittedAsync(
+        string content,
+        string modelId,
+        string? imageDataUrl = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(content);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
@@ -70,6 +82,7 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
             Role = "user",
             Content = content,
             Reasoning = null,
+            ImageDataUrl = string.IsNullOrEmpty(imageDataUrl) ? null : imageDataUrl,
             CreatedAt = now
         });
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

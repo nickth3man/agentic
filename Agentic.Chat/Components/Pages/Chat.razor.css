@@ -1,3 +1,65 @@
+/* ─── Vision composer + user bubble thumbnails ─── */
+.composer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.45rem;
+}
+
+.composer-attach {
+    flex-shrink: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.6);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.composer-image-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.35rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.65);
+}
+
+.composer-image-chip img {
+    width: 2.5rem;
+    height: 2.5rem;
+    object-fit: cover;
+    border-radius: 0.35rem;
+}
+
+.composer-image-remove {
+    border: none;
+    background: transparent;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--ink-mute);
+}
+
+.composer-image-warning {
+    flex: 1 1 100%;
+    font-size: 0.72rem;
+    color: var(--copper);
+}
+
+.user-image-thumb {
+    display: block;
+    max-width: min(220px, 100%);
+    max-height: 160px;
+    object-fit: cover;
+    border-radius: 0.5rem;
+    margin-bottom: 0.45rem;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
 /* ─── Message affordances: error state + Retry/Regenerate actions ─── */
 .chat-bubble.is-error {
     background: var(--danger-bg);
@@ -35,6 +97,36 @@
 .msg-action-btn:focus-visible {
     outline: 2px solid var(--teal);
     outline-offset: 2px;
+}
+
+.msg-usage {
+    margin-top: 0.45rem;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--ink-mute);
+    opacity: 0.85;
+}
+
+.conversation-usage {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-mute);
+    white-space: nowrap;
+}
+
+@media (max-width: 639px) {
+    .msg-usage {
+        display: none;
+    }
 }
 
 /* ─── Off-canvas conversation drawer (phone-first) ─── */

@@ -39,9 +39,9 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal(3, messages.Count);
         Assert.Equal("system", messages[0].Role);
         Assert.Equal("user", messages[1].Role);
-        Assert.Equal("first", messages[1].Content);
+        Assert.Equal("first", messages[1].TextContent);
         Assert.Equal("user", messages[2].Role);
-        Assert.Equal("second", messages[2].Content);
+        Assert.Equal("second", messages[2].TextContent);
 
         // Cross-check via JSON serialization to guard the wire shape as well —
         // no message in the serialized body should contain the placeholder string.
@@ -74,9 +74,9 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal(3, messages.Count);
         Assert.Equal("system", messages[0].Role);
         Assert.Equal("user", messages[1].Role);
-        Assert.Equal("hi", messages[1].Content);
+        Assert.Equal("hi", messages[1].TextContent);
         Assert.Equal("user", messages[2].Role);
-        Assert.Equal("again", messages[2].Content);
+        Assert.Equal("again", messages[2].TextContent);
 
         var serialized = JsonSerializer.Serialize(fake.LastRequest, JsonOptions);
         Assert.DoesNotContain("Error", serialized);
@@ -112,7 +112,7 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal(2, messages.Count);
         Assert.Equal("system", messages[0].Role);
         Assert.Equal("user", messages[1].Role);
-        Assert.Equal("hi", messages[1].Content);
+        Assert.Equal("hi", messages[1].TextContent);
     }
 
     [Fact]
@@ -175,11 +175,11 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal(4, messages.Count);
         Assert.Equal("system", messages[0].Role);
         Assert.Equal("user", messages[1].Role);
-        Assert.Equal("hi", messages[1].Content);
+        Assert.Equal("hi", messages[1].TextContent);
         Assert.Equal("assistant", messages[2].Role);
-        Assert.Equal("second", messages[2].Content);
+        Assert.Equal("second", messages[2].TextContent);
         Assert.Equal("user", messages[3].Role);
-        Assert.Equal("more", messages[3].Content);
+        Assert.Equal("more", messages[3].TextContent);
     }
 
     [Fact]
@@ -211,14 +211,14 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal(2, messages.Count);
         Assert.Equal("system", messages[0].Role);
         Assert.Equal("user", messages[1].Role);
-        Assert.Equal("hi", messages[1].Content);
+        Assert.Equal("hi", messages[1].TextContent);
 
         // A follow-up send proves the regenerated assistant entered the transcript once.
         await Consume(service.SendStreamingAsync("more"));
         var follow = fake.LastRequest!.Messages;
         Assert.Equal(4, follow.Count);
         Assert.Equal("assistant", follow[2].Role);
-        Assert.Equal("real answer", follow[2].Content);
+        Assert.Equal("real answer", follow[2].TextContent);
     }
 
     [Fact]
@@ -417,6 +417,7 @@ public class ChatAgentServiceTranscriptHygieneTests
                 selection,
                 catalog,
                 systemPrompt,
+                TestSupport.NewChatSettings(storage),
                 null!));
         Assert.Equal("conversationWriter", ex.ParamName);
     }
@@ -453,7 +454,7 @@ public class ChatAgentServiceTranscriptHygieneTests
         var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(null);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance), fake);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, TestSupport.NewChatSettings(storage), NullActiveConversationWriter.Instance), fake);
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)

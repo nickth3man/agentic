@@ -1,20 +1,37 @@
 using Agentic.Chat.Data;
+using Agentic.Chat.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agentic.Chat.Services;
 
 public interface IActiveConversationWriter
 {
-    Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default);
-    Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default);
+    Task OnUserMessageCommittedAsync(
+        string content,
+        string modelId,
+        string? imageDataUrl = null,
+        CancellationToken cancellationToken = default);
+    Task OnAssistantFinalizedAsync(
+        string content,
+        string? reasoning,
+        MessageUsage? usage = null,
+        CancellationToken cancellationToken = default);
     Task OnLastAssistantRemovedAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class NullActiveConversationWriter : IActiveConversationWriter
 {
     public static NullActiveConversationWriter Instance { get; } = new();
-    public Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    public Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task OnUserMessageCommittedAsync(
+        string content,
+        string modelId,
+        string? imageDataUrl = null,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task OnAssistantFinalizedAsync(
+        string content,
+        string? reasoning,
+        MessageUsage? usage = null,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task OnLastAssistantRemovedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
@@ -23,7 +40,11 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
     private readonly ChatDbContext _db = db;
     public Guid? ActiveConversationId { get; set; }
 
-    public async Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default)
+    public async Task OnUserMessageCommittedAsync(
+        string content,
+        string modelId,
+        string? imageDataUrl = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(content);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
@@ -61,6 +82,7 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
             Role = "user",
             Content = content,
             Reasoning = null,
+            ImageDataUrl = string.IsNullOrEmpty(imageDataUrl) ? null : imageDataUrl,
             CreatedAt = now
         });
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -74,7 +96,11 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
         }
     }
 
-    public async Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default)
+    public async Task OnAssistantFinalizedAsync(
+        string content,
+        string? reasoning,
+        MessageUsage? usage = null,
+        CancellationToken cancellationToken = default)
     {
         if (ActiveConversationId is null) { return; }
         if (!ChatAgentService.HasApiVisibleContent(content, reasoning))
@@ -94,6 +120,10 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
             Role = "assistant",
             Content = content ?? string.Empty,
             Reasoning = ChatAgentService.NullIfWhiteSpace(reasoning),
+            UsagePromptTokens = usage?.PromptTokens,
+            UsageCompletionTokens = usage?.CompletionTokens,
+            UsageCost = usage?.Cost,
+            UsageIsFree = usage?.IsFree ?? false,
             CreatedAt = now
         });
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

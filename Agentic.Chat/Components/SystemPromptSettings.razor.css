@@ -125,6 +125,52 @@
     line-height: 1.45;
 }
 
+.settings-divider {
+    height: 1px;
+    margin: 0.55rem 0 0.35rem;
+    background: var(--line);
+    border: 0;
+}
+
+.settings-title-sm {
+    font-size: 0.95rem;
+}
+
+.settings-label .settings-value {
+    float: right;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--ink-mute);
+}
+
+.settings-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.settings-range {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--teal);
+}
+
+.settings-range:disabled {
+    opacity: 0.4;
+}
+
+.settings-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
 .settings-preset:focus-visible,
 .settings-textarea:focus-visible {
     outline: 2px solid var(--teal);

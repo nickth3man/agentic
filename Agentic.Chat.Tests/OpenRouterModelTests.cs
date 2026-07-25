@@ -98,9 +98,23 @@ public class OpenRouterModelTests
     }
 
     [Fact]
-    public void SupportsReasoning_False_OnEmptySupportedParametersList()
+    public void SupportsImageInput_True_WhenModalityIncludesImage()
     {
-        var m = Build(supported: Array.Empty<string>());
-        Assert.False(m.SupportsReasoning);
+        var m = Build(modality: "text+image->text");
+        Assert.True(m.SupportsImageInput);
+    }
+
+    [Fact]
+    public void SupportsImageInput_False_WhenModalityNull()
+    {
+        var m = new OpenRouterModel(
+            "vendor/model",
+            "Model",
+            128_000L,
+            DateTimeOffset.UtcNow,
+            null!,
+            new OpenRouterPricing(0m, 0m),
+            []);
+        Assert.False(m.SupportsImageInput);
     }
 }

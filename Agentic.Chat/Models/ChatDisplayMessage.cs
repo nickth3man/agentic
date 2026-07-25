@@ -10,6 +10,91 @@ public sealed class ChatDisplayMessage
 
     public bool IsStreaming { get; set; }
 
+    /// <summary>
+    /// Whether the user has explicitly expanded or collapsed this message's
+    /// thinking panel. Once set, automatic panel state changes no longer apply.
+    /// </summary>
+    public bool ThinkingUserTouched { get; private set; }
+
+    /// <summary>
+    /// The explicit user-selected thinking-panel state. This is meaningful only
+    /// after <see cref="ThinkingUserTouched"/> is true.
+    /// </summary>
+    public bool UserSelectedThinkingOpen { get; private set; }
+
+    /// <summary>
+    /// The moment the first reasoning token arrived.
+    /// </summary>
+    public DateTimeOffset? ReasoningStartedAt { get; private set; }
+
+    /// <summary>
+    /// The moment the first answer-content token arrived.
+    /// </summary>
+    public DateTimeOffset? ContentStartedAt { get; private set; }
+
+    /// <summary>
+    /// The time the stream completed, used when a reasoning-only response has
+    /// no content token from which to calculate its thinking duration.
+    /// </summary>
+    public DateTimeOffset? CompletedAt { get; private set; }
+
+    public bool IsThinkingOpen
+        => ThinkingUserTouched
+            ? UserSelectedThinkingOpen
+            : IsStreaming && string.IsNullOrEmpty(Content);
+
+    public int? ThoughtDurationSeconds
+    {
+        get
+        {
+            if (ReasoningStartedAt is not { } reasoningStartedAt
+                || (ContentStartedAt ?? CompletedAt) is not { } thoughtEndedAt)
+            {
+                return null;
+            }
+
+            return Math.Max(1, (int)Math.Ceiling((thoughtEndedAt - reasoningStartedAt).TotalSeconds));
+        }
+    }
+
+    public void SetThinkingOpenByUser(bool isOpen)
+    {
+        ThinkingUserTouched = true;
+        UserSelectedThinkingOpen = isOpen;
+    }
+
+    /// <summary>
+    /// Applies a stream delta and records the first reasoning/content milestones.
+    /// The first content token automatically collapses thinking unless the user
+    /// already selected a panel state.
+    /// </summary>
+    public bool ApplyDelta(StreamDelta delta, DateTimeOffset timestamp)
+    {
+        var changed = false;
+
+        if (!string.IsNullOrEmpty(delta.Reasoning))
+        {
+            Reasoning += delta.Reasoning;
+            ReasoningStartedAt ??= timestamp;
+            changed = true;
+        }
+
+        if (!string.IsNullOrEmpty(delta.Content))
+        {
+            Content += delta.Content;
+            ContentStartedAt ??= timestamp;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    public void MarkCompleted(DateTimeOffset timestamp)
+    {
+        IsStreaming = false;
+        CompletedAt ??= timestamp;
+    }
+
     // True when this assistant turn ended in an error (an OpenRouterException was
     // surfaced via the streaming core). Distinct from a successful assistant turn
     // so the UI can render an error affordance (retry) instead of treating the

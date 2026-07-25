@@ -273,7 +273,7 @@ public sealed class ChatAgentService
                         }
 
                         var delta = enumerator.Current;
-                        if (ApplyDelta(delta, assistant))
+                        if (assistant.ApplyDelta(delta, DateTimeOffset.UtcNow))
                         {
                             yield return assistant;
                         }
@@ -286,7 +286,7 @@ public sealed class ChatAgentService
 
                 if (openRouterException is not null)
                 {
-                    assistant.IsStreaming = false;
+                    assistant.MarkCompleted(DateTimeOffset.UtcNow);
                     assistant.IsError = true;
                     assistant.Content = $"(Error {openRouterException.StatusCode}: {Truncate(openRouterException.Body, 300)})";
                     yield return assistant;
@@ -304,7 +304,7 @@ public sealed class ChatAgentService
                 ExceptionDispatchInfo.Capture(canceledException).Throw();
             }
 
-            assistant.IsStreaming = false;
+            assistant.MarkCompleted(DateTimeOffset.UtcNow);
 
             // Any non-whitespace content/reasoning counts here — including a literal
             // EmptyResponsePlaceholder string from the model. HasApiVisibleContent
@@ -378,7 +378,7 @@ public sealed class ChatAgentService
     // and clear IsStreaming so the UI unlocks cleanly.
     private async Task FinalizeCancelledAssistantAsync(ChatDisplayMessage assistant)
     {
-        assistant.IsStreaming = false;
+        assistant.MarkCompleted(DateTimeOffset.UtcNow);
 
         var apiContent = assistant.Content;
         var reasoning = NullIfWhiteSpace(assistant.Reasoning);
@@ -455,25 +455,6 @@ public sealed class ChatAgentService
         }
 
         return true;
-    }
-
-    private static bool ApplyDelta(StreamDelta delta, ChatDisplayMessage assistant)
-    {
-        var changed = false;
-
-        if (!string.IsNullOrEmpty(delta.Reasoning))
-        {
-            assistant.Reasoning += delta.Reasoning;
-            changed = true;
-        }
-
-        if (!string.IsNullOrEmpty(delta.Content))
-        {
-            assistant.Content += delta.Content;
-            changed = true;
-        }
-
-        return changed;
     }
 
     internal static bool HasApiVisibleContent(string content, string? reasoning)

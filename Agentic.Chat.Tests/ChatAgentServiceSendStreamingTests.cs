@@ -174,7 +174,7 @@ public class ChatAgentServiceSendStreamingTests
     }
 
     [Fact]
-    public async Task CancelledToken_ThrowsOperationCanceled()
+    public async Task CancelledToken_FinalizesThenThrowsOperationCanceled()
     {
         var service = CreateService();
         using var cts = new CancellationTokenSource();
@@ -182,6 +182,11 @@ public class ChatAgentServiceSendStreamingTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => Consume(service.SendStreamingAsync("hi", cts.Token)));
+
+        // Service finalizes before rethrowing — display unlocked, marker only.
+        Assert.Equal(2, service.Messages.Count);
+        Assert.False(service.Messages[1].IsStreaming);
+        Assert.Equal("(stopped)", service.Messages[1].Content);
     }
 
     // ---------- helpers ----------

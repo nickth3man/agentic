@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using Agentic.Chat.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -46,6 +47,11 @@ public sealed class ChatAgentService
     }
 
     public IReadOnlyList<ChatDisplayMessage> Messages => _displayMessages;
+
+    // Test-only: exposes the API transcript so cancellation/hygiene tests can assert
+    // display-only markers (e.g. "(stopped)") never leak into model-visible history.
+    // Exposed via InternalsVisibleTo.
+    internal IReadOnlyList<ApiChatMessage> ApiMessagesForTest => _apiMessages;
 
     // Test-only: lets unit tests seed display-list states the public API can't
     // produce on its own (e.g. a trailing user message — normal sends always pair
@@ -98,8 +104,10 @@ public sealed class ChatAgentService
     // a finally so yield is permitted.
     //
     // Transcript invariant: the assistant entry is appended to _apiMessages ONLY when the
-    // stream completed cleanly AND produced real content/reasoning. The "(No response
-    // content returned.)" placeholder and error states never enter the API transcript.
+    // stream completed cleanly AND produced real content/reasoning, OR when the user
+    // cancelled mid-stream and partial content/reasoning already arrived. The "(No
+    // response content returned.)" placeholder, "(stopped)" display marker, and error
+    // states never enter the API transcript.
     private async IAsyncEnumerable<ChatDisplayMessage> StreamTurnAsync(
         TurnKind kind,
         string? userText,
@@ -137,52 +145,82 @@ public sealed class ChatAgentService
             LogStreamingStart(_logger, _apiMessages.Count, null);
 
             var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
-            var modelInfo = await _modelCatalog
-                .FindByIdAsync(modelId, cancellationToken)
-                .ConfigureAwait(false);
 
-            var request = new ChatCompletionRequest(
-                modelId,
-                _apiMessages,
-                Stream: true,
-                Reasoning: modelInfo?.SupportsReasoning == true
-                    ? new ReasoningRequest(Enabled: true, Exclude: false)
-                    : null);
-
+            // Capture cancel/error into locals — C# forbids yield inside a try that has a catch.
+            // Catalog cache-hit skips its own CT checks, so we ThrowIfCancellationRequested
+            // before FindByIdAsync; mid-stream cancel is caught around MoveNextAsync.
             OpenRouterException? openRouterException = null;
-            var enumerator = _client
-                .StreamChatAsync(request, cancellationToken)
-                .GetAsyncEnumerator(cancellationToken);
+            OperationCanceledException? canceledException = null;
+            OpenRouterModel? modelInfo = null;
             try
             {
-                while (true)
+                cancellationToken.ThrowIfCancellationRequested();
+                modelInfo = await _modelCatalog
+                    .FindByIdAsync(modelId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex)
+            {
+                canceledException = ex;
+            }
+
+            if (canceledException is null)
+            {
+                var request = new ChatCompletionRequest(
+                    modelId,
+                    _apiMessages,
+                    Stream: true,
+                    Reasoning: modelInfo?.SupportsReasoning == true
+                        ? new ReasoningRequest(Enabled: true, Exclude: false)
+                        : null);
+
+                var enumerator = _client
+                    .StreamChatAsync(request, cancellationToken)
+                    .GetAsyncEnumerator(cancellationToken);
+                try
                 {
-                    bool hasNext;
-                    try
+                    while (true)
                     {
-                        hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
-                    }
-                    catch (OpenRouterException ex)
-                    {
-                        openRouterException = ex;
-                        break;
-                    }
+                        bool hasNext;
+                        try
+                        {
+                            hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                        }
+                        catch (OpenRouterException ex)
+                        {
+                            openRouterException = ex;
+                            break;
+                        }
+                        catch (OperationCanceledException ex)
+                        {
+                            canceledException = ex;
+                            break;
+                        }
 
-                    if (!hasNext)
-                    {
-                        break;
-                    }
+                        if (!hasNext)
+                        {
+                            break;
+                        }
 
-                    var delta = enumerator.Current;
-                    if (ApplyDelta(delta, assistant))
-                    {
-                        yield return assistant;
+                        var delta = enumerator.Current;
+                        if (ApplyDelta(delta, assistant))
+                        {
+                            yield return assistant;
+                        }
                     }
                 }
+                finally
+                {
+                    await enumerator.DisposeAsync().ConfigureAwait(false);
+                }
             }
-            finally
+
+            if (canceledException is not null)
             {
-                await enumerator.DisposeAsync().ConfigureAwait(false);
+                FinalizeCancelledAssistant(assistant);
+                yield return assistant;
+                // Re-throw so Chat.razor can announce "Response stopped" without an error banner.
+                ExceptionDispatchInfo.Capture(canceledException).Throw();
             }
 
             if (openRouterException is not null)
@@ -217,6 +255,31 @@ public sealed class ChatAgentService
         {
             _streamActive = false;
         }
+    }
+
+    // User-initiated stop (or navigate-away cancel): keep whatever partial tokens
+    // already arrived, append them to the API transcript WITHOUT the display-only
+    // "(stopped)" marker, and clear IsStreaming so the UI unlocks cleanly.
+    private void FinalizeCancelledAssistant(ChatDisplayMessage assistant)
+    {
+        assistant.IsStreaming = false;
+
+        var apiContent = assistant.Content;
+        var apiReasoning = assistant.Reasoning;
+        var hadPartial = !string.IsNullOrWhiteSpace(apiContent)
+            || !string.IsNullOrWhiteSpace(apiReasoning);
+        if (hadPartial)
+        {
+            _apiMessages.Add(new ApiChatMessage(
+                "assistant",
+                apiContent,
+                string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning));
+        }
+
+        // Display-only marker — MUST NOT enter the API transcript.
+        assistant.Content = string.IsNullOrEmpty(apiContent)
+            ? "(stopped)"
+            : apiContent + " (stopped)";
     }
 
     // Pops the trailing error assistant from the display list, if any. Used by the Retry

@@ -60,7 +60,7 @@ public sealed class ChatAgentService
         _modelCatalog = modelCatalog;
         _systemPromptService = systemPromptService;
         _conversationWriter = conversationWriter;
-        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
+        ReseedSystemPrompt();
     }
 
     public IReadOnlyList<ChatDisplayMessage> Messages => _displayMessages;
@@ -90,8 +90,7 @@ public sealed class ChatAgentService
         }
 
         _displayMessages.Clear();
-        _apiMessages.Clear();
-        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
+        ReseedSystemPrompt();
 
         foreach (var message in messages)
         {
@@ -116,7 +115,7 @@ public sealed class ChatAgentService
                 _apiMessages.Add(new ApiChatMessage(
                     "assistant",
                     copy.Content,
-                    string.IsNullOrWhiteSpace(copy.Reasoning) ? null : copy.Reasoning));
+                    NullIfWhiteSpace(copy.Reasoning)));
             }
         }
     }
@@ -133,8 +132,7 @@ public sealed class ChatAgentService
         }
 
         _displayMessages.Clear();
-        _apiMessages.Clear();
-        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
+        ReseedSystemPrompt();
     }
 
     /// <summary>
@@ -150,6 +148,11 @@ public sealed class ChatAgentService
             return;
         }
 
+        ReseedSystemPrompt();
+    }
+
+    private void ReseedSystemPrompt()
+    {
         _apiMessages.Clear();
         _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
     }
@@ -168,6 +171,9 @@ public sealed class ChatAgentService
 
         return OpenRouterOptions.DefaultSystemPrompt;
     }
+
+    private string ResolveModelId()
+        => _selectedModelService.CurrentModelId ?? _options.Model;
 
     // Test-only: first _apiMessages entry must reflect the configured prompt.
     internal string GetApiSystemPromptForTest() => _apiMessages[0].Content;
@@ -198,38 +204,9 @@ public sealed class ChatAgentService
         _streamActive = true;
         try
         {
-            if (kind == TurnKind.Send)
+            if (!await TryPrepareTurnAsync(kind, userText, cancellationToken).ConfigureAwait(false))
             {
-                ArgumentException.ThrowIfNullOrWhiteSpace(userText);
-                var trimmed = userText!.Trim();
-                _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
-                _apiMessages.Add(new ApiChatMessage("user", trimmed, null));
-
-                var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
-                await _conversationWriter
-                    .OnUserMessageCommittedAsync(trimmed, modelId, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            else if (kind == TurnKind.Retry)
-            {
-                if (!TryPopErrorPlaceholder())
-                {
-                    yield break;
-                }
-            }
-            else
-            {
-                if (!TryPopLastCompletedAssistant(out var wasPersisted))
-                {
-                    yield break;
-                }
-
-                if (wasPersisted)
-                {
-                    await _conversationWriter
-                        .OnLastAssistantRemovedAsync(cancellationToken)
-                        .ConfigureAwait(false);
-                }
+                yield break;
             }
 
             var assistant = new ChatDisplayMessage { Role = "assistant", IsStreaming = true };
@@ -238,7 +215,7 @@ public sealed class ChatAgentService
 
             LogStreamingStart(_logger, _apiMessages.Count, null);
 
-            var modelIdForRequest = _selectedModelService.CurrentModelId ?? _options.Model;
+            var modelIdForRequest = ResolveModelId();
 
             // Catalog cache-hit skips its own CT checks, so we ThrowIfCancellationRequested
             // before FindByIdAsync; mid-stream cancel is caught around MoveNextAsync.
@@ -329,15 +306,16 @@ public sealed class ChatAgentService
 
             assistant.IsStreaming = false;
 
+            // Any non-whitespace content/reasoning counts here — including a literal
+            // EmptyResponsePlaceholder string from the model. HasApiVisibleContent
+            // excludes that placeholder (persistence/regenerate), so do not reuse it.
+            var reasoning = NullIfWhiteSpace(assistant.Reasoning);
             var hadRealContent = !string.IsNullOrWhiteSpace(assistant.Content)
                 || !string.IsNullOrWhiteSpace(assistant.Reasoning);
 
             if (hadRealContent)
             {
-                _apiMessages.Add(new ApiChatMessage(
-                    "assistant",
-                    assistant.Content,
-                    string.IsNullOrWhiteSpace(assistant.Reasoning) ? null : assistant.Reasoning));
+                _apiMessages.Add(new ApiChatMessage("assistant", assistant.Content, reasoning));
             }
             else
             {
@@ -345,10 +323,7 @@ public sealed class ChatAgentService
             }
 
             await _conversationWriter
-                .OnAssistantFinalizedAsync(
-                    assistant.Content,
-                    string.IsNullOrWhiteSpace(assistant.Reasoning) ? null : assistant.Reasoning,
-                    cancellationToken)
+                .OnAssistantFinalizedAsync(assistant.Content, reasoning, cancellationToken)
                 .ConfigureAwait(false);
 
             yield return assistant;
@@ -357,6 +332,44 @@ public sealed class ChatAgentService
         {
             _streamActive = false;
         }
+    }
+
+    private async Task<bool> TryPrepareTurnAsync(
+        TurnKind kind,
+        string? userText,
+        CancellationToken cancellationToken)
+    {
+        if (kind == TurnKind.Send)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(userText);
+            var trimmed = userText!.Trim();
+            _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
+            _apiMessages.Add(new ApiChatMessage("user", trimmed, null));
+
+            await _conversationWriter
+                .OnUserMessageCommittedAsync(trimmed, ResolveModelId(), cancellationToken)
+                .ConfigureAwait(false);
+            return true;
+        }
+
+        if (kind == TurnKind.Retry)
+        {
+            return TryPopErrorPlaceholder();
+        }
+
+        if (!TryPopLastCompletedAssistant(out var wasPersisted))
+        {
+            return false;
+        }
+
+        if (wasPersisted)
+        {
+            await _conversationWriter
+                .OnLastAssistantRemovedAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return true;
     }
 
     // User-initiated stop (or navigate-away cancel): keep whatever partial tokens
@@ -368,15 +381,12 @@ public sealed class ChatAgentService
         assistant.IsStreaming = false;
 
         var apiContent = assistant.Content;
-        var apiReasoning = assistant.Reasoning;
+        var reasoning = NullIfWhiteSpace(assistant.Reasoning);
         var hadPartial = !string.IsNullOrWhiteSpace(apiContent)
-            || !string.IsNullOrWhiteSpace(apiReasoning);
+            || !string.IsNullOrWhiteSpace(assistant.Reasoning);
         if (hadPartial)
         {
-            _apiMessages.Add(new ApiChatMessage(
-                "assistant",
-                apiContent,
-                string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning));
+            _apiMessages.Add(new ApiChatMessage("assistant", apiContent, reasoning));
 
             // Await with a non-cancellable token so Stop/dispose cancel doesn't
             // drop the partial response, and so queued follow-ups cannot persist
@@ -386,7 +396,7 @@ public sealed class ChatAgentService
             {
                 await _conversationWriter.OnAssistantFinalizedAsync(
                     apiContent,
-                    string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning,
+                    reasoning,
                     CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -436,7 +446,7 @@ public sealed class ChatAgentService
         // Determine whether this assistant was persisted to the conversation store.
         // Empty-response placeholders and assistants with no API-visible content are
         // display-only and never saved to SQLite.
-        wasPersisted = HasApiVisibleContent(last.Content, last.Reasoning ?? string.Empty);
+        wasPersisted = HasApiVisibleContent(last.Content, last.Reasoning);
 
         _displayMessages.RemoveAt(_displayMessages.Count - 1);
         if (_apiMessages[^1].Role == "assistant")
@@ -466,7 +476,7 @@ public sealed class ChatAgentService
         return changed;
     }
 
-    internal static bool HasApiVisibleContent(string content, string reasoning)
+    internal static bool HasApiVisibleContent(string content, string? reasoning)
     {
         if (!string.IsNullOrWhiteSpace(reasoning))
         {
@@ -476,6 +486,10 @@ public sealed class ChatAgentService
         return !string.IsNullOrWhiteSpace(content)
             && !string.Equals(content, EmptyResponsePlaceholder, StringComparison.Ordinal);
     }
+
+    // Visible to tests: shared null-vs-whitespace normalization for API reasoning fields.
+    internal static string? NullIfWhiteSpace(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value;
 
     internal static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..max] + "…";

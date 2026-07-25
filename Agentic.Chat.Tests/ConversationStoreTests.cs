@@ -24,7 +24,7 @@ public class ConversationStoreTests : IDisposable
     {
         _dbPath = Path.Combine(Path.GetTempPath(), "agentic-conv-" + Guid.NewGuid().ToString("N") + ".db");
         var options = new DbContextOptionsBuilder<ChatDbContext>()
-            .UseSqlite(ChatDatabase.ToSqliteConnectionString(_dbPath))
+            .UseSqlite(ChatDatabase.ToConnectionString(_dbPath))
             .Options;
         _db = new ChatDbContext(options);
         _db.Database.EnsureCreated();
@@ -119,7 +119,6 @@ public class ConversationStoreTests : IDisposable
     public void AutoTitle_ShortMessage_ReturnsTrimmedFullText()
     {
         Assert.Equal("Hello world", ConversationTitle.FromFirstUserMessage("  Hello world  "));
-        Assert.Equal("Hello world", ConversationService.BuildAutoTitle("  Hello world  "));
     }
 
     [Fact]
@@ -129,15 +128,13 @@ public class ConversationStoreTests : IDisposable
         var title = ConversationTitle.FromFirstUserMessage(longText);
         Assert.Equal(41, title.Length);
         Assert.Equal(new string('a', 40) + "…", title);
-        Assert.Equal(title, ConversationService.AutoTitle(longText));
     }
 
     [Fact]
     public void AutoTitle_NullOrWhitespace_ReturnsDefault()
     {
-        Assert.Equal(ConversationService.DefaultTitle, ConversationTitle.FromFirstUserMessage(null));
-        Assert.Equal(ConversationService.DefaultTitle, ConversationTitle.FromFirstUserMessage("   "));
-        Assert.Equal(ConversationService.DefaultTitle, ConversationService.BuildAutoTitle("   "));
+        Assert.Equal(ConversationTitle.Default, ConversationTitle.FromFirstUserMessage(null));
+        Assert.Equal(ConversationTitle.Default, ConversationTitle.FromFirstUserMessage("   "));
     }
 
     [Fact]
@@ -177,7 +174,7 @@ public class ConversationStoreTests : IDisposable
     [Fact]
     public void ConnectionString_IsLocalFileOnly()
     {
-        var cs = ChatDatabase.ToSqliteConnectionString(_dbPath);
+        var cs = ChatDatabase.ToConnectionString(_dbPath);
         Assert.False(ChatDatabase.ConnectionStringLooksCredentialed(cs));
         Assert.True(ChatDatabase.ConnectionStringLooksCredentialed("Data Source=x;Password=secret"));
         Assert.Equal(ChatDatabase.FileName, Path.GetFileName(ChatDatabase.GetDefaultFilePath()));

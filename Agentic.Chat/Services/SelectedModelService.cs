@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text.Json;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 
 namespace Agentic.Chat.Services;
@@ -31,17 +29,9 @@ public sealed class SelectedModelService
                 CurrentModelId = stored.Value;
             }
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (ProtectedStorageHelpers.IsBestEffortPersistenceFailure(ex))
         {
-            // Pre-rendering or other no-JS-yet state: treat as no stored value.
-        }
-        catch (CryptographicException)
-        {
-            // Data-protection tampering or wrong purpose: treat as no stored value.
-        }
-        catch (JsonException)
-        {
-            // The stored payload wasn't the shape we wrote: treat as no stored value.
+            // Pre-rendering / crypto / shape / JS failures: treat as no stored value.
         }
         finally
         {
@@ -56,13 +46,12 @@ public sealed class SelectedModelService
 
         try
         {
-            await TryPersistAsync(modelId).ConfigureAwait(false);
+            await _protectedStore.SetAsync(StorageKey, modelId).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or CryptographicException or JsonException)
+        catch (Exception ex) when (ProtectedStorageHelpers.IsBestEffortPersistenceFailure(ex))
         {
-            // Persistence is best-effort: a JS-not-available (prerender), wrong data-
-            // protection purpose, or serialization failure must not lose in-memory
-            // state. The finally block below restores the desired final state.
+            // Persistence is best-effort: prerender, crypto, serialization, or
+            // JS failure must not lose in-memory state.
         }
         finally
         {
@@ -71,9 +60,6 @@ public sealed class SelectedModelService
             OnChange?.Invoke();
         }
     }
-
-    private ValueTask TryPersistAsync(string modelId)
-        => _protectedStore.SetAsync(StorageKey, modelId);
 
     // Test seam: lets unit tests pin CurrentModelId without running through the
     // storage. Exposed via Agentic.Chat's InternalsVisibleTo("Agentic.Chat.Tests").

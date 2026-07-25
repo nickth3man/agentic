@@ -2,7 +2,8 @@
 @rendermode InteractiveServer
 @inject ChatAgentService ChatAgent
 @inject ConversationService Conversations
-@implements IDisposable
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 @using Microsoft.AspNetCore.Components
 
 <PageTitle>Agentic</PageTitle>
@@ -135,7 +136,11 @@
         </div>
 
         <div class="chat-stage">
-            <div class="chat-messages" role="log" aria-relevant="additions" aria-busy="@isBusy">
+            <div class="chat-messages"
+                 @ref="_messagesContainer"
+                 role="log"
+                 aria-relevant="additions"
+                 aria-busy="@isBusy">
                 @if (!ChatAgent.Messages.Any())
                 {
                     <div class="empty-state">
@@ -234,8 +239,17 @@
                         }
                     </article>
                 }
+                <div class="chat-scroll-sentinel" @ref="_scrollSentinel" aria-hidden="true"></div>
             </div>
         </div>
+
+        <button type="button"
+                class="jump-to-latest"
+                @ref="_jumpToLatestButton"
+                aria-label="Jump to latest message">
+            <span aria-hidden="true">↓</span>
+            Jump to latest
+        </button>
 
         @if (!string.IsNullOrEmpty(errorMessage))
         {
@@ -299,6 +313,11 @@
     private string statusText = string.Empty;
     private string? _queuedText;
     private ElementReference _composerInput;
+    private ElementReference _messagesContainer;
+    private ElementReference _scrollSentinel;
+    private ElementReference _jumpToLatestButton;
+    private IJSObjectReference? _scrollModule;
+    private IJSObjectReference? _scrollController;
     private bool _sidebarOpen;
     private bool _initialized;
     private bool _disposed;
@@ -309,18 +328,37 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _initialized)
+        if (firstRender)
         {
-            return;
+            try
+            {
+                _scrollModule = await JS.InvokeAsync<IJSObjectReference>(
+                    "import", "./Components/Pages/Chat.razor.js");
+                _scrollController = await _scrollModule.InvokeAsync<IJSObjectReference>(
+                    "initialize", _messagesContainer, _scrollSentinel, _jumpToLatestButton);
+            }
+            catch
+            {
+                // Scrolling remains manual if JS isolation is unavailable.
+            }
         }
 
-        _initialized = true;
-        Conversations.OnChange += OnConversationsChanged;
-        await Conversations.InitializeAsync();
-        await InvokeAsync(StateHasChanged);
+        if (!_initialized)
+        {
+            _initialized = true;
+            Conversations.OnChange += OnConversationsChanged;
+            await Conversations.InitializeAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+
+        if (_scrollController is not null)
+        {
+            try { await _scrollController.InvokeVoidAsync("update", isBusy); }
+            catch { /* circuit may be disconnecting */ }
+        }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _disposed = true;
         _queuedText = null;
@@ -328,6 +366,20 @@
         _sendCts?.Dispose();
         _sendCts = null;
         Conversations.OnChange -= OnConversationsChanged;
+
+        if (_scrollController is not null)
+        {
+            try { await _scrollController.InvokeVoidAsync("dispose"); }
+            catch { /* browser context may already be gone */ }
+            try { await _scrollController.DisposeAsync(); }
+            catch { /* browser context may already be gone */ }
+        }
+
+        if (_scrollModule is not null)
+        {
+            try { await _scrollModule.DisposeAsync(); }
+            catch { /* browser context may already be gone */ }
+        }
     }
 
     private void OnConversationsChanged()
@@ -483,10 +535,18 @@
         await SendCoreAsync(text);
     }
 
-    private Task SendCoreAsync(string text)
-        => RunStreamAsync(
+    private async Task SendCoreAsync(string text)
+    {
+        if (_scrollController is not null)
+        {
+            try { await _scrollController.InvokeVoidAsync("follow"); }
+            catch { /* circuit may be disconnecting */ }
+        }
+
+        await RunStreamAsync(
             "Assistant is responding",
             ct => ChatAgent.SendStreamingAsync(text, ct));
+    }
 
     /// <summary>
     /// End the current send without opening a race window: if a message is queued

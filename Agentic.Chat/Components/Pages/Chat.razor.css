@@ -337,3 +337,40 @@
     outline: 2px solid var(--teal);
     outline-offset: 1px;
 }
+
+/* Streaming scroll lock — the JS module toggles [hidden] while following. */
+.chat-scroll-sentinel {
+    flex: 0 0 1px;
+    height: 1px;
+}
+
+.jump-to-latest {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: -3rem 0 0;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid rgba(13, 124, 124, 0.35);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0.45rem 1.1rem rgba(20, 34, 42, 0.18);
+    color: var(--teal-deep);
+    font: 650 0.8rem var(--font-body);
+    cursor: pointer;
+    transform: translateY(-0.25rem);
+    z-index: 2;
+}
+
+.jump-to-latest:hover {
+    background: rgba(232, 246, 244, 0.98);
+}
+
+.jump-to-latest:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.jump-to-latest[hidden] {
+    display: none;
+}

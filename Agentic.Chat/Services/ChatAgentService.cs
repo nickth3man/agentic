@@ -71,6 +71,13 @@ public sealed class ChatAgentService
 
     public bool IsStreamActive => _streamActive;
 
+    // The display transcript is deliberately not trimmed. Consumers that know the active
+    // model's context length can use this snapshot for the meter and boundary indicator.
+    internal ContextWindowResult GetContextWindow(long contextLength)
+        => ContextWindow.TrimToBudget(_apiMessages, contextLength);
+
+    internal string CurrentModelId => ResolveModelId();
+
     // Test-only: exposes the API transcript so cancellation/hygiene tests can assert
     // display-only markers (e.g. "(stopped)") never leak into model-visible history.
     // Exposed via InternalsVisibleTo.
@@ -223,8 +230,6 @@ public sealed class ChatAgentService
             _displayMessages.Add(assistant);
             yield return assistant;
 
-            LogStreamingStart(_logger, _apiMessages.Count, null);
-
             var modelIdForRequest = ResolveModelId();
 
             // Catalog cache-hit skips its own CT checks, so we ThrowIfCancellationRequested
@@ -245,9 +250,14 @@ public sealed class ChatAgentService
 
             if (canceledException is null)
             {
+                var contextWindow = ContextWindow.TrimToBudget(
+                    _apiMessages,
+                    modelInfo?.ContextLength ?? 0);
+                LogStreamingStart(_logger, contextWindow.Messages.Count, null);
+
                 var request = BuildCompletionRequest(
                     modelIdForRequest,
-                    _apiMessages,
+                    contextWindow.Messages,
                     modelInfo,
                     _chatSettings.ReasoningEffort,
                     _chatSettings.Temperature,

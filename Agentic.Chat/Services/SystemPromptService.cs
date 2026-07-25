@@ -64,20 +64,9 @@ public sealed class SystemPromptService
                 CurrentPrompt = TruncateIfNeeded(stored.Value);
             }
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (IsBestEffortPersistenceFailure(ex))
         {
-            LogPersistenceFailure(_logger, "load", ex);
-        }
-        catch (CryptographicException ex)
-        {
-            LogPersistenceFailure(_logger, "load", ex);
-        }
-        catch (JsonException ex)
-        {
-            LogPersistenceFailure(_logger, "load", ex);
-        }
-        catch (JSException ex)
-        {
+            // Pre-rendering / JS / crypto / shape failures: treat as no stored value.
             LogPersistenceFailure(_logger, "load", ex);
         }
         finally
@@ -108,20 +97,10 @@ public sealed class SystemPromptService
         {
             await TryPersistAsync(trimmed).ConfigureAwait(false);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (IsBestEffortPersistenceFailure(ex))
         {
-            LogPersistenceFailure(_logger, "set", ex);
-        }
-        catch (CryptographicException ex)
-        {
-            LogPersistenceFailure(_logger, "set", ex);
-        }
-        catch (JsonException ex)
-        {
-            LogPersistenceFailure(_logger, "set", ex);
-        }
-        catch (JSException ex)
-        {
+            // Persistence is best-effort: prerender, crypto, serialization, or
+            // JSException must not lose in-memory state.
             LogPersistenceFailure(_logger, "set", ex);
         }
         finally
@@ -142,19 +121,7 @@ public sealed class SystemPromptService
         {
             await _protectedStore.DeleteAsync(StorageKey).ConfigureAwait(false);
         }
-        catch (InvalidOperationException ex)
-        {
-            LogPersistenceFailure(_logger, "clear", ex);
-        }
-        catch (CryptographicException ex)
-        {
-            LogPersistenceFailure(_logger, "clear", ex);
-        }
-        catch (JsonException ex)
-        {
-            LogPersistenceFailure(_logger, "clear", ex);
-        }
-        catch (JSException ex)
+        catch (Exception ex) when (IsBestEffortPersistenceFailure(ex))
         {
             LogPersistenceFailure(_logger, "clear", ex);
         }
@@ -171,6 +138,13 @@ public sealed class SystemPromptService
 
     private static string TruncateIfNeeded(string value)
         => value.Length <= MaxPromptLength ? value : value[..MaxPromptLength];
+
+    // Visible to tests so the false arm of the persistence filter is coverable.
+    internal static bool IsBestEffortPersistenceFailure(Exception ex)
+        => ex is InvalidOperationException
+            or CryptographicException
+            or JsonException
+            or JSException;
 
     // Test seam: lets unit tests pin CurrentPrompt without running through the
     // storage. Exposed via Agentic.Chat's InternalsVisibleTo("Agentic.Chat.Tests").

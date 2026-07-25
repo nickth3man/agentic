@@ -15,7 +15,7 @@
     height: 2.05rem;
     padding: 0;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--color-16);
     border: 1px solid var(--line);
     backdrop-filter: blur(10px);
     color: var(--ink-soft);
@@ -31,8 +31,8 @@
 .settings-gear:hover,
 .settings-gear.is-open {
     color: var(--teal-deep);
-    border-color: rgba(13, 124, 124, 0.35);
-    background: rgba(13, 124, 124, 0.08);
+    border-color: var(--color-17);
+    background: var(--color-18);
 }
 
 .settings-gear:focus-visible {
@@ -50,11 +50,11 @@
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.85);
+    background: var(--color-52);
+    border: 1px solid var(--color-62);
     border-radius: 1rem;
     box-shadow:
-        0 24px 60px rgba(20, 34, 42, 0.16),
+        0 24px 60px var(--color-63),
         0 0 0 1px var(--line);
     backdrop-filter: blur(18px) saturate(1.15);
     -webkit-backdrop-filter: blur(18px) saturate(1.15);
@@ -107,7 +107,7 @@
     box-sizing: border-box;
     border-radius: 0.55rem;
     border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.75);
+    background: var(--color-72);
     font-family: var(--font-body);
     font-size: 0.88rem;
     color: var(--ink);
@@ -199,18 +199,18 @@
 }
 
 .settings-apply {
-    background: rgba(13, 124, 124, 0.12);
-    border: 1px solid rgba(13, 124, 124, 0.35);
+    background: var(--color-68);
+    border: 1px solid var(--color-17);
     color: var(--teal-deep);
 }
 
 .settings-apply:hover:not(:disabled) {
-    background: rgba(13, 124, 124, 0.2);
+    background: var(--color-71);
 }
 
 .settings-cancel {
-    background: transparent;
-    border: 1px solid transparent;
+    background: var(--color-3);
+    border: 1px solid var(--color-3);
     color: var(--ink-mute);
 }
 

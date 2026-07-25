@@ -2,7 +2,9 @@
 @rendermode InteractiveServer
 @inject ChatAgentService ChatAgent
 @inject ConversationService Conversations
+@inject IJSRuntime JS
 @implements IDisposable
+@implements IAsyncDisposable
 @using Microsoft.AspNetCore.Components
 
 <PageTitle>Agentic</PageTitle>
@@ -165,6 +167,17 @@
                                 @(isUser ? "Y" : "A")
                             </span>
                             <div class="chat-role">@(isUser ? "You" : "Assistant")</div>
+                            @if (!message.IsStreaming)
+                            {
+                                <button type="button"
+                                        class="message-copy-btn @(_copiedMessage == message ? "is-copied" : "")"
+                                        aria-label="@(_copiedMessage == message ? "Message copied" : "Copy message")"
+                                        title="Copy message"
+                                        @onclick="() => CopyMessageAsync(message)">
+                                    <span aria-hidden="true">@(_copiedMessage == message ? "✓" : "⧉")</span>
+                                    <span class="message-copy-label">@(_copiedMessage == message ? "Copied" : "Copy")</span>
+                                </button>
+                            }
                         </div>
 
                         @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || ShouldOpenThinking(message)))
@@ -200,7 +213,7 @@
                                 }
                                 else
                                 {
-                                    <div class="markdown-body">
+                                    <div class="markdown-body" data-copyable="@(message.IsStreaming ? "false" : "true")">
                                         @((MarkupString)MarkdownRenderer.Render(message.Content))
                                     </div>
                                     @if (message.IsStreaming)
@@ -306,18 +319,20 @@
     private string _renameText = string.Empty;
     private Guid? _deleteConfirmId;
     private CancellationTokenSource? _sendCts;
+    private IJSObjectReference? _chatModule;
+    private ChatDisplayMessage? _copiedMessage;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _initialized)
+        if (firstRender && !_initialized)
         {
-            return;
+            _initialized = true;
+            Conversations.OnChange += OnConversationsChanged;
+            await Conversations.InitializeAsync();
+            await InvokeAsync(StateHasChanged);
         }
 
-        _initialized = true;
-        Conversations.OnChange += OnConversationsChanged;
-        await Conversations.InitializeAsync();
-        await InvokeAsync(StateHasChanged);
+        await EnhanceCodeBlocksAsync();
     }
 
     public void Dispose()
@@ -330,8 +345,74 @@
         Conversations.OnChange -= OnConversationsChanged;
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        Dispose();
+        if (_chatModule is not null)
+        {
+            try { await _chatModule.DisposeAsync(); }
+            catch { /* module may already be disconnected */ }
+        }
+    }
+
     private void OnConversationsChanged()
         => _ = InvokeAsync(StateHasChanged);
+
+    private async Task CopyMessageAsync(ChatDisplayMessage message)
+    {
+        var module = await GetChatModuleAsync();
+        if (module is null ||
+            !await module.InvokeAsync<bool>("writeText", message.Content))
+        {
+            return;
+        }
+
+        _copiedMessage = message;
+        statusText = "Copied";
+        await InvokeAsync(StateHasChanged);
+        await ResetCopyIndicatorAsync(message);
+    }
+
+    private async Task ResetCopyIndicatorAsync(ChatDisplayMessage message)
+    {
+        await Task.Delay(TimeSpan.FromMilliseconds(1500));
+        if (_disposed || _copiedMessage != message)
+        {
+            return;
+        }
+
+        _copiedMessage = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task EnhanceCodeBlocksAsync()
+    {
+        var module = await GetChatModuleAsync();
+        if (module is not null)
+        {
+            await module.InvokeVoidAsync("addCodeCopyButtons");
+        }
+    }
+
+    private async Task<IJSObjectReference?> GetChatModuleAsync()
+    {
+        if (_chatModule is not null)
+        {
+            return _chatModule;
+        }
+
+        try
+        {
+            _chatModule = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./Components/Pages/Chat.razor.js");
+        }
+        catch
+        {
+            // Clipboard controls are progressive enhancement.
+        }
+
+        return _chatModule;
+    }
 
     private static bool ShouldOpenThinking(ChatDisplayMessage message)
         => message.IsStreaming && string.IsNullOrEmpty(message.Content);

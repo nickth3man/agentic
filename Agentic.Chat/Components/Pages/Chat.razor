@@ -119,6 +119,10 @@
                     Multi-turn via OpenRouter
                     <ModelPicker />
                     <ReasoningEffortControl />
+                    @if (_contextMeterText is not null)
+                    {
+                        <span class="context-meter" title="@_contextMeterTitle">@_contextMeterText</span>
+                    }
                 </div>
             </div>
             <div class="chat-header-actions">
@@ -172,6 +176,13 @@
 
                 @for (var i = 0; i < ChatAgent.Messages.Count; i++)
                 {
+                    @if (_excludedApiMessages > 0 && i == _excludedApiMessages)
+                    {
+                        <div class="context-trim-divider" role="status">
+                            Older messages are not sent to the model
+                        </div>
+                    }
+
                     var message = ChatAgent.Messages[i];
                     var isUser = message.Role == "user";
                     var isLast = i == ChatAgent.Messages.Count - 1;
@@ -195,18 +206,23 @@
                             }
                         </div>
 
-                        @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || ShouldOpenThinking(message)))
+                        @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || message.IsThinkingOpen))
                         {
-                            var thinkingOpen = ShouldOpenThinking(message);
+                            var thinkingOpen = message.IsThinkingOpen;
                             <details class="thinking-panel @(thinkingOpen ? "is-active" : "")"
                                      open="@thinkingOpen">
-                                <summary>
+                                <summary @onclick="() => ToggleThinking(message)"
+                                         @onclick:preventDefault>
                                     <span class="think-pulse" aria-hidden="true">
                                         <span></span><span></span><span></span>
                                     </span>
                                     <span class="think-label">
                                         @(thinkingOpen ? "Thinking…" : "Thinking")
                                     </span>
+                                    @if (ThoughtDurationLabel(message) is { } duration)
+                                    {
+                                        <span class="think-duration">@duration</span>
+                                    }
                                 </summary>
                                 <pre class="thinking-text">@(string.IsNullOrEmpty(message.Reasoning) ? "…" : message.Reasoning)</pre>
                             </details>
@@ -373,6 +389,9 @@
     private string _renameText = string.Empty;
     private Guid? _deleteConfirmId;
     private CancellationTokenSource? _sendCts;
+    private string? _contextMeterText;
+    private string? _contextMeterTitle;
+    private int _excludedApiMessages;
     private IJSObjectReference? _chatModule;
     private ChatDisplayMessage? _copiedMessage;
     private bool _modelSupportsImage;
@@ -382,16 +401,21 @@
     private int _inputFileKey;
     private string _sessionUsage = string.Empty;
 
+    protected override void OnInitialized()
+    {
+        SelectedModel.OnChange += OnSelectedModelChanged;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && !_initialized)
         {
             _initialized = true;
             Conversations.OnChange += OnConversationsChanged;
-            SelectedModel.OnChange += OnSelectedModelChanged;
             await SelectedModel.LoadAsync();
             await UpdateModelCapabilitiesAsync();
             await Conversations.InitializeAsync();
+            await RefreshContextMeterAsync();
             RefreshSessionUsage();
             await InvokeAsync(StateHasChanged);
         }
@@ -410,12 +434,21 @@
         SelectedModel.OnChange -= OnSelectedModelChanged;
     }
 
+    private void OnConversationsChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            await RefreshContextMeterAsync();
+            RefreshSessionUsage();
+            StateHasChanged();
+        });
+
     private void OnSelectedModelChanged()
         => _ = InvokeAsync(async () =>
         {
             try
             {
                 await UpdateModelCapabilitiesAsync();
+                await RefreshContextMeterAsync();
                 StateHasChanged();
             }
             catch (Exception ex)
@@ -500,14 +533,16 @@
         }
     }
 
-    private void OnConversationsChanged()
-    {
-        RefreshSessionUsage();
-        _ = InvokeAsync(StateHasChanged);
-    }
-
     private void RefreshSessionUsage()
         => _sessionUsage = UsageFormatter.FormatConversationTotal(ChatAgent.Messages);
+
+    private static void ToggleThinking(ChatDisplayMessage message)
+        => message.SetThinkingOpenByUser(!message.IsThinkingOpen);
+
+    private static string? ThoughtDurationLabel(ChatDisplayMessage message)
+        => !message.IsStreaming && message.ThoughtDurationSeconds is { } seconds
+            ? $"Thought for {seconds}s"
+            : null;
 
     private async Task CopyMessageAsync(ChatDisplayMessage message)
     {
@@ -565,9 +600,6 @@
         return _chatModule;
     }
 
-    private static bool ShouldOpenThinking(ChatDisplayMessage message)
-        => message.IsStreaming && string.IsNullOrEmpty(message.Content);
-
     private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
 
     private void CloseSidebar() => _sidebarOpen = false;
@@ -581,6 +613,7 @@
 
         await Conversations.NewChatAsync();
         ResetComposerChrome(clearStatus: true);
+        await RefreshContextMeterAsync();
         await FocusComposerAsync();
     }
 
@@ -593,6 +626,7 @@
 
         await Conversations.SwitchAsync(id);
         ResetComposerChrome();
+        await RefreshContextMeterAsync();
         await FocusComposerAsync();
     }
 
@@ -794,6 +828,7 @@
         {
             await foreach (var _ in streamFactory(ct))
             {
+                await RefreshContextMeterAsync();
                 await InvokeAsync(StateHasChanged);
             }
 
@@ -815,5 +850,44 @@
         {
             await FinishSendAsync();
         }
+    }
+
+    private async Task RefreshContextMeterAsync()
+    {
+        try
+        {
+            var model = await ModelCatalog.FindByIdAsync(ChatAgent.CurrentModelId);
+            if (model?.ContextLength is not > 0)
+            {
+                _contextMeterText = null;
+                _contextMeterTitle = null;
+                _excludedApiMessages = 0;
+                return;
+            }
+
+            var context = ChatAgent.GetContextWindow(model.ContextLength);
+            _contextMeterText = $"~{FormatTokens(context.TranscriptTokens)} / {FormatTokens(model.ContextLength)}";
+            _contextMeterTitle = "Estimated transcript tokens / model context limit";
+            _excludedApiMessages = context.ExcludedMessageCount;
+        }
+        catch
+        {
+            // The meter is advisory; a transient catalog failure must not affect chat.
+            _contextMeterText = null;
+            _contextMeterTitle = null;
+            _excludedApiMessages = 0;
+        }
+    }
+
+    private static string FormatTokens(long tokens)
+    {
+        if (tokens < 1_000)
+        {
+            return tokens.ToString();
+        }
+
+        return tokens % 1_000 == 0
+            ? $"{tokens / 1_000}k"
+            : $"{tokens / 1_000m:0.#}k";
     }
 }

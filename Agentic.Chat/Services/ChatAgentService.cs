@@ -313,7 +313,9 @@ public sealed class ChatAgentService
 
             if (canceledException is not null)
             {
-                FinalizeCancelledAssistant(assistant);
+                // Await persistence before rethrowing so Chat.razor's queue drain
+                // cannot commit the next user turn ahead of this partial assistant.
+                await FinalizeCancelledAssistantAsync(assistant).ConfigureAwait(false);
                 yield return assistant;
                 // Re-throw so Chat.razor can announce "Response stopped" without an error banner.
                 ExceptionDispatchInfo.Capture(canceledException).Throw();
@@ -355,7 +357,7 @@ public sealed class ChatAgentService
     // already arrived, append them to the API transcript WITHOUT the display-only
     // "(stopped)" marker, persist partial content to the conversation store,
     // and clear IsStreaming so the UI unlocks cleanly.
-    private void FinalizeCancelledAssistant(ChatDisplayMessage assistant)
+    private async Task FinalizeCancelledAssistantAsync(ChatDisplayMessage assistant)
     {
         assistant.IsStreaming = false;
 
@@ -370,12 +372,13 @@ public sealed class ChatAgentService
                 apiContent,
                 string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning));
 
-            // Fire-and-forget: persist partial content with a non-cancellable token
-            // so a late cancellation doesn't lose the completed response.
-            _ = _conversationWriter.OnAssistantFinalizedAsync(
+            // Await with a non-cancellable token so Stop/dispose cancel doesn't
+            // drop the partial response, and so queued follow-ups cannot persist
+            // a user turn before this assistant row lands.
+            await _conversationWriter.OnAssistantFinalizedAsync(
                 apiContent,
                 string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning,
-                CancellationToken.None);
+                CancellationToken.None).ConfigureAwait(false);
         }
 
         // Display-only marker — MUST NOT enter the API transcript.

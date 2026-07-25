@@ -325,6 +325,43 @@ public class ChatAgentServiceSendStreamingTests
     }
 
     [Fact]
+    public async Task CancelWithPartialContent_AwaitsAssistantFinalizationBeforeRethrow()
+    {
+        var writer = new RecordingConversationWriter(assistantDelayMs: 40);
+        var service = CreateService(
+            [
+                new StreamDelta("partial answer", null),
+                new StreamDelta(" more", null)
+            ],
+            conversationWriter: writer);
+        using var cts = new CancellationTokenSource();
+
+        await using var enumerator = service
+            .SendStreamingAsync("hi", cts.Token)
+            .GetAsyncEnumerator();
+
+        Assert.True(await enumerator.MoveNextAsync()); // placeholder
+        Assert.True(await enumerator.MoveNextAsync()); // first content delta
+        Assert.Equal("partial answer", enumerator.Current.Content);
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            while (await enumerator.MoveNextAsync())
+            {
+            }
+        });
+
+        // Persistence must have completed before the OCE escaped StreamTurnAsync —
+        // otherwise Chat.razor's queue drain could commit the next user turn first.
+        Assert.True(writer.AssistantFinalizedCompleted);
+        Assert.Contains("assistant-finalized", writer.Events);
+        Assert.Equal("partial answer (stopped)", service.Messages[1].Content);
+        Assert.False(service.IsStreamActive);
+    }
+
+    [Fact]
     public async Task ConcurrentSend_WhileStreamActive_ThrowsInvalidOperation()
     {
         var service = CreateService([new StreamDelta("hello", null)]);
@@ -356,7 +393,8 @@ public class ChatAgentServiceSendStreamingTests
         Exception? exception = null,
         string? selectedModelId = null,
         string? catalogId = "test-model",
-        bool catalogSupportsReasoning = true)
+        bool catalogSupportsReasoning = true,
+        IActiveConversationWriter? conversationWriter = null)
     {
         var fakeClient = new FakeOpenRouterClient(deltas, exception);
         var options = Options.Create(new OpenRouterOptions
@@ -392,7 +430,14 @@ public class ChatAgentServiceSendStreamingTests
         var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(null);
 
-        return new ChatAgentService(fakeClient, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance);
+        return new ChatAgentService(
+            fakeClient,
+            options,
+            logger,
+            selection,
+            catalog,
+            systemPrompt,
+            conversationWriter ?? NullActiveConversationWriter.Instance);
     }
 
     private static async Task<List<ChatDisplayMessage>> Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
@@ -400,6 +445,36 @@ public class ChatAgentServiceSendStreamingTests
         var list = new List<ChatDisplayMessage>();
         await foreach (var m in stream) list.Add(m);
         return list;
+    }
+
+    private sealed class RecordingConversationWriter(int assistantDelayMs) : IActiveConversationWriter
+    {
+        public List<string> Events { get; } = [];
+        public bool AssistantFinalizedCompleted { get; private set; }
+
+        public Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default)
+        {
+            Events.Add("user-committed");
+            return Task.CompletedTask;
+        }
+
+        public async Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default)
+        {
+            Events.Add("assistant-finalized-started");
+            if (assistantDelayMs > 0)
+            {
+                await Task.Delay(assistantDelayMs, CancellationToken.None);
+            }
+
+            AssistantFinalizedCompleted = true;
+            Events.Add("assistant-finalized");
+        }
+
+        public Task OnLastAssistantRemovedAsync(CancellationToken cancellationToken = default)
+        {
+            Events.Add("assistant-removed");
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class UnusedHttpClientFactory : IHttpClientFactory

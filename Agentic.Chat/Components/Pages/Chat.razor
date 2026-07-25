@@ -300,6 +300,7 @@
     private ElementReference _composerInput;
     private bool _sidebarOpen;
     private bool _initialized;
+    private bool _disposed;
     private Guid? _renamingId;
     private string _renameText = string.Empty;
     private Guid? _deleteConfirmId;
@@ -320,6 +321,8 @@
 
     public void Dispose()
     {
+        _disposed = true;
+        _queuedText = null;
         _sendCts?.Cancel();
         _sendCts?.Dispose();
         _sendCts = null;
@@ -509,21 +512,35 @@
         }
         finally
         {
-            EndSend();
-            await FocusComposerAsync();
-            await DrainQueueAsync();
+            await FinishSendAsync();
         }
     }
 
-    private async Task DrainQueueAsync()
+    /// <summary>
+    /// End the current send without opening a race window: if a message is queued
+    /// and the circuit is still alive, hand off while <c>isBusy</c> stays true.
+    /// Otherwise clear busy and restore focus. Never drain after dispose.
+    /// </summary>
+    private async Task FinishSendAsync()
     {
-        if (_queuedText is not { } queued)
+        if (_disposed)
         {
+            _queuedText = null;
+            EndSend();
             return;
         }
 
-        _queuedText = null;
-        await SendCoreAsync(queued);
+        if (_queuedText is { } queued)
+        {
+            _queuedText = null;
+            // Keep isBusy true across the handoff so a concurrent Enter cannot
+            // start a second stream while we await the nested send.
+            await SendCoreAsync(queued);
+            return;
+        }
+
+        EndSend();
+        await FocusComposerAsync();
     }
 
     private async Task RetryAsync()
@@ -561,9 +578,7 @@
         }
         finally
         {
-            EndSend();
-            await FocusComposerAsync();
-            await DrainQueueAsync();
+            await FinishSendAsync();
         }
     }
 
@@ -602,9 +617,7 @@
         }
         finally
         {
-            EndSend();
-            await FocusComposerAsync();
-            await DrainQueueAsync();
+            await FinishSendAsync();
         }
     }
 }

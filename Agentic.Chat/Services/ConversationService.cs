@@ -101,7 +101,12 @@ public sealed class ConversationService
             {
                 Role = m.Role,
                 Content = m.Content,
-                Reasoning = m.Reasoning ?? string.Empty
+                Reasoning = m.Reasoning ?? string.Empty,
+                Usage = MessageUsage.FromStored(
+                    m.UsagePromptTokens,
+                    m.UsageCompletionTokens,
+                    m.UsageCost,
+                    m.UsageIsFree)
             })
             .ToList();
         _chat.LoadTranscript(display);

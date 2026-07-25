@@ -90,16 +90,18 @@ public sealed class OpenRouterClient : IOpenRouterClient
         try
         {
             using var doc = JsonDocument.Parse(payload);
+            var usage = ParseUsage(doc.RootElement);
+
             if (!doc.RootElement.TryGetProperty("choices", out var choices) ||
                 choices.GetArrayLength() == 0)
             {
-                return null;
+                return usage is null ? null : new StreamDelta(null, null, usage);
             }
 
             var choice = choices[0];
             if (!choice.TryGetProperty("delta", out var delta))
             {
-                return null;
+                return usage is null ? null : new StreamDelta(null, null, usage);
             }
 
             // Prefer `reasoning` when that property is present as a string (even if empty),
@@ -119,16 +121,9 @@ public sealed class OpenRouterClient : IOpenRouterClient
 
             if (reasoning is null && content is null)
             {
-                var usageOnly = ParseUsage(doc.RootElement);
-                if (usageOnly is null)
-                {
-                    return null;
-                }
-
-                return new StreamDelta(null, null, usageOnly);
+                return usage is null ? null : new StreamDelta(null, null, usage);
             }
 
-            var usage = ParseUsage(doc.RootElement);
             return new StreamDelta(content, reasoning, usage);
         }
         catch (JsonException)
@@ -181,7 +176,9 @@ public sealed class OpenRouterClient : IOpenRouterClient
         if (!usageEl.TryGetProperty("prompt_tokens", out var promptEl) ||
             !usageEl.TryGetProperty("completion_tokens", out var completionEl) ||
             promptEl.ValueKind != JsonValueKind.Number ||
-            completionEl.ValueKind != JsonValueKind.Number)
+            completionEl.ValueKind != JsonValueKind.Number ||
+            !promptEl.TryGetInt32(out var promptTokens) ||
+            !completionEl.TryGetInt32(out var completionTokens))
         {
             return null;
         }
@@ -198,6 +195,6 @@ public sealed class OpenRouterClient : IOpenRouterClient
             cost = costEl.GetDecimal();
         }
 
-        return new MessageUsage(promptEl.GetInt32(), completionEl.GetInt32(), cost);
+        return new MessageUsage(promptTokens, completionTokens, cost);
     }
 }

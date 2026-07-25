@@ -52,6 +52,7 @@
     padding: 0.35rem 0.65rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(10px);
     border: 1px solid var(--line);
     font-size: 0.68rem;
     font-weight: 600;

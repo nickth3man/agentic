@@ -210,6 +210,32 @@ public class OpenRouterClientDecodeDeltaTests
     }
 
     [Fact]
+    public void UsageOnlyChunk_EmptyChoices_ReturnsDeltaWithUsage()
+    {
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"choices\":[],\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":50,\"cost\":0.01}}");
+
+        Assert.NotNull(delta);
+        Assert.Null(delta!.Content);
+        Assert.Null(delta.Reasoning);
+        Assert.NotNull(delta.Usage);
+        Assert.Equal(100, delta.Usage!.PromptTokens);
+        Assert.Equal(50, delta.Usage.CompletionTokens);
+        Assert.Equal(0.01m, delta.Usage.Cost);
+    }
+
+    [Fact]
+    public void UsageOnlyChunk_NoChoicesProperty_ReturnsDeltaWithUsage()
+    {
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":50,\"cost\":0.01}}");
+
+        Assert.NotNull(delta);
+        Assert.NotNull(delta!.Usage);
+        Assert.Equal(100, delta.Usage!.PromptTokens);
+    }
+
+    [Fact]
     public void ContentAndUsage_BothPresent()
     {
         var delta = OpenRouterClient.DecodeDelta(
@@ -217,9 +243,30 @@ public class OpenRouterClientDecodeDeltaTests
 
         Assert.NotNull(delta);
         Assert.Equal("done", delta!.Content);
+        Assert.NotNull(delta.Usage);
         Assert.Equal(10, delta.Usage!.PromptTokens);
         Assert.Equal(5, delta.Usage.CompletionTokens);
         Assert.Null(delta.Usage.Cost);
+    }
+
+    [Fact]
+    public void UsageOnlyChunk_MissingDeltaProperty_ReturnsDeltaWithUsage()
+    {
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"choices\":[{}],\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":50,\"cost\":0.01}}");
+
+        Assert.NotNull(delta);
+        Assert.Null(delta!.Content);
+        Assert.NotNull(delta.Usage);
+        Assert.Equal(100, delta.Usage!.PromptTokens);
+    }
+
+    [Fact]
+    public void ParseUsage_TokenCountOverflow_ReturnsNull()
+    {
+        using var doc = JsonDocument.Parse(
+            "{\"usage\":{\"prompt_tokens\":2147483648,\"completion_tokens\":2}}");
+        Assert.Null(OpenRouterClient.ParseUsage(doc.RootElement));
     }
 
     [Fact]

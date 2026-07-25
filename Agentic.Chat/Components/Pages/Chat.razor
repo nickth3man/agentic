@@ -115,12 +115,9 @@
                 </div>
             </div>
             <div class="chat-header-actions">
-                @{
-                    var sessionUsage = UsageFormatter.FormatConversationTotal(ChatAgent.Messages);
-                }
-                @if (!string.IsNullOrEmpty(sessionUsage))
+                @if (!string.IsNullOrEmpty(_sessionUsage))
                 {
-                    <div class="conversation-usage" aria-label="Conversation cost">@sessionUsage</div>
+                    <div class="conversation-usage" aria-label="Conversation cost">@_sessionUsage</div>
                 }
                 <SystemPromptSettings />
                 <button type="button"
@@ -320,6 +317,7 @@
     private string _renameText = string.Empty;
     private Guid? _deleteConfirmId;
     private CancellationTokenSource? _sendCts;
+    private string _sessionUsage = string.Empty;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -331,6 +329,7 @@
         _initialized = true;
         Conversations.OnChange += OnConversationsChanged;
         await Conversations.InitializeAsync();
+        RefreshSessionUsage();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -345,7 +344,13 @@
     }
 
     private void OnConversationsChanged()
-        => _ = InvokeAsync(StateHasChanged);
+    {
+        RefreshSessionUsage();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshSessionUsage()
+        => _sessionUsage = UsageFormatter.FormatConversationTotal(ChatAgent.Messages);
 
     private static bool ShouldOpenThinking(ChatDisplayMessage message)
         => message.IsStreaming && string.IsNullOrEmpty(message.Content);
@@ -567,6 +572,7 @@
             }
 
             await Conversations.RefreshAfterTurnAsync();
+            RefreshSessionUsage();
             statusText = "Response complete";
         }
         catch (OperationCanceledException ex) when (ex.CancellationToken == ct)

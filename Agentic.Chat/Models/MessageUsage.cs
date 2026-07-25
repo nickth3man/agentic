@@ -8,4 +8,19 @@ public sealed record MessageUsage(
     int PromptTokens,
     int CompletionTokens,
     decimal? Cost,
-    bool IsFree = false);
+    bool IsFree = false)
+{
+    public static MessageUsage? FromStored(
+        int? promptTokens,
+        int? completionTokens,
+        decimal? cost,
+        bool isFree)
+    {
+        if (promptTokens is null || completionTokens is null)
+        {
+            return null;
+        }
+
+        return new MessageUsage(promptTokens.Value, completionTokens.Value, cost, isFree);
+    }
+}

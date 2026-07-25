@@ -114,8 +114,7 @@ public class OpenRouterClientTests
             "test-model",
             new[] { new ApiChatMessage("system", "sys", null) },
             Stream: true,
-            Reasoning: new ReasoningRequest(Enabled: true, Exclude: false),
-            Usage: null);
+            Reasoning: new ReasoningRequest(Enabled: true, Exclude: false));
 
         _ = await Collect(client.StreamChatAsync(request));
 
@@ -142,7 +141,7 @@ public class OpenRouterClientTests
             new ApiChatMessage("assistant", "ans", null)
         };
         var nonReasoning = JsonSerializer.Serialize(
-            new ChatCompletionRequest("m", nonReasoningMessages, true, null, null),
+            new ChatCompletionRequest("m", nonReasoningMessages, true, null),
             options);
         Assert.Equal(
             "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"},{\"role\":\"user\",\"content\":\"hi\"},{\"role\":\"assistant\",\"content\":\"ans\"}],\"stream\":true}",
@@ -153,8 +152,7 @@ public class OpenRouterClientTests
                 "m",
                 new[] { new ApiChatMessage("system", "sys", null) },
                 true,
-                new ReasoningRequest(true, false),
-                null),
+                new ReasoningRequest(true, false)),
             options);
         Assert.Equal(
             "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"}],\"stream\":true,\"reasoning\":{\"enabled\":true,\"exclude\":false}}",
@@ -165,7 +163,6 @@ public class OpenRouterClientTests
                 "m",
                 new[] { new ApiChatMessage("assistant", "a", "r") },
                 true,
-                null,
                 null),
             options);
         Assert.Equal(
@@ -189,8 +186,7 @@ public class OpenRouterClientTests
             "test-model",
             new[] { new ApiChatMessage("user", "hi", null) },
             Stream: true,
-            Reasoning: null,
-            Usage: null);
+            Reasoning: null);
 
     private static async Task<List<StreamDelta>> Collect(IAsyncEnumerable<StreamDelta> stream)
     {

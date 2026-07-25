@@ -58,14 +58,69 @@ public class UsageFormatterTests
     }
 
     [Fact]
-    public void FormatConversationTotal_ZeroTotalNonFree_ReturnsSessionFree()
+    public void FormatConversationTotal_UnknownCost_ReturnsSessionDash()
     {
         var messages = new List<ChatDisplayMessage>
         {
             new() { Role = "assistant", Usage = new MessageUsage(10, 5, null) }
         };
 
+        Assert.Equal("Session · —", UsageFormatter.FormatConversationTotal(messages));
+    }
+
+    [Fact]
+    public void FormatConversationTotal_ZeroKnownCostNonFree_ReturnsSessionFree()
+    {
+        var messages = new List<ChatDisplayMessage>
+        {
+            new() { Role = "assistant", Usage = new MessageUsage(10, 5, 0m) },
+            new() { Role = "assistant", Usage = new MessageUsage(20, 10, 0m) }
+        };
+
         Assert.Equal("Session · free", UsageFormatter.FormatConversationTotal(messages));
+    }
+
+    [Fact]
+    public void MessageUsage_FromStored_ReturnsNull_WhenIncomplete()
+    {
+        Assert.Null(MessageUsage.FromStored(null, 5, 0.01m, false));
+        Assert.Null(MessageUsage.FromStored(10, null, 0.01m, false));
+    }
+
+    [Fact]
+    public void MessageUsage_FromStored_RoundTripsStoredValues()
+    {
+        var usage = MessageUsage.FromStored(1200, 340, 0.0041m, false);
+
+        Assert.NotNull(usage);
+        Assert.Equal(1200, usage!.PromptTokens);
+        Assert.Equal(340, usage.CompletionTokens);
+        Assert.Equal(0.0041m, usage.Cost);
+    }
+
+    [Fact]
+    public void FormatConversationTotal_MixedFreeAndPaid_SumsPaidOnly()
+    {
+        var messages = new List<ChatDisplayMessage>
+        {
+            new() { Role = "assistant", Usage = new MessageUsage(10, 5, 0m, IsFree: true) },
+            new() { Role = "assistant", Usage = new MessageUsage(20, 10, 0.02m) }
+        };
+
+        var total = UsageFormatter.FormatConversationTotal(messages);
+
+        Assert.Contains("$0.02", total, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatConversationTotal_ZeroTotalNonFree_ReturnsSessionDash()
+    {
+        var messages = new List<ChatDisplayMessage>
+        {
+            new() { Role = "assistant", Usage = new MessageUsage(10, 5, null) }
+        };
+
+        Assert.Equal("Session · —", UsageFormatter.FormatConversationTotal(messages));
     }
 
     [Fact]

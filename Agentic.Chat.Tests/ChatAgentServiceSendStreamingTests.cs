@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
@@ -460,7 +461,7 @@ public class ChatAgentServiceSendStreamingTests
     }
 
     [Fact]
-    public async Task SendAsync_IncludesUsageInRequestBody()
+    public async Task SendAsync_DoesNotIncludeDeprecatedUsageIncludeFlag()
     {
         var fake = new FakeOpenRouterClient([new StreamDelta("ok", null)]);
         var service = CreateServiceWithClient(fake);
@@ -468,8 +469,8 @@ public class ChatAgentServiceSendStreamingTests
         await Consume(service.SendStreamingAsync("hi"));
 
         Assert.NotNull(fake.LastRequest);
-        Assert.NotNull(fake.LastRequest!.Usage);
-        Assert.True(fake.LastRequest.Usage!.Include);
+        var json = JsonSerializer.Serialize(fake.LastRequest);
+        Assert.DoesNotContain("\"usage\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -634,7 +635,11 @@ public class ChatAgentServiceSendStreamingTests
             return Task.CompletedTask;
         }
 
-        public async Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default)
+        public async Task OnAssistantFinalizedAsync(
+            string content,
+            string? reasoning,
+            MessageUsage? usage = null,
+            CancellationToken cancellationToken = default)
         {
             Events.Add("assistant-finalized-started");
             _finalizationStarted.TrySetResult();

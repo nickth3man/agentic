@@ -242,8 +242,7 @@ public sealed class ChatAgentService
                     Stream: true,
                     Reasoning: modelInfo?.SupportsReasoning == true
                         ? new ReasoningRequest(Enabled: true, Exclude: false)
-                        : null,
-                    Usage: new UsageRequest(Include: true));
+                        : null);
 
                 OpenRouterException? openRouterException = null;
                 var enumerator = _client
@@ -327,7 +326,7 @@ public sealed class ChatAgentService
             }
 
             await _conversationWriter
-                .OnAssistantFinalizedAsync(assistant.Content, reasoning, cancellationToken)
+                .OnAssistantFinalizedAsync(assistant.Content, reasoning, assistant.Usage, cancellationToken)
                 .ConfigureAwait(false);
 
             yield return assistant;
@@ -401,6 +400,7 @@ public sealed class ChatAgentService
                 await _conversationWriter.OnAssistantFinalizedAsync(
                     apiContent,
                     reasoning,
+                    assistant.Usage,
                     CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)

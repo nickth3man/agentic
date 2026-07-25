@@ -38,6 +38,11 @@ internal static class UsageFormatter
             return "Session · free";
         }
 
+        if (usages.All(u => u.Cost is null))
+        {
+            return "Session · —";
+        }
+
         var totalCost = usages.Sum(u => u.Cost ?? 0m);
         return totalCost > 0m
             ? $"Session · {FormatCost(totalCost)}"

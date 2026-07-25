@@ -14,5 +14,13 @@ public sealed class Message
 
     public string? Reasoning { get; set; }
 
+    public int? UsagePromptTokens { get; set; }
+
+    public int? UsageCompletionTokens { get; set; }
+
+    public decimal? UsageCost { get; set; }
+
+    public bool UsageIsFree { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

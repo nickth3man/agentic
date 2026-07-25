@@ -96,6 +96,29 @@ public class ChatAgentServiceUsageTests
     }
 
     [Fact]
+    public void FinalizeUsage_EstimatesCostFromPaidModelPricing()
+    {
+        var message = new ChatDisplayMessage
+        {
+            Role = "assistant",
+            Usage = new MessageUsage(1000, 500, null)
+        };
+        var paid = new OpenRouterModel(
+            "provider/paid",
+            "Paid",
+            128_000L,
+            DateTimeOffset.UtcNow,
+            "text->text",
+            new OpenRouterPricing(0.0000025m, 0.00001m),
+            ["tools"]);
+
+        ChatAgentService.FinalizeUsage(message, paid);
+
+        Assert.Equal(0.0075m, message.Usage!.Cost);
+        Assert.False(message.Usage.IsFree);
+    }
+
+    [Fact]
     public void FinalizeUsage_LeavesCostNull_WhenNoModelInfo()
     {
         var message = new ChatDisplayMessage

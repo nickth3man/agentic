@@ -27,6 +27,7 @@ public sealed class ChatAgentService
     private readonly SelectedModelService _selectedModelService;
     private readonly ModelCatalogService _modelCatalog;
     private readonly SystemPromptService _systemPromptService;
+    private readonly ChatSettingsService _chatSettings;
     private readonly IActiveConversationWriter _conversationWriter;
     private readonly List<ChatDisplayMessage> _displayMessages = [];
     private readonly List<ApiChatMessage> _apiMessages = [];
@@ -43,6 +44,7 @@ public sealed class ChatAgentService
         SelectedModelService selectedModelService,
         ModelCatalogService modelCatalog,
         SystemPromptService systemPromptService,
+        ChatSettingsService chatSettings,
         IActiveConversationWriter conversationWriter)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -51,6 +53,7 @@ public sealed class ChatAgentService
         ArgumentNullException.ThrowIfNull(selectedModelService);
         ArgumentNullException.ThrowIfNull(modelCatalog);
         ArgumentNullException.ThrowIfNull(systemPromptService);
+        ArgumentNullException.ThrowIfNull(chatSettings);
         ArgumentNullException.ThrowIfNull(conversationWriter);
 
         _client = client;
@@ -59,6 +62,7 @@ public sealed class ChatAgentService
         _selectedModelService = selectedModelService;
         _modelCatalog = modelCatalog;
         _systemPromptService = systemPromptService;
+        _chatSettings = chatSettings;
         _conversationWriter = conversationWriter;
         ReseedSystemPrompt();
     }
@@ -241,13 +245,13 @@ public sealed class ChatAgentService
 
             if (canceledException is null)
             {
-                var request = new ChatCompletionRequest(
+                var request = BuildCompletionRequest(
                     modelIdForRequest,
                     _apiMessages,
-                    Stream: true,
-                    Reasoning: modelInfo?.SupportsReasoning == true
-                        ? new ReasoningRequest(Enabled: true, Exclude: false)
-                        : null);
+                    modelInfo,
+                    _chatSettings.ReasoningEffort,
+                    _chatSettings.Temperature,
+                    _chatSettings.MaxTokens);
 
                 OpenRouterException? openRouterException = null;
                 var enumerator = _client
@@ -536,6 +540,62 @@ public sealed class ChatAgentService
     // Visible to tests: shared null-vs-whitespace normalization for API reasoning fields.
     internal static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>
+    /// Shapes the OpenRouter chat/completions body from model capabilities + UI settings.
+    /// Effort Off (or non-reasoning models) omits <c>reasoning</c>; temperature / max_tokens
+    /// are sent only when the catalog lists them in <see cref="OpenRouterModel.SupportedParameters"/>.
+    /// </summary>
+    internal static ChatCompletionRequest BuildCompletionRequest(
+        string modelId,
+        IReadOnlyList<ApiChatMessage> messages,
+        OpenRouterModel? modelInfo,
+        ReasoningEffortLevel effort,
+        double? temperature,
+        int? maxTokens)
+    {
+        ReasoningRequest? reasoning = null;
+        if (modelInfo?.SupportsReasoning == true && effort != ReasoningEffortLevel.Off)
+        {
+            reasoning = new ReasoningRequest(
+                Effort: EffortToApiString(effort),
+                Exclude: false);
+        }
+
+        double? sendTemperature = null;
+        if (temperature is not null
+            && modelInfo is not null
+            && SupportsParameter(modelInfo, "temperature"))
+        {
+            sendTemperature = temperature;
+        }
+
+        int? sendMaxTokens = null;
+        if (maxTokens is not null
+            && modelInfo is not null
+            && SupportsParameter(modelInfo, "max_tokens"))
+        {
+            sendMaxTokens = maxTokens;
+        }
+
+        return new ChatCompletionRequest(
+            modelId,
+            messages,
+            Stream: true,
+            Reasoning: reasoning,
+            Temperature: sendTemperature,
+            MaxTokens: sendMaxTokens);
+    }
+
+    private static string EffortToApiString(ReasoningEffortLevel effort) => effort switch
+    {
+        ReasoningEffortLevel.Low => "low",
+        ReasoningEffortLevel.High => "high",
+        _ => "medium"
+    };
+
+    private static bool SupportsParameter(OpenRouterModel model, string name)
+        => model.SupportedParameters.Contains(name, StringComparer.OrdinalIgnoreCase);
 
     internal static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..max] + "…";

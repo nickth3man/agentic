@@ -189,18 +189,23 @@
                             }
                         </div>
 
-                        @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || ShouldOpenThinking(message)))
+                        @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || message.IsThinkingOpen))
                         {
-                            var thinkingOpen = ShouldOpenThinking(message);
+                            var thinkingOpen = message.IsThinkingOpen;
                             <details class="thinking-panel @(thinkingOpen ? "is-active" : "")"
                                      open="@thinkingOpen">
-                                <summary>
+                                <summary @onclick="() => ToggleThinking(message)"
+                                         @onclick:preventDefault>
                                     <span class="think-pulse" aria-hidden="true">
                                         <span></span><span></span><span></span>
                                     </span>
                                     <span class="think-label">
                                         @(thinkingOpen ? "Thinking…" : "Thinking")
                                     </span>
+                                    @if (ThoughtDurationLabel(message) is { } duration)
+                                    {
+                                        <span class="think-duration">@duration</span>
+                                    }
                                 </summary>
                                 <pre class="thinking-text">@(string.IsNullOrEmpty(message.Reasoning) ? "…" : message.Reasoning)</pre>
                             </details>
@@ -503,6 +508,14 @@
     private void RefreshSessionUsage()
         => _sessionUsage = UsageFormatter.FormatConversationTotal(ChatAgent.Messages);
 
+    private static void ToggleThinking(ChatDisplayMessage message)
+        => message.SetThinkingOpenByUser(!message.IsThinkingOpen);
+
+    private static string? ThoughtDurationLabel(ChatDisplayMessage message)
+        => !message.IsStreaming && message.ThoughtDurationSeconds is { } seconds
+            ? $"Thought for {seconds}s"
+            : null;
+
     private async Task CopyMessageAsync(ChatDisplayMessage message)
     {
         var module = await GetChatModuleAsync();
@@ -558,9 +571,6 @@
 
         return _chatModule;
     }
-
-    private static bool ShouldOpenThinking(ChatDisplayMessage message)
-        => message.IsStreaming && string.IsNullOrEmpty(message.Content);
 
     private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
 

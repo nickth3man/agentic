@@ -206,7 +206,7 @@ public class ConversationStoreTests : IDisposable
             new SelectedModelService(new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider())),
             new ModelCatalogService(new UnusedHttpClientFactory()),
             new SystemPromptService(new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider()), NullLogger<SystemPromptService>.Instance),
-            TestSupport.NewChatSettings(),
+            TestSupport.NewChatSettings(new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider())),
             reloadPersistence);
         var reloadConversations = new ConversationService(
             _db,

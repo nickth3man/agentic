@@ -150,7 +150,7 @@ _TeamCity*
 .axoCover/*
 !.axoCover/settings.json
 
-# Coverlet is a free, cross platform Code Coverage Tool
+# Coverlet is a Code Coverage Tool
 coverage*.json
 coverage*.xml
 coverage*.info
@@ -483,3 +483,11 @@ $RECYCLE.BIN/
 
 # Firecrawl scratch output
 .firecrawl/
+
+# Local SQLite conversation store (issue #13) — never commit the DB file
+App_Data/
+*.db
+*.db-shm
+*.db-wal
+
+.build-tmp/

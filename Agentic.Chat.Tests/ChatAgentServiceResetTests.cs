@@ -114,7 +114,8 @@ public class ChatAgentServiceResetTests
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(null);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog), fake);
+        return (new ChatAgentService(
+            fake, options, logger, selection, catalog, NullActiveConversationWriter.Instance), fake);
     }
 
     private static JsonElement RequestMessages(FakeOpenRouterClient fake)
@@ -141,3 +142,5 @@ public class ChatAgentServiceResetTests
             => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
     }
 }
+
+

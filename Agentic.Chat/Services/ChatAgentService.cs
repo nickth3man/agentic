@@ -27,6 +27,7 @@ public sealed class ChatAgentService
     private readonly SelectedModelService _selectedModelService;
     private readonly ModelCatalogService _modelCatalog;
     private readonly SystemPromptService _systemPromptService;
+    private readonly ChatSettingsService _chatSettings;
     private readonly IActiveConversationWriter _conversationWriter;
     private readonly List<ChatDisplayMessage> _displayMessages = [];
     private readonly List<ApiChatMessage> _apiMessages = [];
@@ -43,6 +44,7 @@ public sealed class ChatAgentService
         SelectedModelService selectedModelService,
         ModelCatalogService modelCatalog,
         SystemPromptService systemPromptService,
+        ChatSettingsService chatSettings,
         IActiveConversationWriter conversationWriter)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -51,6 +53,7 @@ public sealed class ChatAgentService
         ArgumentNullException.ThrowIfNull(selectedModelService);
         ArgumentNullException.ThrowIfNull(modelCatalog);
         ArgumentNullException.ThrowIfNull(systemPromptService);
+        ArgumentNullException.ThrowIfNull(chatSettings);
         ArgumentNullException.ThrowIfNull(conversationWriter);
 
         _client = client;
@@ -59,6 +62,7 @@ public sealed class ChatAgentService
         _selectedModelService = selectedModelService;
         _modelCatalog = modelCatalog;
         _systemPromptService = systemPromptService;
+        _chatSettings = chatSettings;
         _conversationWriter = conversationWriter;
         ReseedSystemPrompt();
     }
@@ -107,13 +111,17 @@ public sealed class ChatAgentService
                 Content = message.Content,
                 Reasoning = message.Reasoning,
                 IsStreaming = false,
-                IsError = message.IsError
+                IsError = message.IsError,
+                ImageDataUrl = message.ImageDataUrl,
+                Usage = message.Usage
             };
             _displayMessages.Add(copy);
 
             if (copy.Role == "user")
             {
-                _apiMessages.Add(new ApiChatMessage("user", copy.Content, null));
+                _apiMessages.Add(string.IsNullOrEmpty(copy.ImageDataUrl)
+                    ? new ApiChatMessage("user", copy.Content, null)
+                    : ApiChatMessage.UserWithImage(copy.Content, copy.ImageDataUrl));
             }
             else if (copy.Role == "assistant"
                 && !copy.IsError
@@ -183,23 +191,25 @@ public sealed class ChatAgentService
         => _selectedModelService.CurrentModelId ?? _options.Model;
 
     // Test-only: first _apiMessages entry must reflect the configured prompt.
-    internal string GetApiSystemPromptForTest() => _apiMessages[0].Content;
+    internal string GetApiSystemPromptForTest() => _apiMessages[0].TextContent;
 
     // Send a new user turn and stream the assistant response.
     public IAsyncEnumerable<ChatDisplayMessage> SendStreamingAsync(
         string userText,
+        string? imageDataUrl = null,
         CancellationToken cancellationToken = default)
-        => StreamTurnAsync(TurnKind.Send, userText, cancellationToken);
+        => StreamTurnAsync(TurnKind.Send, userText, imageDataUrl, cancellationToken);
 
     public IAsyncEnumerable<ChatDisplayMessage> RetryLastAsync(CancellationToken cancellationToken = default)
-        => StreamTurnAsync(TurnKind.Retry, null, cancellationToken);
+        => StreamTurnAsync(TurnKind.Retry, null, null, cancellationToken);
 
     public IAsyncEnumerable<ChatDisplayMessage> RegenerateAsync(CancellationToken cancellationToken = default)
-        => StreamTurnAsync(TurnKind.Regenerate, null, cancellationToken);
+        => StreamTurnAsync(TurnKind.Regenerate, null, null, cancellationToken);
 
     private async IAsyncEnumerable<ChatDisplayMessage> StreamTurnAsync(
         TurnKind kind,
         string? userText,
+        string? imageDataUrl,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         if (_streamActive)
@@ -211,7 +221,7 @@ public sealed class ChatAgentService
         _streamActive = true;
         try
         {
-            if (!await TryPrepareTurnAsync(kind, userText, cancellationToken).ConfigureAwait(false))
+            if (!await TryPrepareTurnAsync(kind, userText, imageDataUrl, cancellationToken).ConfigureAwait(false))
             {
                 yield break;
             }
@@ -245,13 +255,13 @@ public sealed class ChatAgentService
                     modelInfo?.ContextLength ?? 0);
                 LogStreamingStart(_logger, contextWindow.Messages.Count, null);
 
-                var request = new ChatCompletionRequest(
+                var request = BuildCompletionRequest(
                     modelIdForRequest,
                     contextWindow.Messages,
-                    Stream: true,
-                    Reasoning: modelInfo?.SupportsReasoning == true
-                        ? new ReasoningRequest(Enabled: true, Exclude: false)
-                        : null);
+                    modelInfo,
+                    _chatSettings.ReasoningEffort,
+                    _chatSettings.Temperature,
+                    _chatSettings.MaxTokens);
 
                 OpenRouterException? openRouterException = null;
                 var enumerator = _client
@@ -316,6 +326,8 @@ public sealed class ChatAgentService
 
             assistant.IsStreaming = false;
 
+            FinalizeUsage(assistant, modelInfo);
+
             // Any non-whitespace content/reasoning counts here — including a literal
             // EmptyResponsePlaceholder string from the model. HasApiVisibleContent
             // excludes that placeholder (persistence/regenerate), so do not reuse it.
@@ -333,7 +345,7 @@ public sealed class ChatAgentService
             }
 
             await _conversationWriter
-                .OnAssistantFinalizedAsync(assistant.Content, reasoning, cancellationToken)
+                .OnAssistantFinalizedAsync(assistant.Content, reasoning, assistant.Usage, cancellationToken)
                 .ConfigureAwait(false);
 
             yield return assistant;
@@ -347,17 +359,25 @@ public sealed class ChatAgentService
     private async Task<bool> TryPrepareTurnAsync(
         TurnKind kind,
         string? userText,
+        string? imageDataUrl,
         CancellationToken cancellationToken)
     {
         if (kind == TurnKind.Send)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(userText);
             var trimmed = userText!.Trim();
-            _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
-            _apiMessages.Add(new ApiChatMessage("user", trimmed, null));
+            _displayMessages.Add(new ChatDisplayMessage
+            {
+                Role = "user",
+                Content = trimmed,
+                ImageDataUrl = imageDataUrl
+            });
+            _apiMessages.Add(string.IsNullOrEmpty(imageDataUrl)
+                ? new ApiChatMessage("user", trimmed, null)
+                : ApiChatMessage.UserWithImage(trimmed, imageDataUrl));
 
             await _conversationWriter
-                .OnUserMessageCommittedAsync(trimmed, ResolveModelId(), cancellationToken)
+                .OnUserMessageCommittedAsync(trimmed, ResolveModelId(), imageDataUrl, cancellationToken)
                 .ConfigureAwait(false);
             return true;
         }
@@ -407,6 +427,7 @@ public sealed class ChatAgentService
                 await _conversationWriter.OnAssistantFinalizedAsync(
                     apiContent,
                     reasoning,
+                    assistant.Usage,
                     CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -483,7 +504,36 @@ public sealed class ChatAgentService
             changed = true;
         }
 
+        if (delta.Usage is not null)
+        {
+            assistant.Usage = delta.Usage;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    internal static void FinalizeUsage(ChatDisplayMessage assistant, OpenRouterModel? modelInfo)
+    {
+        if (assistant.Usage is null)
+        {
+            return;
+        }
+
+        var usage = assistant.Usage;
+        if (usage.Cost is null && modelInfo is not null)
+        {
+            var estimated = usage.PromptTokens * modelInfo.Pricing.PromptPerToken
+                + usage.CompletionTokens * modelInfo.Pricing.CompletionPerToken;
+            usage = usage with { Cost = estimated };
+        }
+
+        if (modelInfo is { IsFree: true } && usage.Cost.GetValueOrDefault() == 0m)
+        {
+            usage = usage with { IsFree = true, Cost = 0m };
+        }
+
+        assistant.Usage = usage;
     }
 
     internal static bool HasApiVisibleContent(string content, string? reasoning)
@@ -500,6 +550,62 @@ public sealed class ChatAgentService
     // Visible to tests: shared null-vs-whitespace normalization for API reasoning fields.
     internal static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>
+    /// Shapes the OpenRouter chat/completions body from model capabilities + UI settings.
+    /// Effort Off (or non-reasoning models) omits <c>reasoning</c>; temperature / max_tokens
+    /// are sent only when the catalog lists them in <see cref="OpenRouterModel.SupportedParameters"/>.
+    /// </summary>
+    internal static ChatCompletionRequest BuildCompletionRequest(
+        string modelId,
+        IReadOnlyList<ApiChatMessage> messages,
+        OpenRouterModel? modelInfo,
+        ReasoningEffortLevel effort,
+        double? temperature,
+        int? maxTokens)
+    {
+        ReasoningRequest? reasoning = null;
+        if (modelInfo?.SupportsReasoning == true && effort != ReasoningEffortLevel.Off)
+        {
+            reasoning = new ReasoningRequest(
+                Effort: EffortToApiString(effort),
+                Exclude: false);
+        }
+
+        double? sendTemperature = null;
+        if (temperature is not null
+            && modelInfo is not null
+            && SupportsParameter(modelInfo, "temperature"))
+        {
+            sendTemperature = temperature;
+        }
+
+        int? sendMaxTokens = null;
+        if (maxTokens is not null
+            && modelInfo is not null
+            && SupportsParameter(modelInfo, "max_tokens"))
+        {
+            sendMaxTokens = maxTokens;
+        }
+
+        return new ChatCompletionRequest(
+            modelId,
+            messages,
+            Stream: true,
+            Reasoning: reasoning,
+            Temperature: sendTemperature,
+            MaxTokens: sendMaxTokens);
+    }
+
+    private static string EffortToApiString(ReasoningEffortLevel effort) => effort switch
+    {
+        ReasoningEffortLevel.Low => "low",
+        ReasoningEffortLevel.High => "high",
+        _ => "medium"
+    };
+
+    private static bool SupportsParameter(OpenRouterModel model, string name)
+        => model.SupportedParameters.Contains(name, StringComparer.OrdinalIgnoreCase);
 
     internal static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..max] + "…";

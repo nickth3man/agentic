@@ -85,11 +85,11 @@ public class ChatAgentServiceSystemPromptTests
         // Mid-conversation refresh is a no-op: the system entry from the start of
         // this conversation stays "Idle refresh prompt."
         var messages = fake.LastRequest!.Messages;
-        Assert.Equal("Idle refresh prompt.", messages[0].Content);
+        Assert.Equal("Idle refresh prompt.", messages[0].TextContent);
         // Empty fake deltas => no assistant API entry: system + user "hi" + user "second".
         Assert.Equal(3, messages.Count);
         Assert.Equal("system", messages[0].Role);
-        Assert.Equal("Idle refresh prompt.", messages[0].Content);
+        Assert.Equal("Idle refresh prompt.", messages[0].TextContent);
     }
 
     [Fact]
@@ -194,7 +194,7 @@ public class ChatAgentServiceSystemPromptTests
         var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(uiPrompt);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance), fake, systemPrompt);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, TestSupport.NewChatSettings(storage), NullActiveConversationWriter.Instance), fake, systemPrompt);
     }
 
     private static string FirstSystemContent(FakeOpenRouterClient fake)
@@ -202,7 +202,7 @@ public class ChatAgentServiceSystemPromptTests
         Assert.NotNull(fake.LastRequest);
         var first = fake.LastRequest!.Messages[0];
         Assert.Equal("system", first.Role);
-        return first.Content ?? string.Empty;
+        return first.TextContent;
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)

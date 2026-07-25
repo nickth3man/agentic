@@ -1,0 +1,15 @@
+: OpenRouter Chat Completions SSE shape, captured from the documented `choices[0].delta`
+: stream format on 2026-07-25. Values are deterministic test data; no production response
+: or credentials are included. https://openrouter.ai/docs/api-reference/streaming
+
+data: {"id":"gen-test-001","object":"chat.completion.chunk","created":1753488000,"model":"test/reasoner","choices":[{"index":0,"delta":{"role":"assistant","reasoning":"I will reason "},"finish_reason":null}]}
+
+data: {"id":"gen-test-001","object":"chat.completion.chunk","created":1753488000,"model":"test/reasoner","choices":[{"index":0,"delta":{"reasoning":"through this."},"finish_reason":null}]}
+
+data: {"id":"gen-test-001","object":"chat.completion.chunk","created":1753488000,"model":"test/reasoner","choices":[{"index":0,"delta":{"content":"Streamed "},"finish_reason":null}]}
+
+data: {"id":"gen-test-001","object":"chat.completion.chunk","created":1753488000,"model":"test/reasoner","choices":[{"index":0,"delta":{"content":"answer."},"finish_reason":null}]}
+
+data: {"id":"gen-test-001","object":"chat.completion.chunk","created":1753488000,"model":"test/reasoner","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]

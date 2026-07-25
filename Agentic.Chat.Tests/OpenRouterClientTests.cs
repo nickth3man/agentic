@@ -88,6 +88,23 @@ public class OpenRouterClientTests
     }
 
     [Fact]
+    public async Task StreamChatAsync_YieldsUsageChunk()
+    {
+        var handler = new StubHandler(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_cost\":0.001}}\n\n" +
+            "data: [DONE]\n\n");
+        using var provider = BuildProvider(handler);
+        var client = new OpenRouterClient(provider.GetRequiredService<IHttpClientFactory>());
+
+        var deltas = await Collect(client.StreamChatAsync(TestRequest()));
+
+        Assert.Equal(2, deltas.Count);
+        Assert.NotNull(deltas[1].Usage);
+        Assert.Equal(10, deltas[1].Usage!.PromptTokens);
+    }
+
+    [Fact]
     public async Task StreamChatAsync_RequestShape()
     {
         var handler = new StubHandler("data: [DONE]\n\n");
@@ -97,7 +114,7 @@ public class OpenRouterClientTests
             "test-model",
             new[] { new ApiChatMessage("system", "sys", null) },
             Stream: true,
-            Reasoning: new ReasoningRequest(Enabled: true, Exclude: false));
+            Reasoning: new ReasoningRequest(Effort: "medium", Exclude: false));
 
         _ = await Collect(client.StreamChatAsync(request));
 
@@ -135,10 +152,10 @@ public class OpenRouterClientTests
                 "m",
                 new[] { new ApiChatMessage("system", "sys", null) },
                 true,
-                new ReasoningRequest(true, false)),
+                new ReasoningRequest("medium", false)),
             options);
         Assert.Equal(
-            "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"}],\"stream\":true,\"reasoning\":{\"enabled\":true,\"exclude\":false}}",
+            "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"}],\"stream\":true,\"reasoning\":{\"effort\":\"medium\",\"exclude\":false}}",
             reasoning);
 
         var assistantReasoning = JsonSerializer.Serialize(

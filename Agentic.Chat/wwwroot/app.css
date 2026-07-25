@@ -896,7 +896,7 @@ body {
 
 .composer {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.5rem;
     padding: 0.4rem 0.4rem 0.4rem 0.85rem;
     border-radius: 1.15rem;
@@ -914,13 +914,19 @@ body {
 .chat-input {
     flex: 1;
     min-width: 0;
+    min-height: calc(1.5em + 1.4rem);
+    max-height: calc(6 * 1.5em + 1.4rem);
     padding: 0.7rem 0.35rem;
     border: none;
     background: transparent;
     font-family: var(--font-body);
     font-size: 1rem;
+    line-height: 1.5;
     color: var(--ink);
     outline: none;
+    resize: none;
+    overflow-y: auto;
+    field-sizing: content;
 }
 
 .chat-input::placeholder {
@@ -1362,8 +1368,25 @@ body {
     box-shadow: inset 3px 0 0 var(--teal);
 }
 
+.model-picker-row.is-active {
+    outline: 2px solid var(--teal);
+    outline-offset: -2px;
+}
+
 .model-picker-row:last-child {
     border-bottom: none;
+}
+
+.model-picker-section-row th {
+    padding: 0.36rem 0.55rem;
+    background: rgba(13, 124, 124, 0.08);
+    border-bottom: 1px solid var(--line);
+    color: var(--teal-deep);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: left;
+    text-transform: uppercase;
 }
 
 .model-picker-row td {
@@ -1391,6 +1414,30 @@ body {
     font-weight: 600;
     color: var(--ink);
     font-size: 0.84rem;
+}
+
+.model-picker-favorite {
+    width: 1.4rem;
+    margin: 0 0.15rem 0 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    vertical-align: -0.05rem;
+}
+
+.model-picker-favorite:hover,
+.model-picker-favorite.is-favorite {
+    color: var(--copper);
+}
+
+.model-picker-favorite:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 1px;
+    border-radius: 0.2rem;
 }
 
 .model-picker-badges {

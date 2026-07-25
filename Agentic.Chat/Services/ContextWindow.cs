@@ -19,7 +19,7 @@ internal static class ContextWindow
     {
         ArgumentNullException.ThrowIfNull(messages);
 
-        return messages.Sum(message => (message.Content.Length + 3) / 4);
+        return messages.Sum(message => (message.TextContent.Length + 3) / 4);
     }
 
     /// <summary>

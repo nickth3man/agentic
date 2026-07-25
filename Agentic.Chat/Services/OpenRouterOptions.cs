@@ -4,6 +4,8 @@ public sealed class OpenRouterOptions
 {
     public const string SectionName = "OpenRouter";
 
+    public const string DefaultSystemPrompt = "You are a helpful chat agent.";
+
     public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1";
 
     public string Model { get; set; } = "openai/gpt-oss-120b";
@@ -11,4 +13,10 @@ public sealed class OpenRouterOptions
     public string HttpReferer { get; set; } = "http://localhost:5123";
 
     public string AppTitle { get; set; } = "Agentic Chat";
+
+    /// <summary>
+    /// Default system prompt used when the user has not overridden it in the UI.
+    /// Bound from appsettings; missing/empty falls back to <see cref="DefaultSystemPrompt"/>.
+    /// </summary>
+    public string SystemPrompt { get; set; } = DefaultSystemPrompt;
 }

@@ -17,18 +17,14 @@ public sealed class ChatAgentService
             default,
             "Streaming chat completion with {MessageCount} message(s) in transcript");
 
-    private const string SystemPrompt = "You are a helpful chat agent.";
-
     private readonly IOpenRouterClient _client;
     private readonly OpenRouterOptions _options;
     private readonly ILogger<ChatAgentService> _logger;
     private readonly SelectedModelService _selectedModelService;
     private readonly ModelCatalogService _modelCatalog;
+    private readonly SystemPromptService _systemPromptService;
     private readonly List<ChatDisplayMessage> _displayMessages = [];
-    private readonly List<ApiChatMessage> _apiMessages =
-    [
-        new ApiChatMessage("system", SystemPrompt, null)
-    ];
+    private readonly List<ApiChatMessage> _apiMessages = [];
     private bool _streamActive;
 
     public ChatAgentService(
@@ -36,16 +32,23 @@ public sealed class ChatAgentService
         IOptions<OpenRouterOptions> options,
         ILogger<ChatAgentService> logger,
         SelectedModelService selectedModelService,
-        ModelCatalogService modelCatalog)
+        ModelCatalogService modelCatalog,
+        SystemPromptService systemPromptService)
     {
         _client = client;
         _options = options.Value;
         _logger = logger;
         _selectedModelService = selectedModelService;
         _modelCatalog = modelCatalog;
+        _systemPromptService = systemPromptService;
+        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
     }
 
     public IReadOnlyList<ChatDisplayMessage> Messages => _displayMessages;
+
+    // Test-only: lets unit tests inspect the API transcript (including the leading
+    // system message) without going through a full send. Exposed via InternalsVisibleTo.
+    internal IReadOnlyList<ApiChatMessage> ApiMessagesForTest => _apiMessages;
 
     // Test-only: lets unit tests seed display-list states the public API can't
     // produce on its own (e.g. a trailing user message — normal sends always pair
@@ -64,8 +67,41 @@ public sealed class ChatAgentService
 
         _displayMessages.Clear();
         _apiMessages.Clear();
-        _apiMessages.Add(new ApiChatMessage("system", SystemPrompt, null));
+        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
     }
+
+    // When the transcript is idle (no display messages), refresh the system entry so a
+    // newly loaded or applied UI prompt takes effect without mid-conversation surgery.
+    // No-op while streaming or once the user has started a conversation — the next
+    // Reset()/New chat picks up the configured prompt then.
+    public void RefreshSystemMessageIfIdle()
+    {
+        if (_streamActive || _displayMessages.Count > 0)
+        {
+            return;
+        }
+
+        _apiMessages.Clear();
+        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
+    }
+
+    internal string ResolveSystemPrompt()
+    {
+        if (!string.IsNullOrWhiteSpace(_systemPromptService.CurrentPrompt))
+        {
+            return _systemPromptService.CurrentPrompt.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
+        {
+            return _options.SystemPrompt.Trim();
+        }
+
+        return OpenRouterOptions.DefaultSystemPrompt;
+    }
+
+    // Test-only: first _apiMessages entry must reflect the configured prompt.
+    internal string GetApiSystemPromptForTest() => _apiMessages[0].Content;
 
     // Send a new user turn and stream the assistant response.
     public IAsyncEnumerable<ChatDisplayMessage> SendStreamingAsync(

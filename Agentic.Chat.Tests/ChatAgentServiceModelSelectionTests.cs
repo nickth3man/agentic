@@ -138,8 +138,10 @@ public class ChatAgentServiceModelSelectionTests
         var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(selectedModelId);
+        var systemPrompt = new SystemPromptService(storage);
+        systemPrompt.SetCurrentPromptForTest(null);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog), fake);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt), fake);
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)

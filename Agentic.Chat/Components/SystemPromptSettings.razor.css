@@ -1,0 +1,198 @@
+/* System prompt settings — gear + frosted popover in the chat header.
+   Matches ModelPicker / new-chat button visual language (teal, frosted glass). */
+
+.system-prompt-settings {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.settings-gear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.05rem;
+    height: 2.05rem;
+    padding: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(10px);
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.settings-gear svg {
+    width: 1.05rem;
+    height: 1.05rem;
+}
+
+.settings-gear:hover,
+.settings-gear.is-open {
+    color: var(--teal-deep);
+    border-color: rgba(13, 124, 124, 0.35);
+    background: rgba(13, 124, 124, 0.08);
+}
+
+.settings-gear:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.settings-popover {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    width: min(22rem, calc(100vw - 2rem));
+    z-index: 60;
+    padding: 0.85rem 0.9rem 0.95rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    border-radius: 1rem;
+    box-shadow:
+        0 24px 60px rgba(20, 34, 42, 0.16),
+        0 0 0 1px var(--line);
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    animation: settings-popover-in 0.18s var(--ease-out) both;
+}
+
+@keyframes settings-popover-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.settings-popover-header {
+    margin-bottom: 0.15rem;
+}
+
+.settings-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+}
+
+.settings-hint {
+    margin: 0.2rem 0 0;
+    font-size: 0.75rem;
+    color: var(--ink-mute);
+    line-height: 1.35;
+}
+
+.settings-label {
+    margin-top: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+.settings-preset,
+.settings-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 0.55rem;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.75);
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    color: var(--ink);
+}
+
+.settings-preset {
+    padding: 0.45rem 0.55rem;
+    cursor: pointer;
+}
+
+.settings-textarea {
+    padding: 0.55rem 0.6rem;
+    resize: vertical;
+    min-height: 7rem;
+    line-height: 1.45;
+}
+
+.settings-preset:focus-visible,
+.settings-textarea:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 1px;
+}
+
+.settings-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+}
+
+.settings-apply,
+.settings-cancel {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.settings-apply {
+    background: rgba(13, 124, 124, 0.12);
+    border: 1px solid rgba(13, 124, 124, 0.35);
+    color: var(--teal-deep);
+}
+
+.settings-apply:hover:not(:disabled) {
+    background: rgba(13, 124, 124, 0.2);
+}
+
+.settings-cancel {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--ink-mute);
+}
+
+.settings-cancel:hover:not(:disabled) {
+    color: var(--ink-soft);
+    border-color: var(--line);
+}
+
+.settings-apply:disabled,
+.settings-cancel:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.settings-apply:focus-visible,
+.settings-cancel:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-gear,
+    .settings-apply,
+    .settings-cancel {
+        transition: none;
+    }
+
+    .settings-popover {
+        animation: none;
+    }
+}

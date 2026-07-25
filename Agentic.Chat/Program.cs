@@ -34,6 +34,7 @@ builder.Services.AddHttpClient("OpenRouter", client =>
 builder.Services.AddScoped<IOpenRouterClient, OpenRouterClient>();
 builder.Services.AddSingleton<ModelCatalogService>();
 builder.Services.AddScoped<SelectedModelService>();
+builder.Services.AddScoped<SystemPromptService>();
 builder.Services.AddScoped<ProtectedLocalStorage>();
 builder.Services.AddScoped<ChatAgentService>();
 

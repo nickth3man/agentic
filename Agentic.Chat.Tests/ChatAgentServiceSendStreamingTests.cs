@@ -224,8 +224,10 @@ public class ChatAgentServiceSendStreamingTests
         var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(selectedModelId);
+        var systemPrompt = new SystemPromptService(storage);
+        systemPrompt.SetCurrentPromptForTest(null);
 
-        return new ChatAgentService(fakeClient, options, logger, selection, catalog);
+        return new ChatAgentService(fakeClient, options, logger, selection, catalog, systemPrompt);
     }
 
     private static async Task<List<ChatDisplayMessage>> Consume(IAsyncEnumerable<ChatDisplayMessage> stream)

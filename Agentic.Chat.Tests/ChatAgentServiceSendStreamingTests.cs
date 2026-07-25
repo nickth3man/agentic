@@ -570,6 +570,7 @@ public class ChatAgentServiceSendStreamingTests
             selection,
             catalog,
             systemPrompt,
+            TestSupport.NewChatSettings(storage),
             NullActiveConversationWriter.Instance);
     }
 

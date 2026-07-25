@@ -152,6 +152,7 @@ public class ConversationStoreTests : IDisposable
             selection,
             catalog,
             new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance),
+            TestSupport.NewChatSettings(storage),
             persistence);
         var conversations = new ConversationService(_db, chat, persistence, storage);
 
@@ -171,6 +172,7 @@ public class ConversationStoreTests : IDisposable
             selection,
             catalog,
             new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance),
+            TestSupport.NewChatSettings(storage),
             reloadPersistence);
         var reloadConversations = new ConversationService(_db, reloadChat, reloadPersistence, storage);
         await reloadConversations.SwitchAsync(conversationId);
@@ -204,6 +206,7 @@ public class ConversationStoreTests : IDisposable
             new SelectedModelService(new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider())),
             new ModelCatalogService(new UnusedHttpClientFactory()),
             new SystemPromptService(new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider()), NullLogger<SystemPromptService>.Instance),
+            TestSupport.NewChatSettings(new ProtectedLocalStorage(_js, new EphemeralDataProtectionProvider())),
             reloadPersistence);
         var reloadConversations = new ConversationService(
             _db,

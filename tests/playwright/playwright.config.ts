@@ -1,16 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright config for Agentic.Chat reconnect-modal tests.
+ * Playwright config for Agentic.Chat browser tests.
  *
- * The webServer block starts the Blazor app directly via `dotnet run` (no cloudflared —
- * Playwright talks to localhost). A fake OPENROUTER_API_KEY is supplied so Program.cs's
- * api-key guard passes; no real OpenRouter calls are made (these tests only load /chat
- * and dispatch synthetic events at the Blazor-managed reconnect modal).
+ * The webServer blocks start a deterministic local OpenRouter-shaped SSE fake and the
+ * Blazor app (no cloudflared — Playwright talks to localhost). A fake
+ * OPENROUTER_API_KEY is supplied so Program.cs's api-key guard passes; all model and
+ * completion requests stay on localhost.
  *
- * In CI: webServer starts fresh on every run (reuseExistingServer: false).
- * Locally: if you already have `bash start-phone.sh` or `dotnet run` running on 5123,
- * Playwright will reuse it (reuseExistingServer: true).
+ * Each run starts its own processes so local runs are as hermetic as CI.
  */
 const APP_URL = 'http://localhost:5123';
 
@@ -31,18 +29,26 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  webServer: {
-    command: 'dotnet run --project ../../Agentic.Chat --launch-profile http',
-    url: `${APP_URL}/chat`,
-    timeout: 90_000,
-    reuseExistingServer: !process.env.CI,
-    env: {
-      // Same fake-key pattern as Agentic.Chat.Tests/ProgramTests.cs. Not a real key;
-      // the reconnect tests only load /chat (no OpenRouter call).
-      OPENROUTER_API_KEY: 'test-only-fake-key-not-real-no-network',
-      ASPNETCORE_ENVIRONMENT: 'Development',
+  webServer: [
+    {
+      command: 'node fake-openrouter-server.mjs',
+      url: 'http://127.0.0.1:5124/health',
+      timeout: 10_000,
+      reuseExistingServer: false,
     },
-  },
+    {
+      command: 'dotnet run --project ../../Agentic.Chat --launch-profile http',
+      url: `${APP_URL}/chat`,
+      timeout: 90_000,
+      reuseExistingServer: false,
+      env: {
+        // Same fake-key pattern as Agentic.Chat.Tests/ProgramTests.cs. Not a real key.
+        OPENROUTER_API_KEY: 'test-only-fake-key-not-real-no-network',
+        OpenRouter__BaseUrl: 'http://127.0.0.1:5124',
+        ASPNETCORE_ENVIRONMENT: 'Development',
+      },
+    },
+  ],
 
   projects: [
     {

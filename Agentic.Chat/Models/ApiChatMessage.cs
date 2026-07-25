@@ -28,3 +28,4 @@ public sealed record ApiChatMessage(
             ]),
             null);
     }
+}

@@ -105,9 +105,16 @@ public class OpenRouterModelTests
     }
 
     [Fact]
-    public void SupportsImageInput_False_ForTextOnlyModality()
+    public void SupportsImageInput_False_WhenModalityNull()
     {
-        var m = Build(modality: "text->text");
+        var m = new OpenRouterModel(
+            "vendor/model",
+            "Model",
+            128_000L,
+            DateTimeOffset.UtcNow,
+            null!,
+            new OpenRouterPricing(0m, 0m),
+            []);
         Assert.False(m.SupportsImageInput);
     }
 }

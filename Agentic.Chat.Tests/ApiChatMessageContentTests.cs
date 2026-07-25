@@ -86,6 +86,36 @@ public class ApiChatMessageContentTests
     }
 
     [Fact]
+    public void Equals_NonDefaultToDefault_ReturnsFalse()
+    {
+        var left = ApiChatMessageContent.FromText("x");
+        ApiChatMessageContent right = default;
+
+        Assert.False(left.Equals(right));
+    }
+
+    [Fact]
+    public void GetHashCode_MultipartWithImage_IncludesImageUrl()
+    {
+        var content = ApiChatMessageContent.FromParts(
+        [
+            new ApiContentPart("text", "caption", null),
+            new ApiContentPart("image_url", null, new ApiImageUrl("data:image/png;base64,x"))
+        ]);
+
+        Assert.NotEqual(0, content.GetHashCode());
+    }
+
+    [Fact]
+    public void GetHashCode_TextOnlyMultipart_UsesPartFields()
+    {
+        var content = ApiChatMessageContent.FromParts(
+            [new ApiContentPart("text", "only text", null)]);
+
+        Assert.NotEqual(0, content.GetHashCode());
+    }
+
+    [Fact]
     public void Equals_TextContent_ComparesOrdinally()
     {
         var a = ApiChatMessageContent.FromText("same");

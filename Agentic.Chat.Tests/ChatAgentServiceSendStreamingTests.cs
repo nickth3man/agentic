@@ -174,6 +174,27 @@ public class ChatAgentServiceSendStreamingTests
     }
 
     [Fact]
+    public async Task ReasoningOnlyStream_PersistsAssistantWithoutContentPlaceholder()
+    {
+        // Covers hadRealContent when content is empty but reasoning is present
+        // (right-hand arm of the OR) — distinct from EmptyStream_SetsNoResponseContent.
+        var service = CreateService(
+        [
+            new StreamDelta(null, "think"),
+            new StreamDelta(null, "ing")
+        ]);
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.Equal(string.Empty, service.Messages[1].Content);
+        Assert.Equal("thinking", service.Messages[1].Reasoning);
+        Assert.False(service.Messages[1].IsStreaming);
+        Assert.Contains(
+            service.ApiMessagesForTest,
+            m => m.Role == "assistant" && m.Reasoning == "thinking");
+    }
+
+    [Fact]
     public async Task CancelledToken_FinalizesThenThrowsOperationCanceled()
     {
         var service = CreateService();

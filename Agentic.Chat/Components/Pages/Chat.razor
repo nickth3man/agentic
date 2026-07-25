@@ -171,16 +171,17 @@
                             <div class="chat-role">@(isUser ? "You" : "Assistant")</div>
                         </div>
 
-                        @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || (message.IsStreaming && string.IsNullOrEmpty(message.Content))))
+                        @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || ShouldOpenThinking(message)))
                         {
-                            <details class="thinking-panel @(message.IsStreaming && string.IsNullOrEmpty(message.Content) ? "is-active" : "")"
-                                     open="@ShouldOpenThinking(message)">
+                            var thinkingOpen = ShouldOpenThinking(message);
+                            <details class="thinking-panel @(thinkingOpen ? "is-active" : "")"
+                                     open="@thinkingOpen">
                                 <summary>
                                     <span class="think-pulse" aria-hidden="true">
                                         <span></span><span></span><span></span>
                                     </span>
                                     <span class="think-label">
-                                        @(message.IsStreaming && string.IsNullOrEmpty(message.Content) ? "Thinking…" : "Thinking")
+                                        @(thinkingOpen ? "Thinking…" : "Thinking")
                                     </span>
                                 </summary>
                                 <pre class="thinking-text">@(string.IsNullOrEmpty(message.Reasoning) ? "…" : message.Reasoning)</pre>
@@ -464,12 +465,7 @@
         }
 
         await Conversations.NewChatAsync();
-        _sidebarOpen = false;
-        _renamingId = null;
-        _deleteConfirmId = null;
-        _queuedText = null;
-        errorMessage = null;
-        statusText = string.Empty;
+        ResetComposerChrome(clearStatus: true);
         await FocusComposerAsync();
     }
 
@@ -481,12 +477,21 @@
         }
 
         await Conversations.SwitchAsync(id);
+        ResetComposerChrome();
+        await FocusComposerAsync();
+    }
+
+    private void ResetComposerChrome(bool clearStatus = false)
+    {
         _sidebarOpen = false;
         _renamingId = null;
         _deleteConfirmId = null;
         _queuedText = null;
         errorMessage = null;
-        await FocusComposerAsync();
+        if (clearStatus)
+        {
+            statusText = string.Empty;
+        }
     }
 
     private void BeginRename(ConversationListItem conversation)
@@ -565,11 +570,7 @@
     }
 
     private static string QueuedPreview(string text)
-    {
-        const int max = 48;
-        var trimmed = text.Trim();
-        return trimmed.Length <= max ? trimmed : trimmed[..max] + "\u2026";
-    }
+        => ChatAgentService.Truncate(text.Trim(), 48);
 
     private void CancelQueued()
     {
@@ -607,39 +608,10 @@
         await SendCoreAsync(text, image);
     }
 
-    private async Task SendCoreAsync(string text, string? imageDataUrl = null)
-    {
-        errorMessage = null;
-        isBusy = true;
-        statusText = "Assistant is responding";
-        var ct = BeginSend();
-        await FocusComposerAsync();
-
-        try
-        {
-            await foreach (var _ in ChatAgent.SendStreamingAsync(text, imageDataUrl, ct))
-            {
-                await InvokeAsync(StateHasChanged);
-            }
-
-            await Conversations.RefreshAfterTurnAsync();
-            statusText = "Response complete";
-        }
-        catch (OperationCanceledException ex) when (ex.CancellationToken == ct)
-        {
-            statusText = "Response stopped";
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-            statusText = string.Empty;
-            try { await Conversations.RefreshAfterTurnAsync(); } catch { }
-        }
-        finally
-        {
-            await FinishSendAsync();
-        }
-    }
+    private Task SendCoreAsync(string text, string? imageDataUrl = null)
+        => RunStreamAsync(
+            "Assistant is responding",
+            ct => ChatAgent.SendStreamingAsync(text, imageDataUrl, ct));
 
     /// <summary>
     /// End the current send without opening a race window: if a message is queued
@@ -675,36 +647,7 @@
             return;
         }
 
-        isBusy = true;
-        errorMessage = null;
-        statusText = "Retrying";
-        var ct = BeginSend();
-        await FocusComposerAsync();
-
-        try
-        {
-            await foreach (var _ in ChatAgent.RetryLastAsync(ct))
-            {
-                await InvokeAsync(StateHasChanged);
-            }
-
-            await Conversations.RefreshAfterTurnAsync();
-            statusText = "Response complete";
-        }
-        catch (OperationCanceledException ex) when (ex.CancellationToken == ct)
-        {
-            statusText = "Response stopped";
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-            statusText = string.Empty;
-            try { await Conversations.RefreshAfterTurnAsync(); } catch { }
-        }
-        finally
-        {
-            await FinishSendAsync();
-        }
+        await RunStreamAsync("Retrying", ct => ChatAgent.RetryLastAsync(ct));
     }
 
     private async Task RegenerateAsync()
@@ -714,15 +657,22 @@
             return;
         }
 
-        isBusy = true;
+        await RunStreamAsync("Regenerating", ct => ChatAgent.RegenerateAsync(ct));
+    }
+
+    private async Task RunStreamAsync(
+        string busyStatus,
+        Func<CancellationToken, IAsyncEnumerable<ChatDisplayMessage>> streamFactory)
+    {
         errorMessage = null;
-        statusText = "Regenerating";
+        isBusy = true;
+        statusText = busyStatus;
         var ct = BeginSend();
         await FocusComposerAsync();
 
         try
         {
-            await foreach (var _ in ChatAgent.RegenerateAsync(ct))
+            await foreach (var _ in streamFactory(ct))
             {
                 await InvokeAsync(StateHasChanged);
             }

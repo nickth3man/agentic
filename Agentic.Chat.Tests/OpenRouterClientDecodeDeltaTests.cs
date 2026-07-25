@@ -106,6 +106,26 @@ public class OpenRouterClientDecodeDeltaTests
     }
 
     [Fact]
+    public void EmptyReasoningString_DoesNotFallThroughToDetails_ReturnsNull()
+    {
+        // Empty string on `reasoning` still "wins" the if-branch (no details fallback).
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"choices\":[{\"delta\":{\"reasoning\":\"\",\"reasoning_details\":[{\"text\":\"ignored\"}]}}]}");
+
+        Assert.Null(delta);
+    }
+
+    [Fact]
+    public void EmptyReasoningString_ReturnsNull()
+    {
+        // Covers the empty arm of `reasoning` IsNullOrEmpty (distinct from missing content).
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"choices\":[{\"delta\":{\"reasoning\":\"\"}}]}");
+
+        Assert.Null(delta);
+    }
+
+    [Fact]
     public void StringReasoning_TakesPrecedenceOverReasoningDetails()
     {
         var delta = OpenRouterClient.DecodeDelta(
@@ -113,6 +133,16 @@ public class OpenRouterClientDecodeDeltaTests
 
         Assert.NotNull(delta);
         Assert.Equal("top", delta!.Reasoning);
+    }
+
+    [Fact]
+    public void NonStringReasoning_FallsThroughToReasoningDetails()
+    {
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"choices\":[{\"delta\":{\"reasoning\":42,\"reasoning_details\":[{\"text\":\"from-details\"}]}}]}");
+
+        Assert.NotNull(delta);
+        Assert.Equal("from-details", delta!.Reasoning);
     }
 
     [Fact]
@@ -161,5 +191,17 @@ public class OpenRouterClientDecodeDeltaTests
 
         Assert.NotNull(delta);
         Assert.Equal("ok", delta!.Reasoning);
+    }
+
+    [Fact]
+    public void ReasoningDetailsArray_AllEmptyEntries_ReturnsNull()
+    {
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"choices\":[{\"delta\":{\"reasoning_details\":[" +
+                "{\"text\":\"\"}," +
+                "{\"foo\":\"bar\"}" +
+            "]}}]}");
+
+        Assert.Null(delta);
     }
 }

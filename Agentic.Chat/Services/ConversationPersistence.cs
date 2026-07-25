@@ -77,12 +77,10 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
     public async Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default)
     {
         if (ActiveConversationId is null) { return; }
-        if (string.Equals(content, ChatAgentService.EmptyResponsePlaceholder, StringComparison.Ordinal)
-            && string.IsNullOrWhiteSpace(reasoning))
+        if (!ChatAgentService.HasApiVisibleContent(content, reasoning))
         {
             return;
         }
-        if (string.IsNullOrWhiteSpace(content) && string.IsNullOrWhiteSpace(reasoning)) { return; }
 
         var now = DateTimeOffset.UtcNow;
         var conversation = await _db.Conversations
@@ -95,7 +93,7 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
             ConversationId = conversation.Id,
             Role = "assistant",
             Content = content ?? string.Empty,
-            Reasoning = string.IsNullOrWhiteSpace(reasoning) ? null : reasoning,
+            Reasoning = ChatAgentService.NullIfWhiteSpace(reasoning),
             CreatedAt = now
         });
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

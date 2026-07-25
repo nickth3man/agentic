@@ -339,17 +339,6 @@ public class SystemPromptServiceTests
         Assert.True(preset.ClearsOverride);
     }
 
-
-    [Fact]
-    public void IsBestEffortPersistenceFailure_ClassifiesKnownAndUnknown()
-    {
-        Assert.True(SystemPromptService.IsBestEffortPersistenceFailure(new InvalidOperationException()));
-        Assert.True(SystemPromptService.IsBestEffortPersistenceFailure(new CryptographicException()));
-        Assert.True(SystemPromptService.IsBestEffortPersistenceFailure(new JsonException()));
-        Assert.True(SystemPromptService.IsBestEffortPersistenceFailure(new JSException("js")));
-        Assert.False(SystemPromptService.IsBestEffortPersistenceFailure(new InvalidDataException("other")));
-    }
-
     [Fact]
     public void Presets_NonDefault_DoNotClearOverride()
     {
@@ -357,7 +346,6 @@ public class SystemPromptServiceTests
         Assert.False(concise.ClearsOverride);
         Assert.False(string.IsNullOrEmpty(concise.Prompt));
     }
-
 
     private static (SystemPromptService Service, TestSupport.ProtectedJSRuntime Store) BuildService(
         Dictionary<string, string>? seed = null)

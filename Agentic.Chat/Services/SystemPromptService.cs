@@ -1,8 +1,5 @@
-using System.Security.Cryptography;
-using System.Text.Json;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.Extensions.Logging;
-using Microsoft.JSInterop;
 
 namespace Agentic.Chat.Services;
 
@@ -64,7 +61,7 @@ public sealed class SystemPromptService
                 CurrentPrompt = TruncateIfNeeded(stored.Value);
             }
         }
-        catch (Exception ex) when (IsBestEffortPersistenceFailure(ex))
+        catch (Exception ex) when (ProtectedStorageHelpers.IsBestEffortPersistenceFailure(ex))
         {
             // Pre-rendering / JS / crypto / shape failures: treat as no stored value.
             LogPersistenceFailure(_logger, "load", ex);
@@ -95,9 +92,9 @@ public sealed class SystemPromptService
 
         try
         {
-            await TryPersistAsync(trimmed).ConfigureAwait(false);
+            await _protectedStore.SetAsync(StorageKey, trimmed).ConfigureAwait(false);
         }
-        catch (Exception ex) when (IsBestEffortPersistenceFailure(ex))
+        catch (Exception ex) when (ProtectedStorageHelpers.IsBestEffortPersistenceFailure(ex))
         {
             // Persistence is best-effort: prerender, crypto, serialization, or
             // JSException must not lose in-memory state.
@@ -121,7 +118,7 @@ public sealed class SystemPromptService
         {
             await _protectedStore.DeleteAsync(StorageKey).ConfigureAwait(false);
         }
-        catch (Exception ex) when (IsBestEffortPersistenceFailure(ex))
+        catch (Exception ex) when (ProtectedStorageHelpers.IsBestEffortPersistenceFailure(ex))
         {
             LogPersistenceFailure(_logger, "clear", ex);
         }
@@ -133,18 +130,8 @@ public sealed class SystemPromptService
         }
     }
 
-    private ValueTask TryPersistAsync(string prompt)
-        => _protectedStore.SetAsync(StorageKey, prompt);
-
     private static string TruncateIfNeeded(string value)
         => value.Length <= MaxPromptLength ? value : value[..MaxPromptLength];
-
-    // Visible to tests so the false arm of the persistence filter is coverable.
-    internal static bool IsBestEffortPersistenceFailure(Exception ex)
-        => ex is InvalidOperationException
-            or CryptographicException
-            or JsonException
-            or JSException;
 
     // Test seam: lets unit tests pin CurrentPrompt without running through the
     // storage. Exposed via Agentic.Chat's InternalsVisibleTo("Agentic.Chat.Tests").

@@ -14,6 +14,12 @@ public sealed class ChatAgentService
             default,
             "Streaming chat completion with {MessageCount} message(s) in transcript");
 
+    private static readonly Action<ILogger, Exception?> LogCancelPersistFailed =
+        LoggerMessage.Define(
+            LogLevel.Warning,
+            default,
+            "Failed to persist partial assistant after cancel; continuing with stop UX");
+
     internal const string EmptyResponsePlaceholder = "(No response content returned.)";
     private readonly IOpenRouterClient _client;
     private readonly OpenRouterOptions _options;
@@ -374,11 +380,19 @@ public sealed class ChatAgentService
 
             // Await with a non-cancellable token so Stop/dispose cancel doesn't
             // drop the partial response, and so queued follow-ups cannot persist
-            // a user turn before this assistant row lands.
-            await _conversationWriter.OnAssistantFinalizedAsync(
-                apiContent,
-                string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning,
-                CancellationToken.None).ConfigureAwait(false);
+            // a user turn before this assistant row lands. Persist failures must
+            // not replace the OCE — Chat.razor still needs "Response stopped".
+            try
+            {
+                await _conversationWriter.OnAssistantFinalizedAsync(
+                    apiContent,
+                    string.IsNullOrWhiteSpace(apiReasoning) ? null : apiReasoning,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogCancelPersistFailed(_logger, ex);
+            }
         }
 
         // Display-only marker — MUST NOT enter the API transcript.

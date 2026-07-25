@@ -327,7 +327,8 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task CancelWithPartialContent_AwaitsAssistantFinalizationBeforeRethrow()
     {
-        var writer = new RecordingConversationWriter(assistantDelayMs: 40);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writer = new RecordingConversationWriter(gate);
         var service = CreateService(
             [
                 new StreamDelta("partial answer", null),
@@ -346,6 +347,17 @@ public class ChatAgentServiceSendStreamingTests
 
         cts.Cancel();
 
+        // Next MoveNext enters cancel finalization and blocks on the gate.
+        var moveTask = enumerator.MoveNextAsync().AsTask();
+        await writer.FinalizationStarted;
+        Assert.False(writer.AssistantFinalizedCompleted);
+        Assert.False(moveTask.IsCompleted);
+
+        gate.SetResult();
+        Assert.True(await moveTask); // stopped assistant yielded after persist
+        Assert.True(writer.AssistantFinalizedCompleted);
+        Assert.Equal("partial answer (stopped)", enumerator.Current.Content);
+
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             while (await enumerator.MoveNextAsync())
@@ -353,10 +365,38 @@ public class ChatAgentServiceSendStreamingTests
             }
         });
 
-        // Persistence must have completed before the OCE escaped StreamTurnAsync —
-        // otherwise Chat.razor's queue drain could commit the next user turn first.
-        Assert.True(writer.AssistantFinalizedCompleted);
         Assert.Contains("assistant-finalized", writer.Events);
+        Assert.False(service.IsStreamActive);
+    }
+
+    [Fact]
+    public async Task CancelWithPartialContent_PersistFailure_StillRethrowsCancellation()
+    {
+        var writer = new RecordingConversationWriter(failFinalization: true);
+        var service = CreateService(
+            [
+                new StreamDelta("partial answer", null),
+                new StreamDelta(" more", null)
+            ],
+            conversationWriter: writer);
+        using var cts = new CancellationTokenSource();
+
+        await using var enumerator = service
+            .SendStreamingAsync("hi", cts.Token)
+            .GetAsyncEnumerator();
+
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.Equal("partial answer", enumerator.Current.Content);
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            while (await enumerator.MoveNextAsync())
+            {
+            }
+        });
+
         Assert.Equal("partial answer (stopped)", service.Messages[1].Content);
         Assert.False(service.IsStreamActive);
     }
@@ -447,10 +487,24 @@ public class ChatAgentServiceSendStreamingTests
         return list;
     }
 
-    private sealed class RecordingConversationWriter(int assistantDelayMs) : IActiveConversationWriter
+    private sealed class RecordingConversationWriter : IActiveConversationWriter
     {
+        private readonly TaskCompletionSource? _blockFinalization;
+        private readonly bool _failFinalization;
+        private readonly TaskCompletionSource _finalizationStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public RecordingConversationWriter(
+            TaskCompletionSource? blockFinalization = null,
+            bool failFinalization = false)
+        {
+            _blockFinalization = blockFinalization;
+            _failFinalization = failFinalization;
+        }
+
         public List<string> Events { get; } = [];
         public bool AssistantFinalizedCompleted { get; private set; }
+        public Task FinalizationStarted => _finalizationStarted.Task;
 
         public Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default)
         {
@@ -461,9 +515,16 @@ public class ChatAgentServiceSendStreamingTests
         public async Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default)
         {
             Events.Add("assistant-finalized-started");
-            if (assistantDelayMs > 0)
+            _finalizationStarted.TrySetResult();
+
+            if (_failFinalization)
             {
-                await Task.Delay(assistantDelayMs, CancellationToken.None);
+                throw new InvalidOperationException("persist failed");
+            }
+
+            if (_blockFinalization is not null)
+            {
+                await _blockFinalization.Task;
             }
 
             AssistantFinalizedCompleted = true;

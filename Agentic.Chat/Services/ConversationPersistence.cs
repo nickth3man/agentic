@@ -40,7 +40,6 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
                 UpdatedAt = now
             };
             _db.Conversations.Add(conversation);
-            ActiveConversationId = conversation.Id;
         }
         else
         {
@@ -65,6 +64,14 @@ public sealed class ConversationPersistence(ChatDbContext db) : IActiveConversat
             CreatedAt = now
         });
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // Set ActiveConversationId only after the initial save succeeds,
+        // so a cancelled or failed first save doesn't leave the circuit
+        // stuck on an ID that was never persisted.
+        if (ActiveConversationId is null)
+        {
+            ActiveConversationId = conversation.Id;
+        }
     }
 
     public async Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default)

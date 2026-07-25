@@ -364,6 +364,60 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal(2, service.Messages.Count);
     }
 
+    [Fact]
+    public void TryPopLastCompletedAssistant_RealContent_WasPersistedTrue()
+    {
+        var (service, _) = CreateService();
+        service.LoadTranscript(
+        [
+            new ChatDisplayMessage { Role = "user", Content = "q" },
+            new ChatDisplayMessage { Role = "assistant", Content = "answer", Reasoning = "think" }
+        ]);
+
+        Assert.Equal(2, service.Messages.Count);
+        Assert.True(service.TryPopLastCompletedAssistant(out var wasPersisted));
+        Assert.True(wasPersisted);
+        Assert.Single(service.Messages);
+    }
+
+    [Fact]
+    public void TryPopLastCompletedAssistant_NullReasoning_WasPersistedByContent()
+    {
+        var (service, _) = CreateService();
+        service.LoadTranscript(
+        [
+            new ChatDisplayMessage { Role = "user", Content = "q" },
+            new ChatDisplayMessage { Role = "assistant", Content = "answer", Reasoning = null! }
+        ]);
+
+        Assert.Equal(2, service.Messages.Count);
+        Assert.True(service.TryPopLastCompletedAssistant(out var wasPersisted));
+        Assert.True(wasPersisted);
+    }
+
+    [Fact]
+    public void Constructor_NullConversationWriter_ThrowsArgumentNullException()
+    {
+        var options = Options.Create(new OpenRouterOptions
+        {
+            BaseUrl = "https://test.local/",
+            Model = "test-model"
+        });
+        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
+        var js = TestSupport.NewProtectedJSRuntime();
+        var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
+        var selection = new SelectedModelService(storage);
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            new ChatAgentService(
+                new FakeOpenRouterClient(),
+                options,
+                NullLogger<ChatAgentService>.Instance,
+                selection,
+                catalog,
+                null!));
+        Assert.Equal("conversationWriter", ex.ParamName);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────
 
     private static (ChatAgentService Service, FakeOpenRouterClient Client) CreateService(

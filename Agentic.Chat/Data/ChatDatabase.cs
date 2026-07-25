@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agentic.Chat.Data;
@@ -34,7 +35,7 @@ public static class ChatDatabase
     public static string ToConnectionString(string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        return "Data Source=" + filePath;
+        return new SqliteConnectionStringBuilder { DataSource = filePath }.ConnectionString;
     }
 
     // Alias used by tests / ChatDbContext.

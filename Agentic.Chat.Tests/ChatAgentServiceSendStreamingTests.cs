@@ -402,6 +402,69 @@ public class ChatAgentServiceSendStreamingTests
     }
 
     [Fact]
+    public async Task HappyPath_CapturesUsageFromFinalChunk()
+    {
+        var service = CreateService(new[]
+        {
+            new StreamDelta("Hello", null),
+            new StreamDelta(null, null, new MessageUsage(1200, 340, 0.0041m))
+        });
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        var assistant = service.Messages[1];
+        Assert.Equal("Hello", assistant.Content);
+        Assert.NotNull(assistant.Usage);
+        Assert.Equal(1200, assistant.Usage!.PromptTokens);
+        Assert.Equal(340, assistant.Usage.CompletionTokens);
+        Assert.Equal(0.0041m, assistant.Usage.Cost);
+        Assert.False(assistant.IsStreaming);
+    }
+
+    [Fact]
+    public async Task UsageWithoutCost_EstimatesFromCatalogPricing()
+    {
+        var service = CreateService(new[]
+        {
+            new StreamDelta("Hi", null),
+            new StreamDelta(null, null, new MessageUsage(1000, 500, null))
+        });
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        var usage = service.Messages[1].Usage;
+        Assert.NotNull(usage);
+        // 1000 * 0.0000025 + 500 * 0.00001 = 0.0025 + 0.005 = 0.0075
+        Assert.Equal(0.0075m, usage!.Cost);
+    }
+
+    [Fact]
+    public async Task SendAsync_IncludesUsageInRequestBody()
+    {
+        var fake = new FakeOpenRouterClient([new StreamDelta("ok", null)]);
+        var service = CreateServiceWithClient(fake);
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.NotNull(fake.LastRequest);
+        Assert.NotNull(fake.LastRequest!.Usage);
+        Assert.True(fake.LastRequest.Usage!.Include);
+    }
+
+    [Fact]
+    public async Task HappyPath_UsageOnlyDelta_UpdatesAssistant()
+    {
+        var service = CreateService(new[]
+        {
+            new StreamDelta(null, null, new MessageUsage(50, 25, 0.001m))
+        });
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.Equal(50, service.Messages[1].Usage!.PromptTokens);
+    }
+
+    [Fact]
     public async Task ConcurrentSend_WhileStreamActive_ThrowsInvalidOperation()
     {
         var service = CreateService([new StreamDelta("hello", null)]);
@@ -427,6 +490,44 @@ public class ChatAgentServiceSendStreamingTests
     }
 
     // ---------- helpers ----------
+
+    private static ChatAgentService CreateServiceWithClient(FakeOpenRouterClient fakeClient)
+    {
+        var options = Options.Create(new OpenRouterOptions
+        {
+            BaseUrl = "https://test.local/",
+            Model = "test-model"
+        });
+        var logger = NullLogger<ChatAgentService>.Instance;
+        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
+        catalog.SeedForTest(
+        [
+            new OpenRouterModel(
+                "test-model",
+                "test-model",
+                128_000L,
+                DateTimeOffset.UtcNow,
+                "text->text",
+                new OpenRouterPricing(0.0000025m, 0.00001m),
+                ["tools", "reasoning"])
+        ]);
+
+        var js = TestSupport.NewProtectedJSRuntime();
+        var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
+        var selection = new SelectedModelService(storage);
+        selection.SetCurrentModelIdForTest(null);
+        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
+        systemPrompt.SetCurrentPromptForTest(null);
+
+        return new ChatAgentService(
+            fakeClient,
+            options,
+            logger,
+            selection,
+            catalog,
+            systemPrompt,
+            NullActiveConversationWriter.Instance);
+    }
 
     private static ChatAgentService CreateService(
         IEnumerable<StreamDelta>? deltas = null,

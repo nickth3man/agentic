@@ -88,6 +88,23 @@ public class OpenRouterClientTests
     }
 
     [Fact]
+    public async Task StreamChatAsync_YieldsUsageChunk()
+    {
+        var handler = new StubHandler(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_cost\":0.001}}\n\n" +
+            "data: [DONE]\n\n");
+        using var provider = BuildProvider(handler);
+        var client = new OpenRouterClient(provider.GetRequiredService<IHttpClientFactory>());
+
+        var deltas = await Collect(client.StreamChatAsync(TestRequest()));
+
+        Assert.Equal(2, deltas.Count);
+        Assert.NotNull(deltas[1].Usage);
+        Assert.Equal(10, deltas[1].Usage!.PromptTokens);
+    }
+
+    [Fact]
     public async Task StreamChatAsync_RequestShape()
     {
         var handler = new StubHandler("data: [DONE]\n\n");
@@ -97,7 +114,8 @@ public class OpenRouterClientTests
             "test-model",
             new[] { new ApiChatMessage("system", "sys", null) },
             Stream: true,
-            Reasoning: new ReasoningRequest(Enabled: true, Exclude: false));
+            Reasoning: new ReasoningRequest(Enabled: true, Exclude: false),
+            Usage: null);
 
         _ = await Collect(client.StreamChatAsync(request));
 
@@ -124,7 +142,7 @@ public class OpenRouterClientTests
             new ApiChatMessage("assistant", "ans", null)
         };
         var nonReasoning = JsonSerializer.Serialize(
-            new ChatCompletionRequest("m", nonReasoningMessages, true, null),
+            new ChatCompletionRequest("m", nonReasoningMessages, true, null, null),
             options);
         Assert.Equal(
             "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"},{\"role\":\"user\",\"content\":\"hi\"},{\"role\":\"assistant\",\"content\":\"ans\"}],\"stream\":true}",
@@ -135,7 +153,8 @@ public class OpenRouterClientTests
                 "m",
                 new[] { new ApiChatMessage("system", "sys", null) },
                 true,
-                new ReasoningRequest(true, false)),
+                new ReasoningRequest(true, false),
+                null),
             options);
         Assert.Equal(
             "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"}],\"stream\":true,\"reasoning\":{\"enabled\":true,\"exclude\":false}}",
@@ -146,6 +165,7 @@ public class OpenRouterClientTests
                 "m",
                 new[] { new ApiChatMessage("assistant", "a", "r") },
                 true,
+                null,
                 null),
             options);
         Assert.Equal(
@@ -169,7 +189,8 @@ public class OpenRouterClientTests
             "test-model",
             new[] { new ApiChatMessage("user", "hi", null) },
             Stream: true,
-            Reasoning: null);
+            Reasoning: null,
+            Usage: null);
 
     private static async Task<List<StreamDelta>> Collect(IAsyncEnumerable<StreamDelta> stream)
     {

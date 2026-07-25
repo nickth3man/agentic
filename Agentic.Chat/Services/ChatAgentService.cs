@@ -101,7 +101,8 @@ public sealed class ChatAgentService
                 Content = message.Content,
                 Reasoning = message.Reasoning,
                 IsStreaming = false,
-                IsError = message.IsError
+                IsError = message.IsError,
+                Usage = message.Usage
             };
             _displayMessages.Add(copy);
 
@@ -264,7 +265,8 @@ public sealed class ChatAgentService
                     Stream: true,
                     Reasoning: modelInfo?.SupportsReasoning == true
                         ? new ReasoningRequest(Enabled: true, Exclude: false)
-                        : null);
+                        : null,
+                    Usage: new UsageRequest(Include: true));
 
                 OpenRouterException? openRouterException = null;
                 var enumerator = _client
@@ -328,6 +330,8 @@ public sealed class ChatAgentService
             }
 
             assistant.IsStreaming = false;
+
+            FinalizeUsage(assistant, modelInfo);
 
             var hadRealContent = !string.IsNullOrWhiteSpace(assistant.Content)
                 || !string.IsNullOrWhiteSpace(assistant.Reasoning);
@@ -463,7 +467,36 @@ public sealed class ChatAgentService
             changed = true;
         }
 
+        if (delta.Usage is not null)
+        {
+            assistant.Usage = delta.Usage;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    internal static void FinalizeUsage(ChatDisplayMessage assistant, OpenRouterModel? modelInfo)
+    {
+        if (assistant.Usage is null)
+        {
+            return;
+        }
+
+        var usage = assistant.Usage;
+        if (usage.Cost is null && modelInfo is not null)
+        {
+            var estimated = usage.PromptTokens * modelInfo.Pricing.PromptPerToken
+                + usage.CompletionTokens * modelInfo.Pricing.CompletionPerToken;
+            usage = usage with { Cost = estimated };
+        }
+
+        if (modelInfo is { IsFree: true } && usage.Cost.GetValueOrDefault() == 0m)
+        {
+            usage = usage with { IsFree = true, Cost = 0m };
+        }
+
+        assistant.Usage = usage;
     }
 
     internal static bool HasApiVisibleContent(string content, string reasoning)

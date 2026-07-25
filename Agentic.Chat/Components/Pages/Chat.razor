@@ -115,6 +115,13 @@
                 </div>
             </div>
             <div class="chat-header-actions">
+                @{
+                    var sessionUsage = UsageFormatter.FormatConversationTotal(ChatAgent.Messages);
+                }
+                @if (!string.IsNullOrEmpty(sessionUsage))
+                {
+                    <div class="conversation-usage" aria-label="Conversation cost">@sessionUsage</div>
+                }
                 <SystemPromptSettings />
                 <button type="button"
                         class="new-chat-btn"
@@ -230,6 +237,13 @@
                                     @onclick="RegenerateAsync">
                                 Regenerate
                             </button>
+                        }
+
+                        @if (!isUser && !message.IsStreaming && !message.IsError && message.Usage is not null)
+                        {
+                            <div class="msg-usage" aria-label="Token usage">
+                                @UsageFormatter.FormatMessageFooter(message.Usage)
+                            </div>
                         }
                     </article>
                 }

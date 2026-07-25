@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
 
@@ -161,5 +162,111 @@ public class OpenRouterClientDecodeDeltaTests
 
         Assert.NotNull(delta);
         Assert.Equal("ok", delta!.Reasoning);
+    }
+
+    [Fact]
+    public void UsageOnlyChunk_ReturnsDeltaWithUsage()
+    {
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":340,\"total_cost\":0.0041}}");
+
+        Assert.NotNull(delta);
+        Assert.Null(delta!.Content);
+        Assert.Null(delta.Reasoning);
+        Assert.NotNull(delta.Usage);
+        Assert.Equal(1200, delta.Usage!.PromptTokens);
+        Assert.Equal(340, delta.Usage.CompletionTokens);
+        Assert.Equal(0.0041m, delta.Usage.Cost);
+    }
+
+    [Fact]
+    public void ContentAndUsage_BothPresent()
+    {
+        var delta = OpenRouterClient.DecodeDelta(
+            "{\"choices\":[{\"delta\":{\"content\":\"done\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}");
+
+        Assert.NotNull(delta);
+        Assert.Equal("done", delta!.Content);
+        Assert.Equal(10, delta.Usage!.PromptTokens);
+        Assert.Equal(5, delta.Usage.CompletionTokens);
+        Assert.Null(delta.Usage.Cost);
+    }
+
+    [Fact]
+    public void ParseUsage_ReadsRootUsageElement()
+    {
+        using var doc = JsonDocument.Parse(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":50,\"cost\":0.01}}");
+        var usage = OpenRouterClient.ParseUsage(doc.RootElement);
+
+        Assert.NotNull(usage);
+        Assert.Equal(100, usage!.PromptTokens);
+        Assert.Equal(50, usage.CompletionTokens);
+        Assert.Equal(0.01m, usage.Cost);
+    }
+
+    [Fact]
+    public void ParseUsage_UsageNotObject_ReturnsNull()
+    {
+        using var doc = JsonDocument.Parse("{\"usage\":[]}");
+        Assert.Null(OpenRouterClient.ParseUsage(doc.RootElement));
+    }
+
+    [Fact]
+    public void ParseUsage_MissingPromptTokens_ReturnsNull()
+    {
+        using var doc = JsonDocument.Parse("{\"usage\":{\"completion_tokens\":2}}");
+        Assert.Null(OpenRouterClient.ParseUsage(doc.RootElement));
+    }
+
+    [Fact]
+    public void ParseUsage_NonNumericPromptTokens_ReturnsNull()
+    {
+        using var doc = JsonDocument.Parse(
+            "{\"usage\":{\"prompt_tokens\":\"nope\",\"completion_tokens\":2}}");
+        Assert.Null(OpenRouterClient.ParseUsage(doc.RootElement));
+    }
+
+    [Fact]
+    public void ParseUsage_MissingUsage_ReturnsNull()
+    {
+        using var doc = JsonDocument.Parse("{\"choices\":[]}");
+        Assert.Null(OpenRouterClient.ParseUsage(doc.RootElement));
+    }
+
+    [Fact]
+    public void ParseUsage_InvalidShape_ReturnsNull()
+    {
+        using var doc = JsonDocument.Parse("{\"usage\":{\"prompt_tokens\":\"nope\"}}");
+        Assert.Null(OpenRouterClient.ParseUsage(doc.RootElement));
+    }
+
+    [Fact]
+    public void ParseUsage_NonNumericCompletionTokens_ReturnsNull()
+    {
+        using var doc = JsonDocument.Parse(
+            "{\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":\"nope\"}}");
+        Assert.Null(OpenRouterClient.ParseUsage(doc.RootElement));
+    }
+
+    [Fact]
+    public void ParseUsage_NonNumericCost_IsIgnored()
+    {
+        using var doc = JsonDocument.Parse(
+            "{\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_cost\":\"nope\",\"cost\":\"nope\"}}");
+        var usage = OpenRouterClient.ParseUsage(doc.RootElement);
+
+        Assert.NotNull(usage);
+        Assert.Null(usage!.Cost);
+    }
+
+    [Fact]
+    public void ParseUsage_PrefersTotalCost_OverCost()
+    {
+        using var doc = JsonDocument.Parse(
+            "{\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_cost\":0.5,\"cost\":0.1}}");
+        var usage = OpenRouterClient.ParseUsage(doc.RootElement);
+
+        Assert.Equal(0.5m, usage!.Cost);
     }
 }

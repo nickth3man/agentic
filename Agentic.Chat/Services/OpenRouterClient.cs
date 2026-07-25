@@ -148,14 +148,52 @@ public sealed class OpenRouterClient : IOpenRouterClient
 
             if (reasoning is null && content is null)
             {
-                return null;
+                var usageOnly = ParseUsage(doc.RootElement);
+                if (usageOnly is null)
+                {
+                    return null;
+                }
+
+                return new StreamDelta(null, null, usageOnly);
             }
 
-            return new StreamDelta(content, reasoning);
+            var usage = ParseUsage(doc.RootElement);
+            return new StreamDelta(content, reasoning, usage);
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    internal static MessageUsage? ParseUsage(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var usageEl) ||
+            usageEl.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (!usageEl.TryGetProperty("prompt_tokens", out var promptEl) ||
+            !usageEl.TryGetProperty("completion_tokens", out var completionEl) ||
+            promptEl.ValueKind != JsonValueKind.Number ||
+            completionEl.ValueKind != JsonValueKind.Number)
+        {
+            return null;
+        }
+
+        decimal? cost = null;
+        if (usageEl.TryGetProperty("total_cost", out var totalCostEl) &&
+            totalCostEl.ValueKind == JsonValueKind.Number)
+        {
+            cost = totalCostEl.GetDecimal();
+        }
+        else if (usageEl.TryGetProperty("cost", out var costEl) &&
+                 costEl.ValueKind == JsonValueKind.Number)
+        {
+            cost = costEl.GetDecimal();
+        }
+
+        return new MessageUsage(promptEl.GetInt32(), completionEl.GetInt32(), cost);
     }
 }

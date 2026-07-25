@@ -12,9 +12,16 @@ public sealed record ChatCompletionRequest(
     [property: JsonPropertyName("stream")] bool Stream,
     [property: JsonPropertyName("reasoning")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    ReasoningRequest? Reasoning);
+    ReasoningRequest? Reasoning,
+    [property: JsonPropertyName("usage")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    UsageRequest? Usage);
 
 // Matches the prior `new { enabled = true, exclude = false }` shape.
 public sealed record ReasoningRequest(
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("exclude")] bool Exclude);
+
+// OpenRouter usage accounting — emits token/cost on the final SSE chunk when included.
+public sealed record UsageRequest(
+    [property: JsonPropertyName("include")] bool Include);

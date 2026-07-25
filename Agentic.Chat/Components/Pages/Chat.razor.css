@@ -37,6 +37,35 @@
     outline-offset: 2px;
 }
 
+.msg-usage {
+    margin-top: 0.45rem;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--ink-mute);
+    opacity: 0.85;
+}
+
+.conversation-usage {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid var(--line);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-mute);
+    white-space: nowrap;
+}
+
+@media (max-width: 639px) {
+    .msg-usage {
+        display: none;
+    }
+}
+
 /* ─── Off-canvas conversation drawer (phone-first) ─── */
 .chat-shell {
     position: relative;

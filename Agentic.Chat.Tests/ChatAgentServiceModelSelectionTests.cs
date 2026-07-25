@@ -54,8 +54,73 @@ public class ChatAgentServiceModelSelectionTests
 
         Assert.NotNull(fake.LastRequest);
         Assert.NotNull(fake.LastRequest!.Reasoning);
-        Assert.True(fake.LastRequest.Reasoning!.Enabled);
+        Assert.Equal("medium", fake.LastRequest.Reasoning!.Effort);
         Assert.False(fake.LastRequest.Reasoning.Exclude);
+    }
+
+    [Fact]
+    public async Task SendAsync_OmitsReasoning_WhenEffortOff()
+    {
+        var (service, fake) = BuildService(
+            selectedModelId: null,
+            catalogModels: new[] { (DefaultModel, true) },
+            effort: ReasoningEffortLevel.Off);
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.NotNull(fake.LastRequest);
+        Assert.Null(fake.LastRequest!.Reasoning);
+    }
+
+    [Theory]
+    [InlineData(ReasoningEffortLevel.Low, "low")]
+    [InlineData(ReasoningEffortLevel.Medium, "medium")]
+    [InlineData(ReasoningEffortLevel.High, "high")]
+    public async Task SendAsync_SerializesEffortLevel(ReasoningEffortLevel effort, string expected)
+    {
+        var (service, fake) = BuildService(
+            selectedModelId: null,
+            catalogModels: new[] { (DefaultModel, true) },
+            effort: effort);
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.NotNull(fake.LastRequest!.Reasoning);
+        Assert.Equal(expected, fake.LastRequest.Reasoning!.Effort);
+    }
+
+    [Fact]
+    public async Task SendAsync_IncludesTemperature_WhenSupported()
+    {
+        var (service, fake) = BuildService(
+            selectedModelId: null,
+            catalogModels: new[] { (DefaultModel, true) },
+            effort: ReasoningEffortLevel.Medium,
+            temperature: 0.4,
+            maxTokens: 512,
+            extraParameters: ["temperature", "max_tokens"]);
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.Equal(0.4, fake.LastRequest!.Temperature);
+        Assert.Equal(512, fake.LastRequest.MaxTokens);
+    }
+
+    [Fact]
+    public async Task SendAsync_OmitsTemperature_WhenNotInSupportedParameters()
+    {
+        var (service, fake) = BuildService(
+            selectedModelId: null,
+            catalogModels: new[] { (DefaultModel, true) },
+            effort: ReasoningEffortLevel.Medium,
+            temperature: 0.4,
+            maxTokens: 512,
+            extraParameters: []);
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.Null(fake.LastRequest!.Temperature);
+        Assert.Null(fake.LastRequest.MaxTokens);
     }
 
     [Fact]
@@ -107,7 +172,11 @@ public class ChatAgentServiceModelSelectionTests
 
     private static (ChatAgentService Service, FakeOpenRouterClient Client) BuildService(
         string? selectedModelId,
-        (string Id, bool SupportsReasoning)[] catalogModels)
+        (string Id, bool SupportsReasoning)[] catalogModels,
+        ReasoningEffortLevel effort = ReasoningEffortLevel.Medium,
+        double? temperature = null,
+        int? maxTokens = null,
+        string[]? extraParameters = null)
     {
         var fake = new FakeOpenRouterClient();
         var options = Options.Create(new OpenRouterOptions
@@ -122,16 +191,28 @@ public class ChatAgentServiceModelSelectionTests
         // populated but empty cache, instead of triggering a real /models fetch
         // through the test's HTTP handler.
         catalog.SeedForTest(
-            catalogModels.Select(m => new OpenRouterModel(
-                m.Id,
-                m.Id,
-                128_000L,
-                DateTimeOffset.UtcNow,
-                "text->text",
-                new OpenRouterPricing(0m, 0m),
-                m.SupportsReasoning
-                    ? new[] { "tools", "reasoning" }
-                    : new[] { "tools" }))
+            catalogModels.Select(m =>
+            {
+                var parameters = new List<string> { "tools" };
+                if (m.SupportsReasoning)
+                {
+                    parameters.Add("reasoning");
+                }
+
+                if (extraParameters is not null)
+                {
+                    parameters.AddRange(extraParameters);
+                }
+
+                return new OpenRouterModel(
+                    m.Id,
+                    m.Id,
+                    128_000L,
+                    DateTimeOffset.UtcNow,
+                    "text->text",
+                    new OpenRouterPricing(0m, 0m),
+                    parameters);
+            })
                 .ToList());
 
         var js = TestSupport.NewProtectedJSRuntime();
@@ -140,8 +221,10 @@ public class ChatAgentServiceModelSelectionTests
         selection.SetCurrentModelIdForTest(selectedModelId);
         var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(null);
+        var chatSettings = TestSupport.NewChatSettings(storage);
+        chatSettings.SetForTest(effort, temperature, maxTokens);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance), fake);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, chatSettings, NullActiveConversationWriter.Instance), fake);
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
@@ -156,6 +239,46 @@ public class ChatAgentServiceModelSelectionTests
     {
         public HttpClient CreateClient(string name)
             => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
+    }
+
+    [Fact]
+    public void BuildCompletionRequest_OmitsParams_WhenModelInfoNull()
+    {
+        var request = ChatAgentService.BuildCompletionRequest(
+            "m",
+            Array.Empty<ApiChatMessage>(),
+            modelInfo: null,
+            ReasoningEffortLevel.High,
+            temperature: 0.5,
+            maxTokens: 100);
+
+        Assert.Null(request.Reasoning);
+        Assert.Null(request.Temperature);
+        Assert.Null(request.MaxTokens);
+    }
+
+    [Fact]
+    public void BuildCompletionRequest_SendsMaxTokens_WhenSupported_EvenIfTemperatureNull()
+    {
+        var model = new OpenRouterModel(
+            "m",
+            "m",
+            1000,
+            DateTimeOffset.UtcNow,
+            "text->text",
+            new OpenRouterPricing(0m, 0m),
+            ["max_tokens"]);
+
+        var request = ChatAgentService.BuildCompletionRequest(
+            "m",
+            Array.Empty<ApiChatMessage>(),
+            model,
+            ReasoningEffortLevel.Off,
+            temperature: null,
+            maxTokens: 50);
+
+        Assert.Null(request.Temperature);
+        Assert.Equal(50, request.MaxTokens);
     }
 }
 

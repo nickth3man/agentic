@@ -3,12 +3,19 @@ using Agentic.Chat.Components;
 using Agentic.Chat.Data;
 using Agentic.Chat.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Vision attachments can send multi-MB base64 over the circuit.
+builder.Services.Configure<HubOptions>(options =>
+{
+    options.MaximumReceiveMessageSize = 4 * 1024 * 1024;
+});
 
 var openRouterSection = builder.Configuration.GetSection(OpenRouterOptions.SectionName);
 builder.Services.Configure<OpenRouterOptions>(openRouterSection);
@@ -43,7 +50,9 @@ builder.Services.AddDbContext<ChatDbContext>(options =>
 builder.Services.AddScoped<IOpenRouterClient, OpenRouterClient>();
 builder.Services.AddSingleton<ModelCatalogService>();
 builder.Services.AddScoped<SelectedModelService>();
+builder.Services.AddScoped<ModelPickerPreferencesService>();
 builder.Services.AddScoped<SystemPromptService>();
+builder.Services.AddScoped<ChatSettingsService>();
 builder.Services.AddScoped<ProtectedLocalStorage>();
 builder.Services.AddScoped<ConversationPersistence>();
 builder.Services.AddScoped<IActiveConversationWriter>(sp =>

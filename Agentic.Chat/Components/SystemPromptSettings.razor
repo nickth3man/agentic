@@ -1,12 +1,13 @@
-@* SystemPromptSettings.razor — gear-icon settings popover for the system prompt.
+@* SystemPromptSettings.razor — gear-icon settings popover for system prompt + generation params.
 
    Presets fill the textarea; the textarea stays editable. Persistence mirrors
-   SelectedModelService via SystemPromptService + ProtectedLocalStorage.
+   SelectedModelService via SystemPromptService / ChatSettingsService + ProtectedLocalStorage.
    The "Default" preset clears the UI override so OpenRouter:SystemPrompt wins.
    Changes apply to the next conversation (Reset/New chat); when the transcript
    is empty, RefreshSystemMessageIfIdle updates the in-memory system entry now. *@
 
 @inject SystemPromptService SystemPrompt
+@inject ChatSettingsService ChatSettings
 @inject ChatAgentService ChatAgent
 @inject IOptions<OpenRouterOptions> Options
 @implements IDisposable
@@ -16,7 +17,7 @@
             class="settings-gear @(IsOpen ? "is-open" : "")"
             aria-haspopup="dialog"
             aria-expanded="@IsOpen"
-            aria-label="System prompt settings"
+            aria-label="Chat settings"
             @onclick="Toggle">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
@@ -30,7 +31,7 @@
     {
         <div class="settings-popover"
              role="dialog"
-             aria-label="System prompt settings">
+             aria-label="Chat settings">
             <div class="settings-popover-header">
                 <h2 class="settings-title">System prompt</h2>
                 <p class="settings-hint">Applies to the next conversation (New chat). Default uses appsettings.</p>
@@ -58,6 +59,53 @@
                       @bind:event="oninput"
                       @bind:after="OnDraftChanged"></textarea>
 
+            <div class="settings-divider" role="separator"></div>
+
+            <div class="settings-popover-header">
+                <h2 class="settings-title settings-title-sm">Generation</h2>
+                <p class="settings-hint">Optional; blank uses the provider default. Sent only when the model supports the parameter.</p>
+            </div>
+
+            <label class="settings-label" for="settings-temperature">
+                Temperature
+                <span class="settings-value">@(_tempEnabled ? _tempDraft.ToString("0.00") : "default")</span>
+            </label>
+            <div class="settings-slider-row">
+                <input id="settings-temperature"
+                       type="range"
+                       class="settings-range"
+                       min="@ChatSettingsService.MinTemperature"
+                       max="@ChatSettingsService.MaxTemperature"
+                       step="0.05"
+                       disabled="@(!_tempEnabled)"
+                       @bind="_tempDraft"
+                       @bind:event="oninput" />
+                <label class="settings-check">
+                    <input type="checkbox" @bind="_tempEnabled" @bind:after="OnTempEnabledChanged" />
+                    Set
+                </label>
+            </div>
+
+            <label class="settings-label" for="settings-max-tokens">
+                Max tokens
+                <span class="settings-value">@(_maxEnabled ? _maxDraft.ToString() : "default")</span>
+            </label>
+            <div class="settings-slider-row">
+                <input id="settings-max-tokens"
+                       type="range"
+                       class="settings-range"
+                       min="@ChatSettingsService.MinMaxTokens"
+                       max="8192"
+                       step="64"
+                       disabled="@(!_maxEnabled)"
+                       @bind="_maxDraft"
+                       @bind:event="oninput" />
+                <label class="settings-check">
+                    <input type="checkbox" @bind="_maxEnabled" @bind:after="OnMaxEnabledChanged" />
+                    Set
+                </label>
+            </div>
+
             <div class="settings-actions">
                 <button type="button"
                         class="settings-apply"
@@ -83,9 +131,15 @@
     private bool _isSaving;
     private bool _loaded;
 
+    private bool _tempEnabled;
+    private double _tempDraft = 1.0;
+    private bool _maxEnabled;
+    private int _maxDraft = 2048;
+
     protected override void OnInitialized()
     {
         SystemPrompt.OnChange += HandlePromptChanged;
+        ChatSettings.OnChange += HandleSettingsChanged;
     }
 
     protected override async Task OnInitializedAsync()
@@ -93,6 +147,7 @@
         try
         {
             await SystemPrompt.LoadAsync();
+            await ChatSettings.LoadAsync();
         }
         catch
         {
@@ -100,6 +155,7 @@
         }
 
         SyncDraftFromService();
+        SyncGenerationFromService();
         ChatAgent.RefreshSystemMessageIfIdle();
         _loaded = true;
     }
@@ -107,6 +163,7 @@
     public void Dispose()
     {
         SystemPrompt.OnChange -= HandlePromptChanged;
+        ChatSettings.OnChange -= HandleSettingsChanged;
     }
 
     private void HandlePromptChanged()
@@ -117,6 +174,17 @@
         }
 
         SyncDraftFromService();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleSettingsChanged()
+    {
+        if (!_loaded || IsOpen)
+        {
+            return;
+        }
+
+        SyncGenerationFromService();
         _ = InvokeAsync(StateHasChanged);
     }
 
@@ -131,6 +199,14 @@
 
         _draft = SystemPrompt.CurrentPrompt!;
         _selectedPreset = MatchPresetName(_draft) ?? string.Empty;
+    }
+
+    private void SyncGenerationFromService()
+    {
+        _tempEnabled = ChatSettings.Temperature is not null;
+        _tempDraft = ChatSettings.Temperature ?? 1.0;
+        _maxEnabled = ChatSettings.MaxTokens is not null;
+        _maxDraft = ChatSettings.MaxTokens ?? 2048;
     }
 
     private string EffectiveConfigPrompt()
@@ -165,6 +241,7 @@
         else
         {
             SyncDraftFromService();
+            SyncGenerationFromService();
             IsOpen = true;
         }
     }
@@ -213,6 +290,22 @@
         _selectedPreset = MatchPresetName(_draft) ?? string.Empty;
     }
 
+    private void OnTempEnabledChanged()
+    {
+        if (!_tempEnabled)
+        {
+            _tempDraft = 1.0;
+        }
+    }
+
+    private void OnMaxEnabledChanged()
+    {
+        if (!_maxEnabled)
+        {
+            _maxDraft = 2048;
+        }
+    }
+
     private async Task ApplyAsync()
     {
         if (string.IsNullOrWhiteSpace(_draft) || _isSaving)
@@ -233,6 +326,9 @@
             {
                 await SystemPrompt.SetAsync(_draft.Trim());
             }
+
+            await ChatSettings.SetTemperatureAsync(_tempEnabled ? _tempDraft : null);
+            await ChatSettings.SetMaxTokensAsync(_maxEnabled ? _maxDraft : null);
 
             ChatAgent.RefreshSystemMessageIfIdle();
             IsOpen = false;

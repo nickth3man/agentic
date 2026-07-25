@@ -3,10 +3,14 @@
 @inject ChatAgentService ChatAgent
 @inject ConversationService Conversations
 @inject IJSRuntime JS
+@inject ModelCatalogService ModelCatalog
+@inject SelectedModelService SelectedModel
 @implements IAsyncDisposable
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
 
 <PageTitle>Agentic</PageTitle>
+<script type="module" src="@Assets["Components/Pages/Chat.razor.js"]"></script>
 
 <div class="chat-shell @(_sidebarOpen ? "sidebar-open" : null)">
     <div class="sidebar-backdrop" @onclick="CloseSidebar" aria-hidden="@(!_sidebarOpen)"></div>
@@ -113,9 +117,14 @@
                 <div class="chat-subtitle">
                     Multi-turn via OpenRouter
                     <ModelPicker />
+                    <ReasoningEffortControl />
                 </div>
             </div>
             <div class="chat-header-actions">
+                @if (!string.IsNullOrEmpty(_sessionUsage))
+                {
+                    <div class="conversation-usage" aria-label="Conversation cost">@_sessionUsage</div>
+                }
                 <SystemPromptSettings />
                 <button type="button"
                         class="new-chat-btn"
@@ -201,6 +210,10 @@
                                 }
                                 else if (isUser)
                                 {
+                                    @if (!string.IsNullOrEmpty(message.ImageDataUrl))
+                                    {
+                                        <img class="user-image-thumb" src="@message.ImageDataUrl" alt="Attached image" />
+                                    }
                                     @message.Content
                                 }
                                 else
@@ -237,6 +250,13 @@
                                 Regenerate
                             </button>
                         }
+
+                        @if (!isUser && !message.IsStreaming && !message.IsError && message.Usage is not null)
+                        {
+                            <div class="msg-usage" aria-label="Token usage">
+                                @UsageFormatter.FormatMessageFooter(message.Usage)
+                            </div>
+                        }
                     </article>
                 }
                 <div class="chat-scroll-sentinel" @ref="_scrollSentinel" aria-hidden="true"></div>
@@ -271,15 +291,43 @@
                 </div>
             }
             <div class="composer">
+                @if (_modelSupportsImage)
+                {
+                    <label class="composer-attach" aria-label="Attach image">
+                        📷
+                        <InputFile @key="_inputFileKey"
+                                   id="chat-image-input"
+                                   class="visually-hidden"
+                                   accept="image/*"
+                                   disabled="@isBusy"
+                                   OnChange="OnImageSelectedAsync" />
+                    </label>
+                }
+                @if (_stagedImageDataUrl is not null)
+                {
+                    <div class="composer-image-chip" role="status">
+                        <img src="@_stagedImageDataUrl" alt="Selected image preview" />
+                        <button type="button"
+                                class="composer-image-remove"
+                                aria-label="Remove attached image"
+                                @onclick="ClearStagedImage">
+                            ×
+                        </button>
+                    </div>
+                }
+                @if (_imageCapabilityWarning is not null)
+                {
+                    <div class="composer-image-warning" role="status">@_imageCapabilityWarning</div>
+                }
                 <label class="visually-hidden" for="chat-input">Message</label>
-                <input id="chat-input"
-                       @ref="_composerInput"
-                       @bind="inputText"
-                       @bind:event="oninput"
-                       class="chat-input"
-                       placeholder="Type a message…"
-                       autocomplete="off"
-                       aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")" />
+                <textarea id="chat-input"
+                          @ref="_composerInput"
+                          @bind="inputText"
+                          @bind:event="oninput"
+                          class="chat-input"
+                          rows="1"
+                          placeholder="Type a message…"
+                          aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")"></textarea>
                 @if (isBusy)
                 {
                     <button type="button"
@@ -325,6 +373,12 @@
     private string _renameText = string.Empty;
     private Guid? _deleteConfirmId;
     private CancellationTokenSource? _sendCts;
+    private bool _modelSupportsImage;
+    private string? _stagedImageDataUrl;
+    private string? _imageCapabilityWarning;
+    private string? _queuedImageDataUrl;
+    private int _inputFileKey;
+    private string _sessionUsage = string.Empty;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -347,7 +401,11 @@
         {
             _initialized = true;
             Conversations.OnChange += OnConversationsChanged;
+            SelectedModel.OnChange += OnSelectedModelChanged;
+            await SelectedModel.LoadAsync();
+            await UpdateModelCapabilitiesAsync();
             await Conversations.InitializeAsync();
+            RefreshSessionUsage();
             await InvokeAsync(StateHasChanged);
         }
 
@@ -366,6 +424,7 @@
         _sendCts?.Dispose();
         _sendCts = null;
         Conversations.OnChange -= OnConversationsChanged;
+        SelectedModel.OnChange -= OnSelectedModelChanged;
 
         if (_scrollController is not null)
         {
@@ -382,8 +441,94 @@
         }
     }
 
+    private void OnSelectedModelChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await UpdateModelCapabilitiesAsync();
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+            }
+        });
+
+    private async Task UpdateModelCapabilitiesAsync()
+    {
+        var modelId = SelectedModel.CurrentModelId;
+        if (string.IsNullOrEmpty(modelId))
+        {
+            _modelSupportsImage = false;
+            _imageCapabilityWarning = _stagedImageDataUrl is not null
+                ? "This model does not support images. Remove the attachment to send."
+                : null;
+            return;
+        }
+
+        var model = await ModelCatalog.FindByIdAsync(modelId);
+        if (!string.Equals(SelectedModel.CurrentModelId, modelId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _modelSupportsImage = model?.SupportsImageInput == true;
+        _imageCapabilityWarning = !_modelSupportsImage && _stagedImageDataUrl is not null
+            ? "This model does not support images. Remove the attachment or choose a vision model."
+            : null;
+    }
+
+    private async Task OnImageSelectedAsync(InputFileChangeEventArgs e)
+    {
+        errorMessage = null;
+        var file = e.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        if (file.Size > 10 * 1024 * 1024)
+        {
+            errorMessage = "Image is too large (max 10 MB). Choose a smaller photo.";
+            return;
+        }
+
+        try
+        {
+            var resized = await file.RequestImageFileAsync("image/jpeg", maxWidth: 1536, maxHeight: 1536);
+            await using var stream = resized.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+            _stagedImageDataUrl = $"data:image/jpeg;base64,{base64}";
+            if (!_modelSupportsImage)
+            {
+                _imageCapabilityWarning =
+                    "This model does not support images. Remove the attachment or choose a vision model.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Could not read image: {ex.Message}";
+        }
+    }
+
+    private void ClearStagedImage()
+    {
+        _stagedImageDataUrl = null;
+        _imageCapabilityWarning = null;
+        _inputFileKey++;
+    }
+
     private void OnConversationsChanged()
-        => _ = InvokeAsync(StateHasChanged);
+    {
+        RefreshSessionUsage();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshSessionUsage()
+        => _sessionUsage = UsageFormatter.FormatConversationTotal(ChatAgent.Messages);
 
     private static bool ShouldOpenThinking(ChatDisplayMessage message)
         => message.IsStreaming && string.IsNullOrEmpty(message.Content);
@@ -510,32 +655,42 @@
     private void CancelQueued()
     {
         _queuedText = null;
+        _queuedImageDataUrl = null;
         statusText = isBusy ? "Assistant is responding" : string.Empty;
     }
 
     private async Task SendAsync()
     {
-        if (string.IsNullOrWhiteSpace(inputText))
+        if (string.IsNullOrWhiteSpace(inputText) && _stagedImageDataUrl is null)
         {
             return;
         }
 
-        var text = inputText.Trim();
+        if (_stagedImageDataUrl is not null && !_modelSupportsImage)
+        {
+            errorMessage = "This model does not support images. Remove the attachment or choose a vision model.";
+            return;
+        }
+
+        var text = string.IsNullOrWhiteSpace(inputText) ? "What's in this image?" : inputText.Trim();
+        var image = _stagedImageDataUrl;
         inputText = string.Empty;
 
         if (isBusy)
         {
-            // One pending message max — a later Enter replaces the chip contents.
             _queuedText = text;
+            _queuedImageDataUrl = image;
             statusText = "Message queued";
             await FocusComposerAsync();
             return;
         }
 
-        await SendCoreAsync(text);
+        _stagedImageDataUrl = null;
+        _imageCapabilityWarning = null;
+        await SendCoreAsync(text, image);
     }
 
-    private async Task SendCoreAsync(string text)
+    private async Task SendCoreAsync(string text, string? imageDataUrl = null)
     {
         // Claim busy before any await so a concurrent Enter cannot start a
         // second stream (and cancel this one via BeginSend) during follow().
@@ -550,7 +705,7 @@
 
         await RunStreamAsync(
             "Assistant is responding",
-            ct => ChatAgent.SendStreamingAsync(text, ct));
+            ct => ChatAgent.SendStreamingAsync(text, imageDataUrl, ct));
     }
 
     /// <summary>
@@ -563,16 +718,19 @@
         if (_disposed)
         {
             _queuedText = null;
+            _queuedImageDataUrl = null;
             EndSend();
             return;
         }
 
         if (_queuedText is { } queued)
         {
+            var queuedImage = _queuedImageDataUrl;
             _queuedText = null;
+            _queuedImageDataUrl = null;
             // Keep isBusy true across the handoff so a concurrent Enter cannot
             // start a second stream while we await the nested send.
-            await SendCoreAsync(queued);
+            await SendCoreAsync(queued, queuedImage);
             return;
         }
 
@@ -618,6 +776,7 @@
             }
 
             await Conversations.RefreshAfterTurnAsync();
+            RefreshSessionUsage();
             statusText = "Response complete";
         }
         catch (OperationCanceledException ex) when (ex.CancellationToken == ct)

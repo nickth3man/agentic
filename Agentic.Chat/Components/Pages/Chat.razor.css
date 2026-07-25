@@ -133,6 +133,86 @@
     content: "";
 }
 
+/* ─── Copy controls ─── */
+.message-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: auto;
+    padding: 0.2rem 0.35rem;
+    border: 0;
+    border-radius: 0.35rem;
+    background: transparent;
+    color: var(--ink-mute);
+    font: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+    opacity: 0.72;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.message-copy-btn:hover,
+.message-copy-btn:focus-visible,
+.message-copy-btn.is-copied {
+    opacity: 1;
+    color: var(--teal-deep);
+    background: rgba(13, 124, 124, 0.09);
+}
+
+.message-copy-btn:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+::deep .code-copy-btn:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.chat-bubble.user .message-copy-btn {
+    color: #e6fffc;
+}
+
+::deep .markdown-body pre {
+    position: relative;
+}
+
+::deep .code-copy-btn {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    padding: 0.2rem 0.45rem;
+    border: 1px solid rgba(217, 236, 236, 0.24);
+    border-radius: 0.35rem;
+    background: rgba(18, 32, 38, 0.86);
+    color: #d9ecec;
+    font: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+    opacity: 0.78;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+::deep .code-copy-btn:hover,
+::deep .code-copy-btn:focus-visible,
+::deep .code-copy-btn.is-copied {
+    opacity: 1;
+    color: #fff;
+    background: rgba(13, 124, 124, 0.85);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .message-copy-btn {
+        opacity: 0;
+    }
+
+    .chat-bubble:hover .message-copy-btn,
+    .message-copy-btn:focus-visible,
+    .message-copy-btn.is-copied {
+        opacity: 1;
+    }
+}
+
 .msg-usage {
     margin-top: 0.45rem;
     font-size: 0.68rem;

@@ -62,6 +62,7 @@ public class ConversationStoreTests : IDisposable
             selection,
             catalog,
             new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance),
+            TestSupport.NewChatSettings(storage),
             _persistence);
         _conversations = new ConversationService(_db, _chat, _persistence, storage);
     }
@@ -103,6 +104,7 @@ public class ConversationStoreTests : IDisposable
             selection,
             new ModelCatalogService(new UnusedHttpClientFactory()),
             new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance),
+            TestSupport.NewChatSettings(storage),
             persistence);
         var freshConversations = new ConversationService(_db, freshChat, persistence, storage);
         await freshConversations.InitializeAsync();

@@ -1,0 +1,99 @@
+@* ReasoningEffortControl — compact Off/Low/Med/High segmented control beside ModelPicker. *@
+
+@inject ChatSettingsService ChatSettings
+@inject ModelCatalogService ModelCatalog
+@inject SelectedModelService SelectedModel
+@implements IDisposable
+
+@if (_supportsReasoning)
+{
+    <div class="reasoning-effort" role="group" aria-label="Reasoning effort">
+        @foreach (var level in Levels)
+        {
+            <button type="button"
+                    class="reasoning-effort-btn @(ChatSettings.ReasoningEffort == level ? "is-active" : null)"
+                    aria-pressed="@(ChatSettings.ReasoningEffort == level)"
+                    @onclick="() => SetAsync(level)">
+                @Label(level)
+            </button>
+        }
+    </div>
+}
+
+@code {
+    private static readonly ReasoningEffortLevel[] Levels =
+    [
+        ReasoningEffortLevel.Off,
+        ReasoningEffortLevel.Low,
+        ReasoningEffortLevel.Medium,
+        ReasoningEffortLevel.High
+    ];
+
+    private bool _supportsReasoning;
+
+    protected override void OnInitialized()
+    {
+        ChatSettings.OnChange += OnChanged;
+        SelectedModel.OnChange += OnChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ChatSettings.LoadAsync();
+        }
+        catch
+        {
+            /* persistence non-fatal */
+        }
+
+        await RefreshCapabilityAsync();
+    }
+
+    public void Dispose()
+    {
+        ChatSettings.OnChange -= OnChanged;
+        SelectedModel.OnChange -= OnChanged;
+    }
+
+    private void OnChanged() => _ = InvokeAsync(async () =>
+    {
+        await RefreshCapabilityAsync();
+        StateHasChanged();
+    });
+
+    private async Task RefreshCapabilityAsync()
+    {
+        var id = SelectedModel.CurrentModelId;
+        if (string.IsNullOrEmpty(id))
+        {
+            _supportsReasoning = false;
+            return;
+        }
+
+        try
+        {
+            var model = await ModelCatalog.FindByIdAsync(id);
+            _supportsReasoning = model?.SupportsReasoning == true;
+        }
+        catch
+        {
+            _supportsReasoning = false;
+        }
+    }
+
+    private async Task SetAsync(ReasoningEffortLevel level)
+    {
+        await ChatSettings.SetReasoningEffortAsync(level);
+    }
+
+    private static string Label(ReasoningEffortLevel level) => level switch
+    {
+        ReasoningEffortLevel.Off => "Off",
+        ReasoningEffortLevel.Low => "Low",
+        ReasoningEffortLevel.Medium => "Med",
+        ReasoningEffortLevel.High => "High",
+        _ => level.ToString()
+    };
+}

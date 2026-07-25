@@ -97,7 +97,7 @@ public class OpenRouterClientTests
             "test-model",
             new[] { new ApiChatMessage("system", "sys", null) },
             Stream: true,
-            Reasoning: new ReasoningRequest(Enabled: true, Exclude: false));
+            Reasoning: new ReasoningRequest(Effort: "medium", Exclude: false));
 
         _ = await Collect(client.StreamChatAsync(request));
 
@@ -135,10 +135,10 @@ public class OpenRouterClientTests
                 "m",
                 new[] { new ApiChatMessage("system", "sys", null) },
                 true,
-                new ReasoningRequest(true, false)),
+                new ReasoningRequest("medium", false)),
             options);
         Assert.Equal(
-            "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"}],\"stream\":true,\"reasoning\":{\"enabled\":true,\"exclude\":false}}",
+            "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"sys\"}],\"stream\":true,\"reasoning\":{\"effort\":\"medium\",\"exclude\":false}}",
             reasoning);
 
         var assistantReasoning = JsonSerializer.Serialize(

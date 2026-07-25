@@ -15,6 +15,15 @@ internal static class TestSupport
     public static ProtectedJSRuntime NewProtectedJSRuntime(Dictionary<string, string>? seed = null)
         => new(seed);
 
+    public static ChatSettingsService NewChatSettings(
+        Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage? storage = null)
+    {
+        storage ??= new Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage(
+            NewProtectedJSRuntime(),
+            new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
+        return new ChatSettingsService(storage);
+    }
+
     public sealed class ProtectedJSRuntime : IJSRuntime
     {
         private readonly Dictionary<string, string> _store;

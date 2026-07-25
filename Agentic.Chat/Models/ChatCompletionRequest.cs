@@ -2,19 +2,23 @@ using System.Text.Json.Serialization;
 
 namespace Agentic.Chat.Models;
 
-// The chat/completions request body. Property order (model, messages, stream, reasoning)
-// matches the key order ChatAgentService previously built with a Dictionary, so the
-// serialized body is byte-identical. Reasoning is omitted entirely when the selected
-// model does not support reasoning (WhenWritingNull).
+// The chat/completions request body. Reasoning / temperature / max_tokens are
+// omitted when null (WhenWritingNull) so strict providers never see unsupported keys.
 public sealed record ChatCompletionRequest(
     [property: JsonPropertyName("model")] string Model,
     [property: JsonPropertyName("messages")] IReadOnlyList<ApiChatMessage> Messages,
     [property: JsonPropertyName("stream")] bool Stream,
     [property: JsonPropertyName("reasoning")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    ReasoningRequest? Reasoning);
+    ReasoningRequest? Reasoning,
+    [property: JsonPropertyName("temperature")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    double? Temperature = null,
+    [property: JsonPropertyName("max_tokens")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? MaxTokens = null);
 
-// Matches the prior `new { enabled = true, exclude = false }` shape.
+// OpenRouter reasoning block: effort low/medium/high; omit the whole key when off.
 public sealed record ReasoningRequest(
-    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("effort")] string Effort,
     [property: JsonPropertyName("exclude")] bool Exclude);

@@ -176,7 +176,7 @@ public class ChatAgentServiceCancellationTests
         var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(null);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance), fake);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, TestSupport.NewChatSettings(storage), NullActiveConversationWriter.Instance), fake);
     }
 
     private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)

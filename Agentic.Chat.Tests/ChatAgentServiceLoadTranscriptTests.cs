@@ -273,6 +273,7 @@ public class ChatAgentServiceLoadTranscriptTests
             selection,
             catalog,
             systemPrompt,
+            TestSupport.NewChatSettings(storage),
             NullActiveConversationWriter.Instance);
     }
 

@@ -194,7 +194,7 @@ public class ChatAgentServiceSystemPromptTests
         var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(uiPrompt);
 
-        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance), fake, systemPrompt);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, TestSupport.NewChatSettings(storage), NullActiveConversationWriter.Instance), fake, systemPrompt);
     }
 
     private static string FirstSystemContent(FakeOpenRouterClient fake)

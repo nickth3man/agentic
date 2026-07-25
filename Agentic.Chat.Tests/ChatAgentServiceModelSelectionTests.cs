@@ -103,11 +103,45 @@ public class ChatAgentServiceModelSelectionTests
         Assert.Null(fake.LastRequest.Reasoning);
     }
 
+    [Fact]
+    public void GetContextWindow_UsesCompleteApiTranscriptForMeter()
+    {
+        var (service, _) = BuildService(
+            selectedModelId: null,
+            catalogModels: new[] { (DefaultModel, true) });
+
+        var context = service.GetContextWindow(128_000);
+
+        Assert.Single(context.Messages);
+        Assert.True(context.TranscriptTokens > 0);
+        Assert.Equal(0, context.ExcludedMessageCount);
+    }
+
+    [Fact]
+    public async Task SendAsync_UsesTrimmedContextWithoutChangingDisplayTranscript()
+    {
+        var (service, fake) = BuildService(
+            selectedModelId: null,
+            catalogModels: new[] { (DefaultModel, true) },
+            contextLength: 100);
+        var oldUser = new string('a', 160);
+        var recentUser = new string('b', 160);
+
+        await Consume(service.SendStreamingAsync(oldUser));
+        await Consume(service.SendStreamingAsync(recentUser));
+        await Consume(service.SendStreamingAsync(new string('c', 160)));
+
+        Assert.NotNull(fake.LastRequest);
+        Assert.DoesNotContain(fake.LastRequest!.Messages, message => message.Content == oldUser);
+        Assert.Equal(6, service.Messages.Count);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────
 
     private static (ChatAgentService Service, FakeOpenRouterClient Client) BuildService(
         string? selectedModelId,
-        (string Id, bool SupportsReasoning)[] catalogModels)
+        (string Id, bool SupportsReasoning)[] catalogModels,
+        long contextLength = 128_000)
     {
         var fake = new FakeOpenRouterClient();
         var options = Options.Create(new OpenRouterOptions
@@ -125,7 +159,7 @@ public class ChatAgentServiceModelSelectionTests
             catalogModels.Select(m => new OpenRouterModel(
                 m.Id,
                 m.Id,
-                128_000L,
+                contextLength,
                 DateTimeOffset.UtcNow,
                 "text->text",
                 new OpenRouterPricing(0m, 0m),

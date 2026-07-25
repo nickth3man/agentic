@@ -2,6 +2,8 @@
 @rendermode InteractiveServer
 @inject ChatAgentService ChatAgent
 @inject ConversationService Conversations
+@inject ModelCatalogService ModelCatalog
+@inject SelectedModelService SelectedModel
 @implements IDisposable
 @using Microsoft.AspNetCore.Components
 
@@ -112,6 +114,10 @@
                 <div class="chat-subtitle">
                     Multi-turn via OpenRouter
                     <ModelPicker />
+                    @if (_contextMeterText is not null)
+                    {
+                        <span class="context-meter" title="@_contextMeterTitle">@_contextMeterText</span>
+                    }
                 </div>
             </div>
             <div class="chat-header-actions">
@@ -155,6 +161,13 @@
 
                 @for (var i = 0; i < ChatAgent.Messages.Count; i++)
                 {
+                    @if (_excludedApiMessages > 0 && i == _excludedApiMessages)
+                    {
+                        <div class="context-trim-divider" role="status">
+                            Older messages are not sent to the model
+                        </div>
+                    }
+
                     var message = ChatAgent.Messages[i];
                     var isUser = message.Role == "user";
                     var isLast = i == ChatAgent.Messages.Count - 1;
@@ -306,6 +319,14 @@
     private string _renameText = string.Empty;
     private Guid? _deleteConfirmId;
     private CancellationTokenSource? _sendCts;
+    private string? _contextMeterText;
+    private string? _contextMeterTitle;
+    private int _excludedApiMessages;
+
+    protected override void OnInitialized()
+    {
+        SelectedModel.OnChange += OnSelectedModelChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -317,6 +338,7 @@
         _initialized = true;
         Conversations.OnChange += OnConversationsChanged;
         await Conversations.InitializeAsync();
+        await RefreshContextMeterAsync();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -328,10 +350,22 @@
         _sendCts?.Dispose();
         _sendCts = null;
         Conversations.OnChange -= OnConversationsChanged;
+        SelectedModel.OnChange -= OnSelectedModelChanged;
     }
 
     private void OnConversationsChanged()
-        => _ = InvokeAsync(StateHasChanged);
+        => _ = InvokeAsync(async () =>
+        {
+            await RefreshContextMeterAsync();
+            StateHasChanged();
+        });
+
+    private void OnSelectedModelChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            await RefreshContextMeterAsync();
+            StateHasChanged();
+        });
 
     private static bool ShouldOpenThinking(ChatDisplayMessage message)
         => message.IsStreaming && string.IsNullOrEmpty(message.Content);
@@ -349,6 +383,7 @@
 
         await Conversations.NewChatAsync();
         ResetComposerChrome(clearStatus: true);
+        await RefreshContextMeterAsync();
         await FocusComposerAsync();
     }
 
@@ -361,6 +396,7 @@
 
         await Conversations.SwitchAsync(id);
         ResetComposerChrome();
+        await RefreshContextMeterAsync();
         await FocusComposerAsync();
     }
 
@@ -549,6 +585,7 @@
         {
             await foreach (var _ in streamFactory(ct))
             {
+                await RefreshContextMeterAsync();
                 await InvokeAsync(StateHasChanged);
             }
 
@@ -569,5 +606,44 @@
         {
             await FinishSendAsync();
         }
+    }
+
+    private async Task RefreshContextMeterAsync()
+    {
+        try
+        {
+            var model = await ModelCatalog.FindByIdAsync(ChatAgent.CurrentModelId);
+            if (model?.ContextLength is not > 0)
+            {
+                _contextMeterText = null;
+                _contextMeterTitle = null;
+                _excludedApiMessages = 0;
+                return;
+            }
+
+            var context = ChatAgent.GetContextWindow(model.ContextLength);
+            _contextMeterText = $"~{FormatTokens(context.TranscriptTokens)} / {FormatTokens(model.ContextLength)}";
+            _contextMeterTitle = "Estimated transcript tokens / model context limit";
+            _excludedApiMessages = context.ExcludedMessageCount;
+        }
+        catch
+        {
+            // The meter is advisory; a transient catalog failure must not affect chat.
+            _contextMeterText = null;
+            _contextMeterTitle = null;
+            _excludedApiMessages = 0;
+        }
+    }
+
+    private static string FormatTokens(long tokens)
+    {
+        if (tokens < 1_000)
+        {
+            return tokens.ToString();
+        }
+
+        return tokens % 1_000 == 0
+            ? $"{tokens / 1_000}k"
+            : $"{tokens / 1_000m:0.#}k";
     }
 }

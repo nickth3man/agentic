@@ -91,7 +91,7 @@ public class ChatAgentServiceLoadTranscriptTests
         Assert.Equal("user", roles[2].Role);
         Assert.Equal("u2", roles[2].Content);
         Assert.Equal("assistant", roles[3].Role);
-        Assert.Equal("only reasoning", roles[3].Reasoning);
+        Assert.Null(roles[3].Reasoning);
         Assert.Equal("user", roles[4].Role);
         Assert.Equal("u3", roles[4].Content);
         Assert.DoesNotContain(fake.LastRequest.Messages, m => m.Content.Contains("Error", StringComparison.Ordinal));
@@ -211,7 +211,7 @@ public class ChatAgentServiceLoadTranscriptTests
     }
 
     [Fact]
-    public async Task LoadTranscript_AssistantWithNonEmptyReasoning_PassesReasoningToApi()
+    public async Task LoadTranscript_AssistantWithNonEmptyReasoning_StripsItFromApiHistory()
     {
         var fake = new FakeOpenRouterClient([new StreamDelta("next", null)]);
         var service = CreateService(fake);
@@ -235,7 +235,7 @@ public class ChatAgentServiceLoadTranscriptTests
         var assistant = Assert.Single(
             fake.LastRequest!.Messages,
             m => m.Role == "assistant" && m.Content == "answer");
-        Assert.Equal("detailed thought", assistant.Reasoning);
+        Assert.Null(assistant.Reasoning);
     }
 
     private static ChatAgentService CreateService(params StreamDelta[] deltas)

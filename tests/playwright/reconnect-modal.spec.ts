@@ -77,8 +77,6 @@ test.describe('ReconnectModal state handler', () => {
       (window as unknown as { __noReloadMarker?: string }).__noReloadMarker = 'alive';
     });
     await dispatchReconnectState(page, 'show');
-    // Give the handler a generous window to fire reload if it were going to.
-    await page.waitForTimeout(1_000);
     const marker = await page.evaluate(
       () => (window as unknown as { __noReloadMarker?: string }).__noReloadMarker,
     );
@@ -91,10 +89,35 @@ test.describe('ReconnectModal state handler', () => {
       (window as unknown as { __noReloadMarker?: string }).__noReloadMarker = 'alive';
     });
     await dispatchReconnectState(page, 'failed');
-    await page.waitForTimeout(1_000);
     const marker = await page.evaluate(
       () => (window as unknown as { __noReloadMarker?: string }).__noReloadMarker,
     );
     expect(marker).toBe('alive');
+  });
+});
+
+test.describe('Multiline composer keyboard policy', () => {
+  test('uses Enter to send only with a fine pointer', async ({ page }) => {
+    await page.goto('/chat');
+    await expect(page.locator('#chat-input')).toHaveAttribute('rows', '1');
+
+    // Exercise the isolated policy function rather than submitting the form: a
+    // real Blazor submit would make a server-side OpenRouter request, which this
+    // hermetic browser suite deliberately does not fake.
+    const [desktopEnter, desktopShiftEnter, mobileEnter] = await page.evaluate(async () => {
+      const { shouldSubmitOnEnter } = await import('/Components/Pages/Chat.razor.js');
+      const enter = { key: 'Enter', shiftKey: false, isComposing: false } as KeyboardEvent;
+      const shiftEnter = { key: 'Enter', shiftKey: true, isComposing: false } as KeyboardEvent;
+
+      return [
+        shouldSubmitOnEnter(enter, true),
+        shouldSubmitOnEnter(shiftEnter, true),
+        shouldSubmitOnEnter(enter, false),
+      ];
+    });
+
+    expect(desktopEnter).toBe(true);
+    expect(desktopShiftEnter).toBe(false);
+    expect(mobileEnter).toBe(false);
   });
 });

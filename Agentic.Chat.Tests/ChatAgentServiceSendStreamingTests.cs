@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
@@ -202,7 +203,7 @@ public class ChatAgentServiceSendStreamingTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => Consume(service.SendStreamingAsync("hi", cts.Token)));
+            () => Consume(service.SendStreamingAsync("hi", cancellationToken: cts.Token)));
 
         // Service finalizes before rethrowing — display unlocked, marker only.
         Assert.Equal(2, service.Messages.Count);
@@ -221,7 +222,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         // Placeholder assistant
@@ -257,7 +258,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync()); // placeholder
@@ -288,7 +289,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         // Placeholder only — cancel before any content delta is applied.
@@ -324,7 +325,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync()); // placeholder
@@ -359,7 +360,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync()); // placeholder
@@ -403,7 +404,7 @@ public class ChatAgentServiceSendStreamingTests
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
-            .SendStreamingAsync("hi", cts.Token)
+            .SendStreamingAsync("hi", cancellationToken: cts.Token)
             .GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync());
@@ -420,6 +421,91 @@ public class ChatAgentServiceSendStreamingTests
 
         Assert.Equal("partial answer (stopped)", service.Messages[1].Content);
         Assert.False(service.IsStreamActive);
+    }
+
+    [Fact]
+    public async Task SendWithImage_AddsMultipartUserMessageToApiTranscript()
+    {
+        var fake = new FakeOpenRouterClient([new StreamDelta("looks like a cat", null)]);
+        var service = CreateServiceWithClient(fake);
+
+        await Consume(service.SendStreamingAsync(
+            "What is this?",
+            "data:image/jpeg;base64,abc123"));
+
+        Assert.NotNull(fake.LastRequest);
+        var user = fake.LastRequest!.Messages[1];
+        Assert.Equal("user", user.Role);
+        Assert.False(user.Content.IsText);
+        Assert.Equal(2, user.Content.Parts.Count);
+        Assert.Equal("text", user.Content.Parts[0].Type);
+        Assert.Equal("What is this?", user.Content.Parts[0].Text);
+        Assert.Equal("image_url", user.Content.Parts[1].Type);
+        Assert.Equal("data:image/jpeg;base64,abc123", user.Content.Parts[1].ImageUrl!.Url);
+        Assert.Equal("data:image/jpeg;base64,abc123", service.Messages[0].ImageDataUrl);
+    }
+
+    [Fact]
+    public async Task HappyPath_CapturesUsageFromFinalChunk()
+    {
+        var service = CreateService(new[]
+        {
+            new StreamDelta("Hello", null),
+            new StreamDelta(null, null, new MessageUsage(1200, 340, 0.0041m))
+        });
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        var assistant = service.Messages[1];
+        Assert.Equal("Hello", assistant.Content);
+        Assert.NotNull(assistant.Usage);
+        Assert.Equal(1200, assistant.Usage!.PromptTokens);
+        Assert.Equal(340, assistant.Usage.CompletionTokens);
+        Assert.Equal(0.0041m, assistant.Usage.Cost);
+        Assert.False(assistant.IsStreaming);
+    }
+
+    [Fact]
+    public async Task UsageWithoutCost_EstimatesFromCatalogPricing()
+    {
+        var service = CreateService(new[]
+        {
+            new StreamDelta("Hi", null),
+            new StreamDelta(null, null, new MessageUsage(1000, 500, null))
+        });
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        var usage = service.Messages[1].Usage;
+        Assert.NotNull(usage);
+        // 1000 * 0.0000025 + 500 * 0.00001 = 0.0025 + 0.005 = 0.0075
+        Assert.Equal(0.0075m, usage!.Cost);
+    }
+
+    [Fact]
+    public async Task SendAsync_DoesNotIncludeDeprecatedUsageIncludeFlag()
+    {
+        var fake = new FakeOpenRouterClient([new StreamDelta("ok", null)]);
+        var service = CreateServiceWithClient(fake);
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.NotNull(fake.LastRequest);
+        var json = JsonSerializer.Serialize(fake.LastRequest);
+        Assert.DoesNotContain("\"usage\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HappyPath_UsageOnlyDelta_UpdatesAssistant()
+    {
+        var service = CreateService(new[]
+        {
+            new StreamDelta(null, null, new MessageUsage(50, 25, 0.001m))
+        });
+
+        await Consume(service.SendStreamingAsync("hi"));
+
+        Assert.Equal(50, service.Messages[1].Usage!.PromptTokens);
     }
 
     [Fact]
@@ -448,6 +534,45 @@ public class ChatAgentServiceSendStreamingTests
     }
 
     // ---------- helpers ----------
+
+    private static ChatAgentService CreateServiceWithClient(FakeOpenRouterClient fakeClient)
+    {
+        var options = Options.Create(new OpenRouterOptions
+        {
+            BaseUrl = "https://test.local/",
+            Model = "test-model"
+        });
+        var logger = NullLogger<ChatAgentService>.Instance;
+        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
+        catalog.SeedForTest(
+        [
+            new OpenRouterModel(
+                "test-model",
+                "test-model",
+                128_000L,
+                DateTimeOffset.UtcNow,
+                "text->text",
+                new OpenRouterPricing(0.0000025m, 0.00001m),
+                ["tools", "reasoning"])
+        ]);
+
+        var js = TestSupport.NewProtectedJSRuntime();
+        var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
+        var selection = new SelectedModelService(storage);
+        selection.SetCurrentModelIdForTest(null);
+        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
+        systemPrompt.SetCurrentPromptForTest(null);
+
+        return new ChatAgentService(
+            fakeClient,
+            options,
+            logger,
+            selection,
+            catalog,
+            systemPrompt,
+            TestSupport.NewChatSettings(storage),
+            NullActiveConversationWriter.Instance);
+    }
 
     private static ChatAgentService CreateService(
         IEnumerable<StreamDelta>? deltas = null,
@@ -498,6 +623,7 @@ public class ChatAgentServiceSendStreamingTests
             selection,
             catalog,
             systemPrompt,
+            TestSupport.NewChatSettings(storage),
             conversationWriter ?? NullActiveConversationWriter.Instance);
     }
 
@@ -527,13 +653,21 @@ public class ChatAgentServiceSendStreamingTests
         public bool AssistantFinalizedCompleted { get; private set; }
         public Task FinalizationStarted => _finalizationStarted.Task;
 
-        public Task OnUserMessageCommittedAsync(string content, string modelId, CancellationToken cancellationToken = default)
+        public Task OnUserMessageCommittedAsync(
+            string content,
+            string modelId,
+            string? imageDataUrl = null,
+            CancellationToken cancellationToken = default)
         {
             Events.Add("user-committed");
             return Task.CompletedTask;
         }
 
-        public async Task OnAssistantFinalizedAsync(string content, string? reasoning, CancellationToken cancellationToken = default)
+        public async Task OnAssistantFinalizedAsync(
+            string content,
+            string? reasoning,
+            MessageUsage? usage = null,
+            CancellationToken cancellationToken = default)
         {
             Events.Add("assistant-finalized-started");
             _finalizationStarted.TrySetResult();

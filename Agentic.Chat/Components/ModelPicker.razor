@@ -8,6 +8,7 @@
 @using System.Globalization
 @inject ModelCatalogService Catalog
 @inject SelectedModelService SelectedModel
+@inject ModelPickerPreferencesService Preferences
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
@@ -156,46 +157,63 @@
                                     </td>
                                 </tr>
                             }
-                            @foreach (var model in SortedAndFiltered)
+                            @foreach (var group in ModelGroups)
                             {
-                                var isSelected = model.Id == SelectedModel.CurrentModelId;
-                                <tr class="model-picker-row @(isSelected ? "is-selected" : "")"
-                                    aria-selected="@(isSelected ? "true" : "false")"
-                                    @onclick="() => SelectAsync(model.Id)">
-                                    <td class="model-picker-cell-provider col-provider">
-                                        @Capitalize(model.Provider)
-                                    </td>
-                                    <td class="model-picker-cell-model col-model">
-                                        <span class="model-picker-name-text">@model.Name</span>
-                                        <span class="model-picker-badges">
-                                            @if (model.IsFree)
-                                            {
-                                                <span class="model-picker-badge-free">Free</span>
-                                            }
-                                            @if (ModalityTag(model.Modality) is { } tag)
-                                            {
-                                                <span class="model-picker-tag-modality">@tag</span>
-                                            }
-                                            @if (model.SupportsReasoning)
-                                            {
-                                                <span class="model-picker-tag-modality" title="Supports reasoning parameter">reason</span>
-                                            }
-                                        </span>
-                                        <code class="model-picker-id">@model.Id</code>
-                                    </td>
-                                    <td class="model-picker-cell-cost col-input">
-                                        @FormatCost(model.IsFree, model.PromptPerMillionTokens)
-                                    </td>
-                                    <td class="model-picker-cell-cost col-output">
-                                        @FormatCost(model.IsFree, model.CompletionPerMillionTokens)
-                                    </td>
-                                    <td class="model-picker-cell-context col-context">
-                                        @FormatContext(model.ContextLength)
-                                    </td>
-                                    <td class="model-picker-cell-added col-added">
-                                        @FormatAdded(model.Created)
-                                    </td>
+                                <tr class="model-picker-section-row">
+                                    <th colspan="6" scope="rowgroup">@group.Name</th>
                                 </tr>
+                                @foreach (var model in group.Models)
+                                {
+                                    var isSelected = model.Id == SelectedModel.CurrentModelId;
+                                    var isActive = model.Id == ActiveModel?.Id;
+                                    var isFavorite = Preferences.IsFavorite(model.Id);
+                                    <tr class="model-picker-row @(isSelected ? "is-selected" : "") @(isActive ? "is-active" : "")"
+                                        aria-selected="@(isSelected ? "true" : "false")"
+                                        @onclick="() => SelectAsync(model.Id)">
+                                        <td class="model-picker-cell-provider col-provider">
+                                            @Capitalize(model.Provider)
+                                        </td>
+                                        <td class="model-picker-cell-model col-model">
+                                            <button type="button"
+                                                    class="model-picker-favorite @(isFavorite ? "is-favorite" : "")"
+                                                    aria-label="@(isFavorite ? $"Remove {model.Name} from favorites" : $"Add {model.Name} to favorites")"
+                                                    aria-pressed="@isFavorite"
+                                                    title="@(isFavorite ? "Remove from favorites" : "Add to favorites")"
+                                                    @onclick="() => ToggleFavoriteAsync(model.Id)"
+                                                    @onclick:stopPropagation>
+                                                <span aria-hidden="true">★</span>
+                                            </button>
+                                            <span class="model-picker-name-text">@model.Name</span>
+                                            <span class="model-picker-badges">
+                                                @if (model.IsFree)
+                                                {
+                                                    <span class="model-picker-badge-free">Free</span>
+                                                }
+                                                @if (ModalityTag(model.Modality) is { } tag)
+                                                {
+                                                    <span class="model-picker-tag-modality">@tag</span>
+                                                }
+                                                @if (model.SupportsReasoning)
+                                                {
+                                                    <span class="model-picker-tag-modality" title="Supports reasoning parameter">reason</span>
+                                                }
+                                            </span>
+                                            <code class="model-picker-id">@model.Id</code>
+                                        </td>
+                                        <td class="model-picker-cell-cost col-input">
+                                            @FormatCost(model.IsFree, model.PromptPerMillionTokens)
+                                        </td>
+                                        <td class="model-picker-cell-cost col-output">
+                                            @FormatCost(model.IsFree, model.CompletionPerMillionTokens)
+                                        </td>
+                                        <td class="model-picker-cell-context col-context">
+                                            @FormatContext(model.ContextLength)
+                                        </td>
+                                        <td class="model-picker-cell-added col-added">
+                                            @FormatAdded(model.Created)
+                                        </td>
+                                    </tr>
+                                }
                             }
                         </tbody>
                     </table>
@@ -223,6 +241,9 @@
     private Exception? LoadError;
 
     private string SearchText = string.Empty;
+    private int _activeModelIndex = -1;
+    private bool _shouldAutoFocusSearch;
+    private bool _scrollActiveModelIntoView;
 
     // ── Sort state ───────────────────────────────────────────────────────
     private enum SortCol { Provider, Model, InputCost, OutputCost, Context, Added }
@@ -237,7 +258,7 @@
                 ? m
                 : null;
 
-    private IEnumerable<OpenRouterModel> SortedAndFiltered
+    private IReadOnlyList<OpenRouterModel> SortedAndFiltered
     {
         get
         {
@@ -278,21 +299,57 @@
                 _ => q
             };
 
-            return q;
+            return q.ToList();
         }
     }
+
+    private IReadOnlyList<ModelGroup> ModelGroups
+    {
+        get
+        {
+            var sorted = SortedAndFiltered;
+            var favorites = sorted.Where(m => Preferences.IsFavorite(m.Id)).ToList();
+            var recentIds = Preferences.RecentModelIds;
+            var recent = recentIds
+                .Select(id => sorted.FirstOrDefault(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)))
+                .OfType<OpenRouterModel>()
+                .Where(m => !Preferences.IsFavorite(m.Id))
+                .ToList();
+            var remaining = sorted
+                .Where(m => !Preferences.IsFavorite(m.Id) &&
+                    !recentIds.Contains(m.Id, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            var groups = new List<ModelGroup>();
+            if (favorites.Count > 0) groups.Add(new("Favorites", favorites));
+            if (recent.Count > 0) groups.Add(new("Recent", recent));
+            if (remaining.Count > 0) groups.Add(new("All models", remaining));
+            return groups;
+        }
+    }
+
+    private IReadOnlyList<OpenRouterModel> VisibleModels =>
+        ModelGroups.SelectMany(group => group.Models).ToList();
+
+    private OpenRouterModel? ActiveModel =>
+        _activeModelIndex is >= 0 && _activeModelIndex < VisibleModels.Count
+            ? VisibleModels[_activeModelIndex]
+            : null;
+
+    private sealed record ModelGroup(string Name, IReadOnlyList<OpenRouterModel> Models);
 
     // ── Lifecycle ────────────────────────────────────────────────────────
     protected override void OnInitialized()
     {
         // Subscribe early so we catch the OnChange fired by our own LoadAsync().
         SelectedModel.OnChange += HandleSelectedChanged;
+        Preferences.OnChange += HandleSelectedChanged;
     }
 
     protected override async Task OnInitializedAsync()
     {
         // Persisted selection load is best-effort — a failure shouldn't block the catalog.
-        try { await SelectedModel.LoadAsync(); }
+        try { await Task.WhenAll(SelectedModel.LoadAsync(), Preferences.LoadAsync()); }
         catch { /* swallow: persistence is non-fatal */ }
 
         await LoadModelsAsync(forceRefresh: false);
@@ -300,7 +357,17 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (!firstRender)
+        {
+            if (_scrollActiveModelIntoView && _module is not null)
+            {
+                _scrollActiveModelIntoView = false;
+                try { await _module.InvokeVoidAsync("scrollActiveModelIntoView"); }
+                catch { /* scroll enhancement is non-fatal */ }
+            }
+
+            return;
+        }
 
         // Lazy-load the colocated JS module. This is the project's first JS
         // isolation usage — kept minimal and explicit.
@@ -309,6 +376,7 @@
             _module = await JS.InvokeAsync<IJSObjectReference>(
                 "import", "./Components/ModelPicker.razor.js");
             _dotnetRef = DotNetObjectReference.Create(this);
+            _shouldAutoFocusSearch = await _module.InvokeAsync<bool>("shouldAutoFocusSearch");
         }
         catch
         {
@@ -362,12 +430,17 @@
     {
         IsOpen = true;
         SearchText = string.Empty; // reset search each time we reopen
+        _activeModelIndex = -1;
         StateHasChanged();
         await AttachOutsideClickAsync();
-        // Auto-focus the search input — by the time the await chain completes,
-        // Blazor has flushed the render that put the input in the DOM.
-        try { await _searchInput.FocusAsync(); }
-        catch { /* focus failure is non-fatal */ }
+        if (_shouldAutoFocusSearch)
+        {
+            // By the time the await chain completes, Blazor has flushed the render
+            // that put the input in the DOM. Coarse pointers skip this to avoid
+            // opening the virtual keyboard before the user requests it.
+            try { await _searchInput.FocusAsync(); }
+            catch { /* focus failure is non-fatal */ }
+        }
     }
 
     private async Task CloseAsync()
@@ -380,17 +453,55 @@
 
     private async Task SelectAsync(string modelId)
     {
+        await Preferences.RecordRecentAsync(modelId);
         await SelectedModel.SetAsync(modelId);
         await CloseAsync();
     }
 
     private async Task OnPopoverKeyAsync(KeyboardEventArgs e)
     {
-        if (e.Key == "Escape" && IsOpen) await CloseAsync();
+        if (e.Key == "Escape" && IsOpen)
+        {
+            await CloseAsync();
+            return;
+        }
+
+        if (e.Key is "ArrowDown" or "ArrowUp")
+        {
+            MoveActiveModel(e.Key == "ArrowDown" ? 1 : -1);
+            return;
+        }
+
+        if (e.Key == "Enter" && ActiveModel is { } model)
+        {
+            await SelectAsync(model.Id);
+        }
     }
 
     private void OnSearchInput(ChangeEventArgs e)
-        => SearchText = e.Value as string ?? string.Empty;
+    {
+        SearchText = e.Value as string ?? string.Empty;
+        _activeModelIndex = -1;
+    }
+
+    private async Task ToggleFavoriteAsync(string modelId)
+    {
+        await Preferences.ToggleFavoriteAsync(modelId);
+        _activeModelIndex = -1;
+    }
+
+    private void MoveActiveModel(int direction)
+    {
+        var models = VisibleModels;
+        if (models.Count == 0) return;
+
+        _activeModelIndex = direction > 0
+            ? Math.Min(_activeModelIndex + 1, models.Count - 1)
+            : _activeModelIndex < 0
+                ? models.Count - 1
+                : Math.Max(_activeModelIndex - 1, 0);
+        _scrollActiveModelIntoView = true;
+    }
 
     private void SortBy(SortCol col)
     {
@@ -403,6 +514,8 @@
             _sortCol = col;
             _sortDir = SortDir.Asc;
         }
+
+        _activeModelIndex = -1;
     }
 
     private string SortClass(SortCol col)
@@ -507,6 +620,7 @@
     public async ValueTask DisposeAsync()
     {
         SelectedModel.OnChange -= HandleSelectedChanged;
+        Preferences.OnChange -= HandleSelectedChanged;
         _dotnetRef?.Dispose();
         await DetachOutsideClickAsync();
         if (_module is not null)

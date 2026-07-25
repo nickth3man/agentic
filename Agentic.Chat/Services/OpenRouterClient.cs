@@ -90,16 +90,18 @@ public sealed class OpenRouterClient : IOpenRouterClient
         try
         {
             using var doc = JsonDocument.Parse(payload);
+            var usage = ParseUsage(doc.RootElement);
+
             if (!doc.RootElement.TryGetProperty("choices", out var choices) ||
                 choices.GetArrayLength() == 0)
             {
-                return null;
+                return usage is null ? null : new StreamDelta(null, null, usage);
             }
 
             var choice = choices[0];
             if (!choice.TryGetProperty("delta", out var delta))
             {
-                return null;
+                return usage is null ? null : new StreamDelta(null, null, usage);
             }
 
             // Prefer `reasoning` when that property is present as a string (even if empty),
@@ -119,10 +121,10 @@ public sealed class OpenRouterClient : IOpenRouterClient
 
             if (reasoning is null && content is null)
             {
-                return null;
+                return usage is null ? null : new StreamDelta(null, null, usage);
             }
 
-            return new StreamDelta(content, reasoning);
+            return new StreamDelta(content, reasoning, usage);
         }
         catch (JsonException)
         {
@@ -161,5 +163,38 @@ public sealed class OpenRouterClient : IOpenRouterClient
         }
 
         return sb.Length > 0 ? sb.ToString() : null;
+    }
+
+    internal static MessageUsage? ParseUsage(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var usageEl) ||
+            usageEl.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (!usageEl.TryGetProperty("prompt_tokens", out var promptEl) ||
+            !usageEl.TryGetProperty("completion_tokens", out var completionEl) ||
+            promptEl.ValueKind != JsonValueKind.Number ||
+            completionEl.ValueKind != JsonValueKind.Number ||
+            !promptEl.TryGetInt32(out var promptTokens) ||
+            !completionEl.TryGetInt32(out var completionTokens))
+        {
+            return null;
+        }
+
+        decimal? cost = null;
+        if (usageEl.TryGetProperty("total_cost", out var totalCostEl) &&
+            totalCostEl.ValueKind == JsonValueKind.Number)
+        {
+            cost = totalCostEl.GetDecimal();
+        }
+        else if (usageEl.TryGetProperty("cost", out var costEl) &&
+                 costEl.ValueKind == JsonValueKind.Number)
+        {
+            cost = costEl.GetDecimal();
+        }
+
+        return new MessageUsage(promptTokens, completionTokens, cost);
     }
 }

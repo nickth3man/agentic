@@ -266,28 +266,6 @@ between a dependency bump and `main` — another reason not to weaken them. Don'
 casually edit `renovate.json5`; if bot PRs get noisy, tune throttling there
 rather than disabling checks.
 
-## Issue → PR workflow (agent skills)
-
-Two machine-level Agent Skills (open standard, agentskills.io) drive the
-issue-resolution loop in OpenCode, Claude Code, and Cursor — nothing is stored
-in this repo:
-
-- `/fix-issue <number|url>` — read the issue, discover conventions, reproduce,
-  implement, verify, open a draft PR, post a state comment.
-- `/babysit-pr <number>` — resume any PR: classify CI failures and unresolved
-  review threads, repair (max 3 rounds) or escalate.
-
-Canonical skills: `~/.config/opencode/skills/{fix-issue,babysit-pr}/` (proxied
-into `~/.claude/skills/` and `~/.agents/skills/`; commands installed per
-agent). Cross-session state lives in a `<!-- agent-state -->` comment on the
-PR, so any agent or human can resume. Portable copies:
-`~/Documents/GitHub/skills/`.
-
-Humans: treat the `<!-- agent-state -->` comment as agent-owned — put requests
-and instructions in normal PR comments instead. Two safe interventions on a
-stuck PR: set its `Status:` line to `needs-human` (agents stop and wait), or
-delete the comment entirely (resets the loop and its attempt budget).
-
 ## Git workflow (PRs on `main`)
 
 `main` is gated by a repository **ruleset** (the newer GitHub rules engine —

@@ -38,10 +38,6 @@ public static class ChatDatabase
         return new SqliteConnectionStringBuilder { DataSource = filePath }.ConnectionString;
     }
 
-    // Alias used by tests / ChatDbContext.
-    public static string ToSqliteConnectionString(string filePath)
-        => ToConnectionString(filePath);
-
     public static void ConfigureSqlite(DbContextOptionsBuilder options, string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);

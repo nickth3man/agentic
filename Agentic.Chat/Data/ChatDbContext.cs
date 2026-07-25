@@ -8,11 +8,6 @@ public sealed class ChatDbContext(DbContextOptions<ChatDbContext> options) : DbC
 
     public DbSet<Message> Messages => Set<Message>();
 
-    public static string GetDefaultDatabasePath() => ChatDatabase.GetDefaultFilePath();
-
-    public static string BuildSqliteConnectionString(string filePath)
-        => ChatDatabase.ToConnectionString(filePath);
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Conversation>(entity =>

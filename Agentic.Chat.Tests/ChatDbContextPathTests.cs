@@ -7,7 +7,7 @@ public class ChatDbContextPathTests
     [Fact]
     public void BuildSqliteConnectionString_IsLocalFileOnly_NoCredentials()
     {
-        var cs = ChatDbContext.BuildSqliteConnectionString(@"C:\data\conversations.db");
+        var cs = ChatDatabase.ToConnectionString(@"C:\data\conversations.db");
         Assert.Equal(@"Data Source=C:\data\conversations.db", cs);
         Assert.DoesNotContain("Password", cs, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("User Id", cs, StringComparison.OrdinalIgnoreCase);
@@ -17,7 +17,7 @@ public class ChatDbContextPathTests
     [Fact]
     public void GetDefaultDatabasePath_CreatesDirectoryUnderLocalAppData()
     {
-        var path = ChatDbContext.GetDefaultDatabasePath();
+        var path = ChatDatabase.GetDefaultFilePath();
         Assert.EndsWith("conversations.db", path);
         Assert.Contains("Agentic.Chat", path);
         Assert.True(Directory.Exists(Path.GetDirectoryName(path)!));

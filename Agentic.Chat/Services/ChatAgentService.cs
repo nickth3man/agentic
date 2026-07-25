@@ -183,6 +183,12 @@ public sealed class ChatAgentService
         string? userText,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        if (_streamActive)
+        {
+            throw new InvalidOperationException(
+                "A stream is already in progress. Wait for it to finish or cancel it before starting another.");
+        }
+
         _streamActive = true;
         try
         {

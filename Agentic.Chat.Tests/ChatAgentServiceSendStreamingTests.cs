@@ -324,6 +324,31 @@ public class ChatAgentServiceSendStreamingTests
         Assert.False(service.Messages[1].IsStreaming);
     }
 
+    [Fact]
+    public async Task ConcurrentSend_WhileStreamActive_ThrowsInvalidOperation()
+    {
+        var service = CreateService([new StreamDelta("hello", null)]);
+
+        await using var enumerator = service.SendStreamingAsync("first").GetAsyncEnumerator();
+        Assert.True(await enumerator.MoveNextAsync());
+        Assert.True(service.IsStreamActive);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Consume(service.SendStreamingAsync("second")));
+        Assert.Contains("already in progress", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        while (await enumerator.MoveNextAsync())
+        {
+        }
+
+        Assert.False(service.IsStreamActive);
+        Assert.Equal(2, service.Messages.Count);
+        Assert.Equal("user", service.Messages[0].Role);
+        Assert.Equal("first", service.Messages[0].Content);
+        Assert.Equal("assistant", service.Messages[1].Role);
+        Assert.Equal("hello", service.Messages[1].Content);
+    }
+
     // ---------- helpers ----------
 
     private static ChatAgentService CreateService(

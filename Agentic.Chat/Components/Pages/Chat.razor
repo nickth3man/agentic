@@ -250,7 +250,6 @@
                        @bind:event="oninput"
                        class="chat-input"
                        placeholder="Type a message…"
-                       disabled="@isBusy"
                        autocomplete="off"
                        aria-describedby="@(string.IsNullOrEmpty(errorMessage) ? null : "chat-error")" />
                 @if (isBusy)
@@ -442,6 +441,7 @@
         isBusy = true;
         statusText = "Assistant is responding";
         var ct = BeginSend();
+        await FocusComposerAsync();
 
         try
         {
@@ -466,6 +466,7 @@
         finally
         {
             EndSend();
+            await FocusComposerAsync();
         }
     }
 
@@ -480,6 +481,7 @@
         errorMessage = null;
         statusText = "Retrying";
         var ct = BeginSend();
+        await FocusComposerAsync();
 
         try
         {
@@ -504,6 +506,7 @@
         finally
         {
             EndSend();
+            await FocusComposerAsync();
         }
     }
 
@@ -518,6 +521,7 @@
         errorMessage = null;
         statusText = "Regenerating";
         var ct = BeginSend();
+        await FocusComposerAsync();
 
         try
         {
@@ -542,6 +546,7 @@
         finally
         {
             EndSend();
+            await FocusComposerAsync();
         }
     }
 }

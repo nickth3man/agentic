@@ -14,37 +14,47 @@ public sealed class ChatAgentService
             default,
             "Streaming chat completion with {MessageCount} message(s) in transcript");
 
-    private const string SystemPrompt = "You are a helpful chat agent.";
     internal const string EmptyResponsePlaceholder = "(No response content returned.)";
-
     private readonly IOpenRouterClient _client;
     private readonly OpenRouterOptions _options;
     private readonly ILogger<ChatAgentService> _logger;
     private readonly SelectedModelService _selectedModelService;
     private readonly ModelCatalogService _modelCatalog;
+    private readonly SystemPromptService _systemPromptService;
     private readonly IActiveConversationWriter _conversationWriter;
     private readonly List<ChatDisplayMessage> _displayMessages = [];
-    private readonly List<ApiChatMessage> _apiMessages =
-    [
-        new ApiChatMessage("system", SystemPrompt, null)
-    ];
+    private readonly List<ApiChatMessage> _apiMessages = [];
     private bool _streamActive;
 
+    /// <summary>
+    /// Creates the scoped chat agent with a leading system message resolved from
+    /// the UI override, then options, then <see cref="OpenRouterOptions.DefaultSystemPrompt"/>.
+    /// </summary>
     public ChatAgentService(
         IOpenRouterClient client,
         IOptions<OpenRouterOptions> options,
         ILogger<ChatAgentService> logger,
         SelectedModelService selectedModelService,
         ModelCatalogService modelCatalog,
+        SystemPromptService systemPromptService,
         IActiveConversationWriter conversationWriter)
     {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(selectedModelService);
+        ArgumentNullException.ThrowIfNull(modelCatalog);
+        ArgumentNullException.ThrowIfNull(systemPromptService);
+        ArgumentNullException.ThrowIfNull(conversationWriter);
+
         _client = client;
         _options = options.Value;
         _logger = logger;
         _selectedModelService = selectedModelService;
         _modelCatalog = modelCatalog;
-        _conversationWriter = conversationWriter
-            ?? throw new ArgumentNullException(nameof(conversationWriter));
+        _systemPromptService = systemPromptService;
+        _conversationWriter = conversationWriter;
+        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
     }
 
     public IReadOnlyList<ChatDisplayMessage> Messages => _displayMessages;
@@ -56,6 +66,9 @@ public sealed class ChatAgentService
     // Exposed via InternalsVisibleTo.
     internal IReadOnlyList<ApiChatMessage> ApiMessagesForTest => _apiMessages;
 
+    // Test-only: lets unit tests seed display-list states the public API can't
+    // produce on its own (e.g. a trailing user message — normal sends always pair
+    // user with an assistant placeholder). Exposed via InternalsVisibleTo.
     internal void AddDisplayMessageForTest(string role, string content)
     {
         _displayMessages.Add(new ChatDisplayMessage { Role = role, Content = content });
@@ -72,7 +85,7 @@ public sealed class ChatAgentService
 
         _displayMessages.Clear();
         _apiMessages.Clear();
-        _apiMessages.Add(new ApiChatMessage("system", SystemPrompt, null));
+        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
 
         foreach (var message in messages)
         {
@@ -102,6 +115,10 @@ public sealed class ChatAgentService
         }
     }
 
+    /// <summary>
+    /// Clears the display and API transcripts and reseeds the leading system message
+    /// from the current prompt resolution. No-op while a stream is active.
+    /// </summary>
     public void Reset()
     {
         if (_streamActive)
@@ -111,9 +128,45 @@ public sealed class ChatAgentService
 
         _displayMessages.Clear();
         _apiMessages.Clear();
-        _apiMessages.Add(new ApiChatMessage("system", SystemPrompt, null));
+        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
     }
 
+    /// <summary>
+    /// When the transcript is idle (no display messages), refreshes the system entry so a
+    /// newly loaded or applied UI prompt takes effect without mid-conversation surgery.
+    /// No-op while streaming or once the user has started a conversation — the next
+    /// Reset()/New chat picks up the configured prompt then.
+    /// </summary>
+    public void RefreshSystemMessageIfIdle()
+    {
+        if (_streamActive || _displayMessages.Count > 0)
+        {
+            return;
+        }
+
+        _apiMessages.Clear();
+        _apiMessages.Add(new ApiChatMessage("system", ResolveSystemPrompt(), null));
+    }
+
+    internal string ResolveSystemPrompt()
+    {
+        if (!string.IsNullOrWhiteSpace(_systemPromptService.CurrentPrompt))
+        {
+            return _systemPromptService.CurrentPrompt.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
+        {
+            return _options.SystemPrompt.Trim();
+        }
+
+        return OpenRouterOptions.DefaultSystemPrompt;
+    }
+
+    // Test-only: first _apiMessages entry must reflect the configured prompt.
+    internal string GetApiSystemPromptForTest() => _apiMessages[0].Content;
+
+    // Send a new user turn and stream the assistant response.
     public IAsyncEnumerable<ChatDisplayMessage> SendStreamingAsync(
         string userText,
         CancellationToken cancellationToken = default)

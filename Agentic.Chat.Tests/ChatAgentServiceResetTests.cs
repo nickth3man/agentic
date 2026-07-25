@@ -113,9 +113,10 @@ public class ChatAgentServiceResetTests
         var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(null);
+        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
+        systemPrompt.SetCurrentPromptForTest(null);
 
-        return (new ChatAgentService(
-            fake, options, logger, selection, catalog, NullActiveConversationWriter.Instance), fake);
+        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, NullActiveConversationWriter.Instance), fake);
     }
 
     private static JsonElement RequestMessages(FakeOpenRouterClient fake)

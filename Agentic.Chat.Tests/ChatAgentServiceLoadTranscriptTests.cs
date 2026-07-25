@@ -264,12 +264,15 @@ public class ChatAgentServiceLoadTranscriptTests
         var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
         var selection = new SelectedModelService(storage);
         selection.SetCurrentModelIdForTest(null);
+        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
+        systemPrompt.SetCurrentPromptForTest(null);
         return new ChatAgentService(
             fake,
             options,
             NullLogger<ChatAgentService>.Instance,
             selection,
             catalog,
+            systemPrompt,
             NullActiveConversationWriter.Instance);
     }
 

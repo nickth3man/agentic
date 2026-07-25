@@ -491,3 +491,4 @@ App_Data/
 *.db-wal
 
 .build-tmp/
+.tmp-merge/

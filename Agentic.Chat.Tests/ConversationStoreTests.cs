@@ -61,6 +61,7 @@ public class ConversationStoreTests : IDisposable
             NullLogger<ChatAgentService>.Instance,
             selection,
             catalog,
+            new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance),
             _persistence);
         _conversations = new ConversationService(_db, _chat, _persistence, storage);
     }
@@ -101,6 +102,7 @@ public class ConversationStoreTests : IDisposable
             NullLogger<ChatAgentService>.Instance,
             selection,
             new ModelCatalogService(new UnusedHttpClientFactory()),
+            new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance),
             persistence);
         var freshConversations = new ConversationService(_db, freshChat, persistence, storage);
         await freshConversations.InitializeAsync();

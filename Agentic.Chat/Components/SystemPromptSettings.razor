@@ -1,0 +1,245 @@
+@* SystemPromptSettings.razor — gear-icon settings popover for the system prompt.
+
+   Presets fill the textarea; the textarea stays editable. Persistence mirrors
+   SelectedModelService via SystemPromptService + ProtectedLocalStorage.
+   The "Default" preset clears the UI override so OpenRouter:SystemPrompt wins.
+   Changes apply to the next conversation (Reset/New chat); when the transcript
+   is empty, RefreshSystemMessageIfIdle updates the in-memory system entry now. *@
+
+@inject SystemPromptService SystemPrompt
+@inject ChatAgentService ChatAgent
+@inject IOptions<OpenRouterOptions> Options
+@implements IDisposable
+
+<div class="system-prompt-settings" @onkeydown="OnRootKeyDown">
+    <button type="button"
+            class="settings-gear @(IsOpen ? "is-open" : "")"
+            aria-haspopup="dialog"
+            aria-expanded="@IsOpen"
+            aria-label="System prompt settings"
+            @onclick="Toggle">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+                  stroke="currentColor" stroke-width="1.75"/>
+            <path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19.5a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4.5a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V4.5a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1h.09a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z"
+                  stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>
+        </svg>
+    </button>
+
+    @if (IsOpen)
+    {
+        <div class="settings-popover"
+             role="dialog"
+             aria-label="System prompt settings">
+            <div class="settings-popover-header">
+                <h2 class="settings-title">System prompt</h2>
+                <p class="settings-hint">Applies to the next conversation (New chat). Default uses appsettings.</p>
+            </div>
+
+            <label class="settings-label" for="system-prompt-preset">Preset</label>
+            <select id="system-prompt-preset"
+                    class="settings-preset"
+                    @bind="_selectedPreset"
+                    @bind:after="OnPresetChanged">
+                <option value="">Custom…</option>
+                @foreach (var preset in SystemPromptService.Presets)
+                {
+                    <option value="@preset.Name">@preset.Name</option>
+                }
+            </select>
+
+            <label class="settings-label" for="system-prompt-text">Prompt</label>
+            <textarea id="system-prompt-text"
+                      class="settings-textarea"
+                      rows="6"
+                      maxlength="@SystemPromptService.MaxPromptLength"
+                      spellcheck="true"
+                      @bind="_draft"
+                      @bind:event="oninput"
+                      @bind:after="OnDraftChanged"></textarea>
+
+            <div class="settings-actions">
+                <button type="button"
+                        class="settings-apply"
+                        disabled="@(_isSaving || string.IsNullOrWhiteSpace(_draft))"
+                        @onclick="ApplyAsync">
+                    @(_isSaving ? "Saving…" : "Apply")
+                </button>
+                <button type="button"
+                        class="settings-cancel"
+                        disabled="@_isSaving"
+                        @onclick="Close">
+                    Close
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool IsOpen { get; set; }
+    private string _draft = string.Empty;
+    private string _selectedPreset = string.Empty;
+    private bool _isSaving;
+    private bool _loaded;
+
+    protected override void OnInitialized()
+    {
+        SystemPrompt.OnChange += HandlePromptChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await SystemPrompt.LoadAsync();
+        }
+        catch
+        {
+            /* persistence is non-fatal */
+        }
+
+        SyncDraftFromService();
+        ChatAgent.RefreshSystemMessageIfIdle();
+        _loaded = true;
+    }
+
+    public void Dispose()
+    {
+        SystemPrompt.OnChange -= HandlePromptChanged;
+    }
+
+    private void HandlePromptChanged()
+    {
+        if (!_loaded || IsOpen)
+        {
+            return;
+        }
+
+        SyncDraftFromService();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void SyncDraftFromService()
+    {
+        if (string.IsNullOrWhiteSpace(SystemPrompt.CurrentPrompt))
+        {
+            _draft = EffectiveConfigPrompt();
+            _selectedPreset = "Default";
+            return;
+        }
+
+        _draft = SystemPrompt.CurrentPrompt!;
+        _selectedPreset = MatchPresetName(_draft) ?? string.Empty;
+    }
+
+    private string EffectiveConfigPrompt()
+        => !string.IsNullOrWhiteSpace(Options.Value.SystemPrompt)
+            ? Options.Value.SystemPrompt.Trim()
+            : OpenRouterOptions.DefaultSystemPrompt;
+
+    private static string? MatchPresetName(string prompt)
+    {
+        foreach (var preset in SystemPromptService.Presets)
+        {
+            if (preset.Prompt is null)
+            {
+                continue;
+            }
+
+            if (string.Equals(preset.Prompt, prompt, StringComparison.Ordinal))
+            {
+                return preset.Name;
+            }
+        }
+
+        return null;
+    }
+
+    private void Toggle()
+    {
+        if (IsOpen)
+        {
+            Close();
+        }
+        else
+        {
+            SyncDraftFromService();
+            IsOpen = true;
+        }
+    }
+
+    private void Close()
+    {
+        IsOpen = false;
+    }
+
+    private void OnRootKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && IsOpen)
+        {
+            Close();
+        }
+    }
+
+    private void OnPresetChanged()
+    {
+        if (string.IsNullOrEmpty(_selectedPreset))
+        {
+            return;
+        }
+
+        var preset = SystemPromptService.Presets
+            .FirstOrDefault(p => p.Name == _selectedPreset);
+        if (preset is null)
+        {
+            return;
+        }
+
+        _draft = preset.Prompt is null
+            ? EffectiveConfigPrompt()
+            : preset.Prompt;
+    }
+
+    private void OnDraftChanged()
+    {
+        if (string.IsNullOrWhiteSpace(SystemPrompt.CurrentPrompt)
+            && string.Equals(_draft.Trim(), EffectiveConfigPrompt(), StringComparison.Ordinal))
+        {
+            _selectedPreset = "Default";
+            return;
+        }
+
+        _selectedPreset = MatchPresetName(_draft) ?? string.Empty;
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_draft) || _isSaving)
+        {
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var preset = SystemPromptService.Presets
+                .FirstOrDefault(p => p.Name == _selectedPreset);
+            if (preset is not null && preset.Prompt is null)
+            {
+                await SystemPrompt.ClearAsync();
+            }
+            else
+            {
+                await SystemPrompt.SetAsync(_draft.Trim());
+            }
+
+            ChatAgent.RefreshSystemMessageIfIdle();
+            IsOpen = false;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

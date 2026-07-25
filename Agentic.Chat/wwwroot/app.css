@@ -125,6 +125,16 @@
     }
 }
 
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        color-scheme: dark;
+        --ink: #eff8f8; --ink-soft: #c0d2d7; --ink-mute: #91abb3; --paper: #10191d; --paper-elevated: rgba(23, 36, 42, .84); --line: rgba(239, 248, 248, .14); --teal: #4cb8b3; --teal-deep: #88d7d1; --teal-mist: #245d60; --copper: #e6a16f; --copper-soft: #f0bd94; --copper-mist: #533a2c; --danger: #ffaaa4; --danger-bg: #482729; --shadow-soft: 0 18px 50px rgba(0, 0, 0, .32); --shadow-lift: 0 8px 28px rgba(76, 184, 179, .18);
+        --color-2: #16383a; --color-4: #3b2c24; --color-5: #142126; --color-6: #17272d; --color-7: #182927; --color-8: #267875; --color-9: #89563a; --color-10: #376b75;
+        --color-16: rgba(29, 45, 52, .78); --color-20: rgba(83, 58, 44, .75); --color-24: rgba(29, 45, 52, .86); --color-26: #168c89; --color-27: #0c6e70; --color-29: #1d2d34; --color-33: #3d2c21; --color-44: #1a2b30; --color-48: #302820; --color-51: rgba(29, 45, 52, .90); --color-52: rgba(29, 45, 52, .96); --color-61: rgba(29, 45, 52, .92); --color-62: rgba(29, 45, 52, .94); --color-67: rgba(23, 36, 42, .96); --color-72: rgba(29, 45, 52, .88); --color-74: rgba(29, 45, 52, .82); --color-76: rgba(29, 45, 52, .94); --color-78: rgba(29, 45, 52, .85); --color-82: rgba(29, 45, 52, .82);
+        --color-75: rgba(0, 0, 0, .55); --color-77: rgba(255, 255, 255, .08); --color-83: rgba(255, 255, 255, .07); --color-89: #332f18;
+    }
+}
+
 :root[data-theme="light"] {
     color-scheme: light;
     --ink: #14222a; --ink-soft: #3d5360; --ink-mute: #6b8290;
@@ -388,7 +398,7 @@ body {
     padding: 0.4rem 0.7rem;
     border: 1px solid var(--line);
     border-radius: 999px;
-    background: var(--surface-55);
+    background: var(--color-16);
     color: var(--ink-soft);
     font: 600 0.75rem var(--font-body);
     letter-spacing: 0.02em;
@@ -398,9 +408,9 @@ body {
 
 .theme-toggle:hover,
 .theme-toggle:focus-visible {
-    border-color: var(--accent-35);
+    border-color: var(--color-17);
     color: var(--teal-deep);
-    background: var(--accent-08);
+    background: var(--color-18);
 }
 
 .theme-toggle:focus-visible {

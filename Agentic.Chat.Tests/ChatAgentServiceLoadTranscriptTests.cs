@@ -84,18 +84,18 @@ public class ChatAgentServiceLoadTranscriptTests
         }
 
         Assert.NotNull(fake.LastRequest);
-        var roles = fake.LastRequest!.Messages.Select(m => (m.Role, m.Content, m.Reasoning)).ToList();
+        var roles = fake.LastRequest!.Messages.Select(m => (m.Role, m.TextContent, m.Reasoning)).ToList();
         Assert.Equal("system", roles[0].Role);
         Assert.Equal("user", roles[1].Role);
-        Assert.Equal("u1", roles[1].Content);
+        Assert.Equal("u1", roles[1].TextContent);
         Assert.Equal("user", roles[2].Role);
-        Assert.Equal("u2", roles[2].Content);
+        Assert.Equal("u2", roles[2].TextContent);
         Assert.Equal("assistant", roles[3].Role);
         Assert.Equal("only reasoning", roles[3].Reasoning);
         Assert.Equal("user", roles[4].Role);
-        Assert.Equal("u3", roles[4].Content);
-        Assert.DoesNotContain(fake.LastRequest.Messages, m => m.Content.Contains("Error", StringComparison.Ordinal));
-        Assert.DoesNotContain(fake.LastRequest.Messages, m => m.Content.Contains("No response", StringComparison.Ordinal));
+        Assert.Equal("u3", roles[4].TextContent);
+        Assert.DoesNotContain(fake.LastRequest.Messages, m => m.TextContent.Contains("Error", StringComparison.Ordinal));
+        Assert.DoesNotContain(fake.LastRequest.Messages, m => m.TextContent.Contains("No response", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class ChatAgentServiceLoadTranscriptTests
         Assert.NotNull(fake.LastRequest);
         var assistant = Assert.Single(
             fake.LastRequest!.Messages,
-            m => m.Role == "assistant" && m.Content == "answer");
+            m => m.Role == "assistant" && m.TextContent == "answer");
         Assert.Null(assistant.Reasoning);
     }
 
@@ -234,8 +234,28 @@ public class ChatAgentServiceLoadTranscriptTests
         Assert.NotNull(fake.LastRequest);
         var assistant = Assert.Single(
             fake.LastRequest!.Messages,
-            m => m.Role == "assistant" && m.Content == "answer");
+            m => m.Role == "assistant" && m.TextContent == "answer");
         Assert.Equal("detailed thought", assistant.Reasoning);
+    }
+
+    [Fact]
+    public void LoadTranscript_UserWithImage_RebuildsMultipartApiMessage()
+    {
+        var service = CreateService(new FakeOpenRouterClient([]));
+        service.LoadTranscript(
+        [
+            new ChatDisplayMessage
+            {
+                Role = "user",
+                Content = "look",
+                ImageDataUrl = "data:image/jpeg;base64,abc"
+            }
+        ]);
+
+        var user = service.ApiMessagesForTest[1];
+        Assert.Equal("user", user.Role);
+        Assert.False(user.Content.IsText);
+        Assert.Equal("look", user.Content.Parts[0].Text);
     }
 
     private static ChatAgentService CreateService(params StreamDelta[] deltas)

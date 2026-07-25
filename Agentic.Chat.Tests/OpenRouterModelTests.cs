@@ -98,9 +98,16 @@ public class OpenRouterModelTests
     }
 
     [Fact]
-    public void SupportsReasoning_False_OnEmptySupportedParametersList()
+    public void SupportsImageInput_True_WhenModalityIncludesImage()
     {
-        var m = Build(supported: Array.Empty<string>());
-        Assert.False(m.SupportsReasoning);
+        var m = Build(modality: "text+image->text");
+        Assert.True(m.SupportsImageInput);
+    }
+
+    [Fact]
+    public void SupportsImageInput_False_ForTextOnlyModality()
+    {
+        var m = Build(modality: "text->text");
+        Assert.False(m.SupportsImageInput);
     }
 }

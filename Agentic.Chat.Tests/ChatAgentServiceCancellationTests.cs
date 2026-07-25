@@ -22,7 +22,7 @@ public class ChatAgentServiceCancellationTests
                 new StreamDelta("!", null)));
 
         using var cts = new CancellationTokenSource();
-        await using var enumerator = service.SendStreamingAsync("hi", cts.Token).GetAsyncEnumerator();
+        await using var enumerator = service.SendStreamingAsync("hi", cancellationToken: cts.Token).GetAsyncEnumerator();
 
         // Placeholder before any traffic.
         Assert.True(await enumerator.MoveNextAsync());
@@ -61,8 +61,8 @@ public class ChatAgentServiceCancellationTests
         Assert.Equal("system", service.ApiMessagesForTest[0].Role);
         Assert.Equal("user", service.ApiMessagesForTest[1].Role);
         Assert.Equal("assistant", service.ApiMessagesForTest[2].Role);
-        Assert.Equal("Hello", service.ApiMessagesForTest[2].Content);
-        Assert.DoesNotContain("(stopped)", service.ApiMessagesForTest[2].Content!);
+        Assert.Equal("Hello", service.ApiMessagesForTest[2].TextContent);
+        Assert.DoesNotContain("(stopped)", service.ApiMessagesForTest[2].TextContent);
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class ChatAgentServiceCancellationTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => Consume(service.SendStreamingAsync("hi", cts.Token)));
+            () => Consume(service.SendStreamingAsync("hi", cancellationToken: cts.Token)));
 
         Assert.Equal(2, service.Messages.Count);
         Assert.Equal("assistant", service.Messages[1].Role);
@@ -84,7 +84,7 @@ public class ChatAgentServiceCancellationTests
         Assert.Equal(2, service.ApiMessagesForTest.Count);
         Assert.Equal("system", service.ApiMessagesForTest[0].Role);
         Assert.Equal("user", service.ApiMessagesForTest[1].Role);
-        Assert.All(service.ApiMessagesForTest, m => Assert.DoesNotContain("(stopped)", m.Content ?? string.Empty));
+        Assert.All(service.ApiMessagesForTest, m => Assert.DoesNotContain("(stopped)", m.TextContent));
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class ChatAgentServiceCancellationTests
                 new StreamDelta("answer", null)));
 
         using var cts = new CancellationTokenSource();
-        await using var enumerator = service.SendStreamingAsync("hi", cts.Token).GetAsyncEnumerator();
+        await using var enumerator = service.SendStreamingAsync("hi", cancellationToken: cts.Token).GetAsyncEnumerator();
 
         Assert.True(await enumerator.MoveNextAsync()); // placeholder
         Assert.True(await enumerator.MoveNextAsync()); // reasoning "think"
@@ -117,9 +117,9 @@ public class ChatAgentServiceCancellationTests
         Assert.Equal(3, service.ApiMessagesForTest.Count);
         var apiAssistant = service.ApiMessagesForTest[2];
         Assert.Equal("assistant", apiAssistant.Role);
-        Assert.Equal(string.Empty, apiAssistant.Content);
+        Assert.Equal(string.Empty, apiAssistant.TextContent);
         Assert.Equal("think", apiAssistant.Reasoning);
-        Assert.DoesNotContain("(stopped)", apiAssistant.Content ?? string.Empty);
+        Assert.DoesNotContain("(stopped)", apiAssistant.TextContent);
         Assert.DoesNotContain("(stopped)", apiAssistant.Reasoning ?? string.Empty);
     }
 
@@ -134,7 +134,7 @@ public class ChatAgentServiceCancellationTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => Consume(service.SendStreamingAsync("hi", cts.Token)));
+            () => Consume(service.SendStreamingAsync("hi", cancellationToken: cts.Token)));
 
         Assert.Equal(2, service.Messages.Count);
         Assert.False(service.Messages[1].IsStreaming);

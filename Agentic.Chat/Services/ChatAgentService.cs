@@ -101,13 +101,16 @@ public sealed class ChatAgentService
                 Content = message.Content,
                 Reasoning = message.Reasoning,
                 IsStreaming = false,
-                IsError = message.IsError
+                IsError = message.IsError,
+                ImageDataUrl = message.ImageDataUrl
             };
             _displayMessages.Add(copy);
 
             if (copy.Role == "user")
             {
-                _apiMessages.Add(new ApiChatMessage("user", copy.Content, null));
+                _apiMessages.Add(copy.ImageDataUrl is null
+                    ? new ApiChatMessage("user", copy.Content, null)
+                    : ApiChatMessage.UserWithImage(copy.Content, copy.ImageDataUrl));
             }
             else if (copy.Role == "assistant"
                 && !copy.IsError
@@ -170,23 +173,25 @@ public sealed class ChatAgentService
     }
 
     // Test-only: first _apiMessages entry must reflect the configured prompt.
-    internal string GetApiSystemPromptForTest() => _apiMessages[0].Content;
+    internal string GetApiSystemPromptForTest() => _apiMessages[0].TextContent;
 
     // Send a new user turn and stream the assistant response.
     public IAsyncEnumerable<ChatDisplayMessage> SendStreamingAsync(
         string userText,
+        string? imageDataUrl = null,
         CancellationToken cancellationToken = default)
-        => StreamTurnAsync(TurnKind.Send, userText, cancellationToken);
+        => StreamTurnAsync(TurnKind.Send, userText, imageDataUrl, cancellationToken);
 
     public IAsyncEnumerable<ChatDisplayMessage> RetryLastAsync(CancellationToken cancellationToken = default)
-        => StreamTurnAsync(TurnKind.Retry, null, cancellationToken);
+        => StreamTurnAsync(TurnKind.Retry, null, null, cancellationToken);
 
     public IAsyncEnumerable<ChatDisplayMessage> RegenerateAsync(CancellationToken cancellationToken = default)
-        => StreamTurnAsync(TurnKind.Regenerate, null, cancellationToken);
+        => StreamTurnAsync(TurnKind.Regenerate, null, null, cancellationToken);
 
     private async IAsyncEnumerable<ChatDisplayMessage> StreamTurnAsync(
         TurnKind kind,
         string? userText,
+        string? imageDataUrl,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         if (_streamActive)
@@ -202,8 +207,15 @@ public sealed class ChatAgentService
             {
                 ArgumentException.ThrowIfNullOrWhiteSpace(userText);
                 var trimmed = userText!.Trim();
-                _displayMessages.Add(new ChatDisplayMessage { Role = "user", Content = trimmed });
-                _apiMessages.Add(new ApiChatMessage("user", trimmed, null));
+                _displayMessages.Add(new ChatDisplayMessage
+                {
+                    Role = "user",
+                    Content = trimmed,
+                    ImageDataUrl = imageDataUrl
+                });
+                _apiMessages.Add(string.IsNullOrEmpty(imageDataUrl)
+                    ? new ApiChatMessage("user", trimmed, null)
+                    : ApiChatMessage.UserWithImage(trimmed, imageDataUrl));
 
                 var modelId = _selectedModelService.CurrentModelId ?? _options.Model;
                 await _conversationWriter

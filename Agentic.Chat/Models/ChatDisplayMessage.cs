@@ -16,4 +16,7 @@ public sealed class ChatDisplayMessage
     // error text as model-visible content. Error placeholders are NEVER appended
     // to the API transcript.
     public bool IsError { get; set; }
+
+    /// <summary>Data URL thumbnail for a user-sent image (display only).</summary>
+    public string? ImageDataUrl { get; set; }
 }

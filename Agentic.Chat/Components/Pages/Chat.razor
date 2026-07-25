@@ -537,6 +537,11 @@
 
     private async Task SendCoreAsync(string text)
     {
+        // Claim busy before any await so a concurrent Enter cannot start a
+        // second stream (and cancel this one via BeginSend) during follow().
+        isBusy = true;
+        statusText = "Assistant is responding";
+
         if (_scrollController is not null)
         {
             try { await _scrollController.InvokeVoidAsync("follow"); }

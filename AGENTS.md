@@ -21,7 +21,9 @@ Start here instead of re-deriving the layout each session.
 | `Services/ChatAgentService.cs` | **Core.** Scoped service owning the in-memory transcript, streaming send (`SendStreamingAsync`), SSE delta application (`TryApplyDelta`), and `Reset()` | Async/streaming edits; scoped-lifetime assumptions (state resets on circuit restart) |
 | `Services/ModelCatalogService.cs` | Fetches + 15-min caches the OpenRouter model list | Cache expiry, `IHttpClientFactory` usage, network error handling |
 | `Services/SelectedModelService.cs` | Persists the chosen model via `ProtectedLocalStorage`; raises `OnChange` | Blazor prerender (storage unavailable until interactive); event wiring |
-| `Services/OpenRouterOptions.cs` | Bound config (`BaseUrl`, `Model`, `HttpReferer`, `AppTitle`) | Options binding; a test forbids an API key here |
+| `Services/SystemPromptService.cs` | Persists the UI system-prompt override via `ProtectedLocalStorage`; presets; raises `OnChange` | Same prerender/storage caveats as `SelectedModelService`; never log prompt text |
+| `Services/OpenRouterOptions.cs` | Bound config (`BaseUrl`, `Model`, `HttpReferer`, `AppTitle`, `SystemPrompt`) | Options binding; a test forbids an API key here |
+| `Components/SystemPromptSettings.razor` | Gear-icon settings popover for system prompt presets + textarea | Popover stacking; apply vs idle transcript refresh via `RefreshSystemMessageIfIdle` |
 | `Models/` | `ChatDisplayMessage`, `OpenRouterModel` DTOs | JSON shape drift vs. the OpenRouter API |
 | `Components/Pages/Chat.razor` | Chat page: renders messages and streaming output | `@key`, render mode, markup rendering, mobile overflow |
 | `Components/ModelPicker.razor` (+`.js`) | Model dropdown UI + JS interop | Dropdown z-index/stacking (see #10), interop disposal |

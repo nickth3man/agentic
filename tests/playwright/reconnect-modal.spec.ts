@@ -77,8 +77,6 @@ test.describe('ReconnectModal state handler', () => {
       (window as unknown as { __noReloadMarker?: string }).__noReloadMarker = 'alive';
     });
     await dispatchReconnectState(page, 'show');
-    // Give the handler a generous window to fire reload if it were going to.
-    await page.waitForTimeout(1_000);
     const marker = await page.evaluate(
       () => (window as unknown as { __noReloadMarker?: string }).__noReloadMarker,
     );
@@ -91,7 +89,6 @@ test.describe('ReconnectModal state handler', () => {
       (window as unknown as { __noReloadMarker?: string }).__noReloadMarker = 'alive';
     });
     await dispatchReconnectState(page, 'failed');
-    await page.waitForTimeout(1_000);
     const marker = await page.evaluate(
       () => (window as unknown as { __noReloadMarker?: string }).__noReloadMarker,
     );

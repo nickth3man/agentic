@@ -102,49 +102,20 @@ public sealed class OpenRouterClient : IOpenRouterClient
                 return null;
             }
 
-            string? reasoning = null;
-
-            if (delta.TryGetProperty("reasoning", out var reasoningEl) &&
-                reasoningEl.ValueKind == JsonValueKind.String)
+            // Prefer `reasoning` when that property is present as a string (even if empty),
+            // matching the prior if/else-if — do not fall through to reasoning_details.
+            string? reasoning;
+            if (delta.TryGetProperty("reasoning", out var reasoningEl)
+                && reasoningEl.ValueKind == JsonValueKind.String)
             {
-                var piece = reasoningEl.GetString();
-                if (!string.IsNullOrEmpty(piece))
-                {
-                    reasoning = piece;
-                }
+                reasoning = TryReadNonEmptyString(delta, "reasoning");
             }
-            else if (delta.TryGetProperty("reasoning_details", out var details) &&
-                     details.ValueKind == JsonValueKind.Array)
+            else
             {
-                var sb = new StringBuilder();
-                foreach (var detail in details.EnumerateArray())
-                {
-                    if (detail.TryGetProperty("text", out var textEl) &&
-                        textEl.ValueKind == JsonValueKind.String)
-                    {
-                        var piece = textEl.GetString();
-                        if (!string.IsNullOrEmpty(piece))
-                        {
-                            sb.Append(piece);
-                        }
-                    }
-                }
-                if (sb.Length > 0)
-                {
-                    reasoning = sb.ToString();
-                }
+                reasoning = ReadReasoningDetails(delta);
             }
 
-            string? content = null;
-            if (delta.TryGetProperty("content", out var contentEl) &&
-                contentEl.ValueKind == JsonValueKind.String)
-            {
-                var piece = contentEl.GetString();
-                if (!string.IsNullOrEmpty(piece))
-                {
-                    content = piece;
-                }
-            }
+            var content = TryReadNonEmptyString(delta, "content");
 
             if (reasoning is null && content is null)
             {
@@ -164,6 +135,39 @@ public sealed class OpenRouterClient : IOpenRouterClient
         {
             return null;
         }
+    }
+
+    private static string? TryReadNonEmptyString(JsonElement parent, string propertyName)
+    {
+        if (!parent.TryGetProperty(propertyName, out var el)
+            || el.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var value = el.GetString();
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private static string? ReadReasoningDetails(JsonElement delta)
+    {
+        if (!delta.TryGetProperty("reasoning_details", out var details)
+            || details.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var sb = new StringBuilder();
+        foreach (var detail in details.EnumerateArray())
+        {
+            var piece = TryReadNonEmptyString(detail, "text");
+            if (piece is not null)
+            {
+                sb.Append(piece);
+            }
+        }
+
+        return sb.Length > 0 ? sb.ToString() : null;
     }
 
     internal static MessageUsage? ParseUsage(JsonElement root)

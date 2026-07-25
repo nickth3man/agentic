@@ -21,7 +21,9 @@ Start here instead of re-deriving the layout each session.
 | `Services/ChatAgentService.cs` | **Core.** Scoped service owning the in-memory transcript, streaming send (`SendStreamingAsync`), SSE delta application (`TryApplyDelta`), and `Reset()` | Async/streaming edits; scoped-lifetime assumptions (state resets on circuit restart) |
 | `Services/ModelCatalogService.cs` | Fetches + 15-min caches the OpenRouter model list | Cache expiry, `IHttpClientFactory` usage, network error handling |
 | `Services/SelectedModelService.cs` | Persists the chosen model via `ProtectedLocalStorage`; raises `OnChange` | Blazor prerender (storage unavailable until interactive); event wiring |
-| `Services/OpenRouterOptions.cs` | Bound config (`BaseUrl`, `Model`, `HttpReferer`, `AppTitle`) | Options binding; a test forbids an API key here |
+| `Services/SystemPromptService.cs` | Persists the UI system-prompt override via `ProtectedLocalStorage`; presets; raises `OnChange` | Same prerender/storage caveats as `SelectedModelService`; never log prompt text |
+| `Services/OpenRouterOptions.cs` | Bound config (`BaseUrl`, `Model`, `HttpReferer`, `AppTitle`, `SystemPrompt`) | Options binding; a test forbids an API key here |
+| `Components/SystemPromptSettings.razor` | Gear-icon settings popover for system prompt presets + textarea | Popover stacking; apply vs idle transcript refresh via `RefreshSystemMessageIfIdle` |
 | `Models/` | `ChatDisplayMessage`, `OpenRouterModel` DTOs | JSON shape drift vs. the OpenRouter API |
 | `Components/Pages/Chat.razor` | Chat page: renders messages and streaming output | `@key`, render mode, markup rendering, mobile overflow |
 | `Components/ModelPicker.razor` (+`.js`) | Model dropdown UI + JS interop | Dropdown z-index/stacking (see #10), interop disposal |
@@ -265,28 +267,6 @@ Because green CI ⇒ auto-merge, the required suites are the only thing standing
 between a dependency bump and `main` — another reason not to weaken them. Don't
 casually edit `renovate.json5`; if bot PRs get noisy, tune throttling there
 rather than disabling checks.
-
-## Issue → PR workflow (agent skills)
-
-Two machine-level Agent Skills (open standard, agentskills.io) drive the
-issue-resolution loop in OpenCode, Claude Code, and Cursor — nothing is stored
-in this repo:
-
-- `/fix-issue <number|url>` — read the issue, discover conventions, reproduce,
-  implement, verify, open a draft PR, post a state comment.
-- `/babysit-pr <number>` — resume any PR: classify CI failures and unresolved
-  review threads, repair (max 3 rounds) or escalate.
-
-Canonical skills: `~/.config/opencode/skills/{fix-issue,babysit-pr}/` (proxied
-into `~/.claude/skills/` and `~/.agents/skills/`; commands installed per
-agent). Cross-session state lives in a `<!-- agent-state -->` comment on the
-PR, so any agent or human can resume. Portable copies:
-`~/Documents/GitHub/skills/`.
-
-Humans: treat the `<!-- agent-state -->` comment as agent-owned — put requests
-and instructions in normal PR comments instead. Two safe interventions on a
-stuck PR: set its `Status:` line to `needs-human` (agents stop and wait), or
-delete the comment entirely (resets the loop and its attempt budget).
 
 ## Git workflow (PRs on `main`)
 

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text.Json;
 using Agentic.Chat.Data;
 using Agentic.Chat.Models;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
@@ -15,8 +13,6 @@ public sealed record ConversationListItem(Guid Id, string Title, DateTimeOffset 
 public sealed class ConversationService
 {
     public const string ActiveConversationStorageKey = "active-conversation";
-    public const string DefaultTitle = ConversationTitle.Default;
-    public const int AutoTitleMaxLength = ConversationTitle.MaxLength;
     private const int TitleMaxLength = 200;
 
     private readonly ChatDbContext _db;
@@ -44,11 +40,6 @@ public sealed class ConversationService
 
     public event Action? OnChange;
 
-    public static string AutoTitle(string? firstUserMessage)
-        => ConversationTitle.FromFirstUserMessage(firstUserMessage);
-
-    public static string BuildAutoTitle(string? firstUserMessage) => AutoTitle(firstUserMessage);
-
     public async Task InitializeAsync()
     {
         await RefreshListCoreAsync().ConfigureAwait(false);
@@ -66,15 +57,13 @@ public sealed class ConversationService
             return;
         }
 
+        // No conversations yet — reset in-memory state but leave any stale
+        // protected-storage key alone (NewChatAsync clears storage explicitly).
         _persistence.ActiveConversationId = null;
         _chat.Reset();
         IsLoaded = true;
         OnChange?.Invoke();
     }
-
-    public Task CreateNewAsync() => NewChatAsync();
-
-    public Task StartNewChatAsync() => NewChatAsync();
 
     public async Task NewChatAsync()
     {
@@ -83,9 +72,7 @@ public sealed class ConversationService
             return;
         }
 
-        _persistence.ActiveConversationId = null;
-        _chat.Reset();
-        await ClearActiveIdAsync().ConfigureAwait(false);
+        await ClearActiveConversationAsync().ConfigureAwait(false);
         await RefreshListCoreAsync().ConfigureAwait(false);
         IsLoaded = true;
         OnChange?.Invoke();
@@ -124,8 +111,6 @@ public sealed class ConversationService
         IsLoaded = true;
         OnChange?.Invoke();
     }
-
-    public Task SelectAsync(Guid conversationId) => SwitchAsync(conversationId);
 
     public async Task RenameAsync(Guid conversationId, string title)
     {
@@ -185,9 +170,7 @@ public sealed class ConversationService
             return;
         }
 
-        _persistence.ActiveConversationId = null;
-        _chat.Reset();
-        await ClearActiveIdAsync().ConfigureAwait(false);
+        await ClearActiveConversationAsync().ConfigureAwait(false);
         IsLoaded = true;
         OnChange?.Invoke();
     }
@@ -208,12 +191,6 @@ public sealed class ConversationService
         }
     }
 
-    public Task RefreshAfterPersistAsync() => RefreshAfterTurnAsync();
-
-    public Task NotifyTurnPersistedAsync() => RefreshAfterTurnAsync();
-
-    public Task SaveProgressAsync() => RefreshAfterTurnAsync();
-
     private async Task RefreshListCoreAsync()
     {
         // SQLite cannot ORDER BY DateTimeOffset — load then sort in memory.
@@ -225,6 +202,13 @@ public sealed class ConversationService
             .OrderByDescending(c => c.UpdatedAt.UtcTicks)
             .Select(c => new ConversationListItem(c.Id, c.Title, c.UpdatedAt))
             .ToList();
+    }
+
+    private async Task ClearActiveConversationAsync()
+    {
+        _persistence.ActiveConversationId = null;
+        _chat.Reset();
+        await ClearActiveIdAsync().ConfigureAwait(false);
     }
 
     private async Task<Guid?> TryReadActiveIdAsync()
@@ -241,13 +225,7 @@ public sealed class ConversationService
                 return id;
             }
         }
-        catch (InvalidOperationException)
-        {
-        }
-        catch (CryptographicException)
-        {
-        }
-        catch (JsonException)
+        catch (Exception ex) when (ProtectedStorageHelpers.IsBestEffortPersistenceFailure(ex))
         {
         }
 
@@ -262,7 +240,7 @@ public sealed class ConversationService
                 .SetAsync(ActiveConversationStorageKey, id.ToString("D"))
                 .ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or CryptographicException or JsonException)
+        catch (Exception ex) when (ProtectedStorageHelpers.IsBestEffortPersistenceFailure(ex))
         {
         }
     }
@@ -273,7 +251,7 @@ public sealed class ConversationService
         {
             await _protectedStore.DeleteAsync(ActiveConversationStorageKey).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or CryptographicException or JsonException)
+        catch (Exception ex) when (ProtectedStorageHelpers.IsBestEffortPersistenceFailure(ex))
         {
         }
     }
@@ -284,4 +262,3 @@ public sealed class ConversationService
         IsLoaded = true;
     }
 }
-

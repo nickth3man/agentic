@@ -1,13 +1,16 @@
 // ModelPicker.razor.js
 // First ES-module JS isolation usage in this project.
-// Two exports: attach a one-shot `pointerdown` listener on `document` that closes
-// the popover when the user clicks outside it, and detach that listener on close.
+// Exports: outside-click close, viewport-clamped popover positioning, and
+// small helpers for search autofocus / active-row scroll.
 //
-// The cleanup value returned from `listenForOutsideClick` is a plain JS function;
-// Blazor wraps it as an IJSObjectReference. We pass it back to
-// `stopListeningForOutsideClick` when the popover closes from the .NET side
-// (Escape key, row selection, trigger toggle). When the user simply clicks
-// outside, the listener removes itself and notifies .NET via ClosePopover().
+// The cleanup value returned from `listenForOutsideClick` /
+// `listenForPopoverReposition` is a plain JS function; Blazor wraps it as an
+// IJSObjectReference. We pass it back to the matching stop* helper when the
+// popover closes from the .NET side (Escape key, row selection, trigger toggle).
+
+const POPOVER_MAX_WIDTH = 640;
+const POPOVER_MARGIN = 8;
+const POPOVER_GAP = 8;
 
 export function listenForOutsideClick(element, dotnetRef) {
     if (!element) return null;
@@ -39,6 +42,105 @@ export function listenForOutsideClick(element, dotnetRef) {
 }
 
 export function stopListeningForOutsideClick(cleanupFn) {
+    if (typeof cleanupFn === 'function') {
+        cleanupFn();
+    }
+}
+
+/**
+ * Clamp the popover to the viewport: fixed position, width <= 640px, never
+ * past the left/right/bottom edges. Absolute left:0 + width:100vw was wrong
+ * because left is relative to the trigger, not the viewport.
+ *
+ * If an ancestor still has a transform/filter (fixed containing block), style
+ * offsets are relative to that ancestor — subtract its viewport origin.
+ */
+export function positionPopover(wrapper) {
+    if (!wrapper) return;
+    const trigger = wrapper.querySelector('.model-picker-trigger');
+    const popover = wrapper.querySelector('.model-picker-popover');
+    if (!trigger || !popover) return;
+
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const triggerRect = trigger.getBoundingClientRect();
+    const origin = getFixedContainingBlockOrigin(popover);
+
+    const width = Math.min(POPOVER_MAX_WIDTH, Math.max(0, viewportWidth - POPOVER_MARGIN * 2));
+    const maxLeft = viewportWidth - POPOVER_MARGIN - width;
+    const leftViewport = Math.min(
+        Math.max(triggerRect.left, POPOVER_MARGIN),
+        Math.max(POPOVER_MARGIN, maxLeft));
+
+    // Apply horizontal placement first so height measurement uses the final width.
+    popover.style.position = 'fixed';
+    popover.style.left = `${leftViewport - origin.left}px`;
+    popover.style.right = 'auto';
+    popover.style.width = `${width}px`;
+    popover.style.maxWidth = `${width}px`;
+
+    // Keep the scrollable table within the remaining viewport height.
+    const tableWrap = popover.querySelector('.model-picker-table-wrap');
+    let topViewport = triggerRect.bottom + POPOVER_GAP;
+    // Clear prior max-height so measurement reflects natural size first.
+    if (tableWrap instanceof HTMLElement) {
+        tableWrap.style.maxHeight = '';
+    }
+    const chromeHeight = popover.getBoundingClientRect().height
+        - (tableWrap instanceof HTMLElement ? tableWrap.getBoundingClientRect().height : 0);
+    const availableForTable = Math.max(
+        120,
+        viewportHeight - POPOVER_MARGIN - topViewport - Math.max(0, chromeHeight));
+    if (tableWrap instanceof HTMLElement) {
+        tableWrap.style.maxHeight = `${availableForTable}px`;
+    }
+
+    const popoverHeight = popover.getBoundingClientRect().height;
+    const maxTop = viewportHeight - POPOVER_MARGIN - popoverHeight;
+    if (popoverHeight > 0 && topViewport > maxTop) {
+        topViewport = Math.max(POPOVER_MARGIN, maxTop);
+    }
+
+    popover.style.top = `${topViewport - origin.top}px`;
+}
+
+/** Viewport origin of the nearest ancestor that traps position:fixed. */
+function getFixedContainingBlockOrigin(el) {
+    let node = el.parentElement;
+    while (node && node !== document.documentElement) {
+        const style = getComputedStyle(node);
+        if (style.transform !== 'none'
+            || (style.filter && style.filter !== 'none')
+            || (style.perspective && style.perspective !== 'none')) {
+            const rect = node.getBoundingClientRect();
+            return { left: rect.left, top: rect.top };
+        }
+        node = node.parentElement;
+    }
+    return { left: 0, top: 0 };
+}
+
+/**
+ * Position once, then reclamp on resize/scroll while open. Returns a cleanup
+ * function (same pattern as listenForOutsideClick).
+ */
+export function listenForPopoverReposition(wrapper) {
+    if (!wrapper) return null;
+
+    const reposition = () => positionPopover(wrapper);
+    reposition();
+
+    window.addEventListener('resize', reposition, { passive: true });
+    // Capture scroll so nested scrollers (table wrap) and page scroll both reclamp.
+    window.addEventListener('scroll', reposition, { passive: true, capture: true });
+
+    return function cleanup() {
+        window.removeEventListener('resize', reposition);
+        window.removeEventListener('scroll', reposition, true);
+    };
+}
+
+export function stopPopoverReposition(cleanupFn) {
     if (typeof cleanupFn === 'function') {
         cleanupFn();
     }

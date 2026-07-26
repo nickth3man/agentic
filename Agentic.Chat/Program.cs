@@ -65,7 +65,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ChatDbContext>();
-    db.Database.EnsureCreated();
+    await ChatDatabase.EnsureCreatedAndMigratedAsync(db);
 }
 
 if (!app.Environment.IsDevelopment())

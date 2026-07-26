@@ -227,13 +227,13 @@
     align-items: center;
     padding: 0.35rem 0.65rem;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--color-16);
     backdrop-filter: blur(10px);
     border: 1px solid var(--line);
     font-size: 0.68rem;
     font-weight: 600;
     letter-spacing: 0.02em;
-    color: var(--ink-mute);
+    color: var(--ink);
     white-space: nowrap;
 }
 
@@ -246,8 +246,12 @@
 /* ─── Off-canvas conversation drawer (phone-first) ─── */
 .chat-shell {
     position: relative;
-    min-height: 100vh;
-    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .sidebar-backdrop {

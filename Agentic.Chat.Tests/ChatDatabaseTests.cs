@@ -1,4 +1,6 @@
 using Agentic.Chat.Data;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 namespace Agentic.Chat.Tests;
 
@@ -31,5 +33,102 @@ public class ChatDatabaseTests
     {
         Assert.True(ChatDatabase.ConnectionStringLooksCredentialed("Data Source=x.db;Password=secret"));
         Assert.False(ChatDatabase.ConnectionStringLooksCredentialed("Data Source=x.db"));
+    }
+
+    [Fact]
+    public async Task EnsureCreatedAndMigrated_AddsMissingImageDataUrl_OnLegacySchema()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), "agentic-schema-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            await using (var raw = new SqliteConnection(ChatDatabase.ToConnectionString(dbPath)))
+            {
+                await raw.OpenAsync();
+                await using var cmd = raw.CreateCommand();
+                // Pre-ImageDataUrl Messages shape (mirrors an older EnsureCreated file).
+                cmd.CommandText =
+                    """
+                    CREATE TABLE "Conversations" (
+                        "Id" TEXT NOT NULL CONSTRAINT "PK_Conversations" PRIMARY KEY,
+                        "Title" TEXT NOT NULL,
+                        "Model" TEXT NOT NULL,
+                        "CreatedAt" TEXT NOT NULL,
+                        "UpdatedAt" TEXT NOT NULL
+                    );
+                    CREATE TABLE "Messages" (
+                        "Id" TEXT NOT NULL CONSTRAINT "PK_Messages" PRIMARY KEY,
+                        "ConversationId" TEXT NOT NULL,
+                        "Role" TEXT NOT NULL,
+                        "Content" TEXT NOT NULL,
+                        "Reasoning" TEXT NULL,
+                        "UsagePromptTokens" INTEGER NULL,
+                        "UsageCompletionTokens" INTEGER NULL,
+                        "UsageCost" TEXT NULL,
+                        "UsageIsFree" INTEGER NOT NULL,
+                        "CreatedAt" TEXT NOT NULL,
+                        FOREIGN KEY ("ConversationId") REFERENCES "Conversations" ("Id") ON DELETE CASCADE
+                    );
+                    """;
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            var options = new DbContextOptionsBuilder<ChatDbContext>()
+                .UseSqlite(ChatDatabase.ToConnectionString(dbPath))
+                .Options;
+            await using var db = new ChatDbContext(options);
+            await ChatDatabase.EnsureCreatedAndMigratedAsync(db);
+
+            var conversationId = Guid.NewGuid();
+            db.Conversations.Add(new Conversation
+            {
+                Id = conversationId,
+                Title = "test",
+                Model = "test-model",
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            db.Messages.Add(new Message
+            {
+                Id = Guid.NewGuid(),
+                ConversationId = conversationId,
+                Role = "user",
+                Content = "hi",
+                ImageDataUrl = "data:image/png;base64,xx",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var loaded = await db.Messages.SingleAsync(m => m.ConversationId == conversationId);
+            Assert.Equal("data:image/png;base64,xx", loaded.ImageDataUrl);
+        }
+        finally
+        {
+            try { File.Delete(dbPath); } catch { /* best-effort */ }
+            try { File.Delete(dbPath + "-shm"); } catch { /* best-effort */ }
+            try { File.Delete(dbPath + "-wal"); } catch { /* best-effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task EnsureCreatedAndMigrated_IsIdempotent_OnCurrentSchema()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), "agentic-schema-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            var options = new DbContextOptionsBuilder<ChatDbContext>()
+                .UseSqlite(ChatDatabase.ToConnectionString(dbPath))
+                .Options;
+            await using var db = new ChatDbContext(options);
+            await ChatDatabase.EnsureCreatedAndMigratedAsync(db);
+            await ChatDatabase.EnsureCreatedAndMigratedAsync(db);
+
+            Assert.True(await db.Database.CanConnectAsync());
+        }
+        finally
+        {
+            try { File.Delete(dbPath); } catch { /* best-effort */ }
+            try { File.Delete(dbPath + "-shm"); } catch { /* best-effort */ }
+            try { File.Delete(dbPath + "-wal"); } catch { /* best-effort */ }
+        }
     }
 }

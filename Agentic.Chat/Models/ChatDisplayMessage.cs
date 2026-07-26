@@ -38,10 +38,16 @@ public sealed class ChatDisplayMessage
     /// </summary>
     public DateTimeOffset? CompletedAt { get; private set; }
 
+    /// <summary>
+    /// True while the assistant is still in the reasoning phase (streaming and
+    /// no answer content yet). Drives the Thinking pulse / shimmer — not panel open.
+    /// </summary>
+    public bool IsThinking => IsStreaming && string.IsNullOrEmpty(Content);
+
     public bool IsThinkingOpen
         => ThinkingUserTouched
             ? UserSelectedThinkingOpen
-            : IsStreaming && string.IsNullOrEmpty(Content);
+            : IsThinking;
 
     public int? ThoughtDurationSeconds
     {

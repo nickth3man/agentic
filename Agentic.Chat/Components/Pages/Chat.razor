@@ -213,15 +213,19 @@
                         @if (!isUser && (!string.IsNullOrEmpty(message.Reasoning) || message.IsThinkingOpen))
                         {
                             var thinkingOpen = message.IsThinkingOpen;
-                            <details class="thinking-panel @(thinkingOpen ? "is-active" : "")"
+                            var thinkingActive = message.IsThinking;
+                            <details class="thinking-panel @(thinkingActive ? "is-active" : "")"
                                      open="@thinkingOpen">
                                 <summary @onclick="() => ToggleThinking(message)"
                                          @onclick:preventDefault>
-                                    <span class="think-pulse" aria-hidden="true">
-                                        <span></span><span></span><span></span>
-                                    </span>
+                                    @if (thinkingActive)
+                                    {
+                                        <span class="think-pulse" aria-hidden="true">
+                                            <span></span><span></span><span></span>
+                                        </span>
+                                    }
                                     <span class="think-label">
-                                        @(thinkingOpen ? "Thinking…" : "Thinking")
+                                        @(thinkingActive ? "Thinking…" : "Thinking")
                                     </span>
                                     @if (ThoughtDurationLabel(message) is { } duration)
                                     {

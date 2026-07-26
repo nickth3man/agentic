@@ -3,7 +3,7 @@
     align-items: stretch;
     border-radius: 0.45rem;
     border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--color-16);
     backdrop-filter: blur(8px);
     overflow: hidden;
 }
@@ -18,7 +18,7 @@
     font-weight: 600;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: var(--ink-soft);
+    color: var(--ink);
     background: transparent;
     cursor: pointer;
     line-height: 1.2;
@@ -30,13 +30,13 @@
 }
 
 .reasoning-effort-btn:hover {
-    color: var(--teal-deep);
-    background: rgba(13, 124, 124, 0.08);
+    color: var(--teal);
+    background: var(--color-18);
 }
 
 .reasoning-effort-btn.is-active {
     color: var(--teal-deep);
-    background: rgba(13, 124, 124, 0.14);
+    background: var(--color-14);
 }
 
 .reasoning-effort-btn:focus-visible {

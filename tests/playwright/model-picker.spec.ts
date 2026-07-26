@@ -98,13 +98,24 @@ test.describe('Model picker viewport clamp', () => {
     const tableWrap = popover.locator('.model-picker-table-wrap');
     await expect(tableWrap).toBeVisible();
 
-    const before = await tableWrap.evaluate((el) => el.scrollTop);
+    // CI uses a small fake catalog that may not overflow at natural height.
+    // Force a short wrap so nested scroll is exercised regardless of model count.
     await tableWrap.evaluate((el) => {
-      el.scrollTop = Math.min(el.scrollHeight, 240);
+      (el as HTMLElement).style.maxHeight = '120px';
+    });
+
+    const metrics = await tableWrap.evaluate((el) => ({
+      before: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+
+    await tableWrap.evaluate((el) => {
+      el.scrollTop = Math.min(el.scrollHeight, 80);
     });
     const after = await tableWrap.evaluate((el) => el.scrollTop);
-    // Catalog is long enough that the wrap should accept a scroll offset.
-    expect(after).toBeGreaterThan(before);
+    expect(after).toBeGreaterThan(metrics.before);
 
     await page.waitForTimeout(50);
     await assertPopoverInViewport(popover);

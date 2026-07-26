@@ -131,4 +131,77 @@ public class ChatDatabaseTests
             try { File.Delete(dbPath + "-wal"); } catch { /* best-effort */ }
         }
     }
+
+    [Fact]
+    public void IsDuplicateColumnError_MatchesSqliteDuplicateColumnMessage()
+    {
+        var ex = new InvalidOperationException(
+            "inner",
+            new SqliteException("SQLite Error 1: 'duplicate column name: ImageDataUrl'.", 1));
+
+        Assert.True(ChatDatabase.IsDuplicateColumnError(ex, "ImageDataUrl"));
+        Assert.False(ChatDatabase.IsDuplicateColumnError(ex, "Reasoning"));
+        Assert.False(ChatDatabase.IsDuplicateColumnError(
+            new InvalidOperationException("other"), "ImageDataUrl"));
+    }
+
+    [Fact]
+    public async Task EnsureCreatedAndMigrated_SwallowsDuplicateColumnRace()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), "agentic-schema-" + Guid.NewGuid().ToString("N") + ".db");
+        try
+        {
+            await using (var raw = new SqliteConnection(ChatDatabase.ToConnectionString(dbPath)))
+            {
+                await raw.OpenAsync();
+                await using var cmd = raw.CreateCommand();
+                cmd.CommandText =
+                    """
+                    CREATE TABLE "Conversations" (
+                        "Id" TEXT NOT NULL CONSTRAINT "PK_Conversations" PRIMARY KEY,
+                        "Title" TEXT NOT NULL,
+                        "Model" TEXT NOT NULL,
+                        "CreatedAt" TEXT NOT NULL,
+                        "UpdatedAt" TEXT NOT NULL
+                    );
+                    CREATE TABLE "Messages" (
+                        "Id" TEXT NOT NULL CONSTRAINT "PK_Messages" PRIMARY KEY,
+                        "ConversationId" TEXT NOT NULL,
+                        "Role" TEXT NOT NULL,
+                        "Content" TEXT NOT NULL,
+                        "CreatedAt" TEXT NOT NULL,
+                        FOREIGN KEY ("ConversationId") REFERENCES "Conversations" ("Id") ON DELETE CASCADE
+                    );
+                    """;
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            var options = new DbContextOptionsBuilder<ChatDbContext>()
+                .UseSqlite(ChatDatabase.ToConnectionString(dbPath))
+                .Options;
+
+            // Two contexts racing the same ALTER path — loser may hit duplicate column.
+            await Task.WhenAll(
+                Task.Run(async () =>
+                {
+                    await using var db = new ChatDbContext(options);
+                    await ChatDatabase.EnsureCreatedAndMigratedAsync(db);
+                }),
+                Task.Run(async () =>
+                {
+                    await using var db = new ChatDbContext(options);
+                    await ChatDatabase.EnsureCreatedAndMigratedAsync(db);
+                }));
+
+            await using var verify = new ChatDbContext(options);
+            await ChatDatabase.EnsureCreatedAndMigratedAsync(verify);
+            Assert.True(await verify.Database.CanConnectAsync());
+        }
+        finally
+        {
+            try { File.Delete(dbPath); } catch { /* best-effort */ }
+            try { File.Delete(dbPath + "-shm"); } catch { /* best-effort */ }
+            try { File.Delete(dbPath + "-wal"); } catch { /* best-effort */ }
+        }
+    }
 }

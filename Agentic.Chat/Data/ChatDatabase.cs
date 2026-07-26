@@ -133,8 +133,16 @@ public static class ChatDatabase
                     continue;
                 }
 
-                await db.Database.ExecuteSqlRawAsync(alterSql, cancellationToken)
-                    .ConfigureAwait(false);
+                try
+                {
+                    await db.Database.ExecuteSqlRawAsync(alterSql, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex) when (IsDuplicateColumnError(ex, name))
+                {
+                    // Concurrent startups can both pass the PRAGMA check, then the
+                    // loser hits SQLite "duplicate column name". Treat as success.
+                }
             }
         }
         finally
@@ -164,5 +172,27 @@ public static class ChatDatabase
         }
 
         return names;
+    }
+
+    /// <summary>
+    /// True when <paramref name="ex"/> (or an inner exception) is SQLite refusing
+    /// to ADD a column that already exists — the concurrent-startup race.
+    /// </summary>
+    internal static bool IsDuplicateColumnError(Exception ex, string columnName)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            var message = current.Message;
+            if (message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase)
+                && message.Contains(columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

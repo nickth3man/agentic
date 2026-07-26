@@ -391,6 +391,19 @@
             // JS isolation failure is non-fatal — popover still opens, just
             // without click-outside-to-close. Escape and row-select still work.
         }
+
+        // User may have opened the picker before the module finished importing.
+        // Attach outside-click + viewport clamp now so that open is not stuck
+        // on the CSS-only fallback for the rest of the session open.
+        if (_module is not null && IsOpen)
+        {
+            await AttachOutsideClickAsync();
+            if (_needsPositionPopover)
+            {
+                _needsPositionPopover = false;
+                await AttachPopoverPositionAsync();
+            }
+        }
     }
 
     private void HandleSelectedChanged()
@@ -595,15 +608,7 @@
     }
 
     [JSInvokable]
-    public async Task ClosePopover()
-    {
-        if (!IsOpen) return;
-        IsOpen = false;
-        _needsPositionPopover = false;
-        StateHasChanged();
-        await DetachOutsideClickAsync();
-        await DetachPopoverPositionAsync();
-    }
+    public Task ClosePopover() => CloseAsync();
 
     // ── Formatting helpers ───────────────────────────────────────────────
     private static string Capitalize(string slug)

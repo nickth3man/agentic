@@ -80,6 +80,8 @@ export function positionPopover(wrapper) {
     popover.style.maxWidth = `${width}px`;
 
     // Keep the scrollable table within the remaining viewport height.
+    // Do not force a floor height — a short visual viewport (mobile keyboard)
+    // must be allowed to shrink the table so both edges stay on-screen.
     const tableWrap = popover.querySelector('.model-picker-table-wrap');
     let topViewport = triggerRect.bottom + POPOVER_GAP;
     // Clear prior max-height so measurement reflects natural size first.
@@ -89,7 +91,7 @@ export function positionPopover(wrapper) {
     const chromeHeight = popover.getBoundingClientRect().height
         - (tableWrap instanceof HTMLElement ? tableWrap.getBoundingClientRect().height : 0);
     const availableForTable = Math.max(
-        120,
+        0,
         viewportHeight - POPOVER_MARGIN - topViewport - Math.max(0, chromeHeight));
     if (tableWrap instanceof HTMLElement) {
         tableWrap.style.maxHeight = `${availableForTable}px`;
@@ -104,14 +106,31 @@ export function positionPopover(wrapper) {
     popover.style.top = `${topViewport - origin.top}px`;
 }
 
+/** True when this element establishes a containing block for position:fixed. */
+function createsFixedContainingBlock(style) {
+    if (style.transform !== 'none') return true;
+    if (style.filter && style.filter !== 'none') return true;
+    if (style.perspective && style.perspective !== 'none') return true;
+    if (style.backdropFilter && style.backdropFilter !== 'none') return true;
+    // Safari still exposes the prefixed form in some builds.
+    if (style.webkitBackdropFilter && style.webkitBackdropFilter !== 'none') return true;
+
+    const contain = style.contain || '';
+    if (/\b(layout|paint|strict|content)\b/.test(contain)) return true;
+
+    const willChange = style.willChange || '';
+    if (/\b(transform|filter|perspective|backdrop-filter|contain)\b/.test(willChange)) {
+        return true;
+    }
+
+    return false;
+}
+
 /** Viewport origin of the nearest ancestor that traps position:fixed. */
 function getFixedContainingBlockOrigin(el) {
     let node = el.parentElement;
     while (node && node !== document.documentElement) {
-        const style = getComputedStyle(node);
-        if (style.transform !== 'none'
-            || (style.filter && style.filter !== 'none')
-            || (style.perspective && style.perspective !== 'none')) {
+        if (createsFixedContainingBlock(getComputedStyle(node))) {
             const rect = node.getBoundingClientRect();
             return { left: rect.left, top: rect.top };
         }
@@ -121,22 +140,51 @@ function getFixedContainingBlockOrigin(el) {
 }
 
 /**
- * Position once, then reclamp on resize/scroll while open. Returns a cleanup
- * function (same pattern as listenForOutsideClick).
+ * Position once, then reclamp on resize / window scroll / visualViewport
+ * changes while open. Nested table scrolling is intentionally ignored so we
+ * do not clear max-height mid-scroll (which clamps scrollTop and jumps the
+ * list). Returns a cleanup function (same pattern as listenForOutsideClick).
  */
 export function listenForPopoverReposition(wrapper) {
     if (!wrapper) return null;
 
-    const reposition = () => positionPopover(wrapper);
+    let scheduled = false;
+    let rafId = 0;
+    const reposition = () => {
+        if (scheduled) return;
+        scheduled = true;
+        rafId = requestAnimationFrame(() => {
+            scheduled = false;
+            rafId = 0;
+            positionPopover(wrapper);
+        });
+    };
+
     reposition();
 
     window.addEventListener('resize', reposition, { passive: true });
-    // Capture scroll so nested scrollers (table wrap) and page scroll both reclamp.
-    window.addEventListener('scroll', reposition, { passive: true, capture: true });
+    // No capture — only window/document scroll, not the model table scroller.
+    window.addEventListener('scroll', reposition, { passive: true });
+
+    const visualViewport = window.visualViewport;
+    if (visualViewport) {
+        // Mobile keyboard / pinch-zoom update visualViewport without a window resize.
+        visualViewport.addEventListener('resize', reposition, { passive: true });
+        visualViewport.addEventListener('scroll', reposition, { passive: true });
+    }
 
     return function cleanup() {
         window.removeEventListener('resize', reposition);
-        window.removeEventListener('scroll', reposition, true);
+        window.removeEventListener('scroll', reposition);
+        if (visualViewport) {
+            visualViewport.removeEventListener('resize', reposition);
+            visualViewport.removeEventListener('scroll', reposition);
+        }
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = 0;
+        }
+        scheduled = false;
     };
 }
 

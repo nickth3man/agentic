@@ -230,6 +230,8 @@
     private IJSObjectReference? _module;
     private DotNetObjectReference<ModelPicker>? _dotnetRef;
     private IJSObjectReference? _cleanupFn;
+    private IJSObjectReference? _positionCleanupFn;
+    private bool _needsPositionPopover;
 
     // ── Catalog state ────────────────────────────────────────────────────
     private List<OpenRouterModel> AllModels = new();
@@ -359,6 +361,12 @@
     {
         if (!firstRender)
         {
+            if (_needsPositionPopover && _module is not null)
+            {
+                _needsPositionPopover = false;
+                await AttachPopoverPositionAsync();
+            }
+
             if (_scrollActiveModelIntoView && _module is not null)
             {
                 _scrollActiveModelIntoView = false;
@@ -382,6 +390,19 @@
         {
             // JS isolation failure is non-fatal — popover still opens, just
             // without click-outside-to-close. Escape and row-select still work.
+        }
+
+        // User may have opened the picker before the module finished importing.
+        // Attach outside-click + viewport clamp now so that open is not stuck
+        // on the CSS-only fallback for the rest of the session open.
+        if (_module is not null && IsOpen)
+        {
+            await AttachOutsideClickAsync();
+            if (_needsPositionPopover)
+            {
+                _needsPositionPopover = false;
+                await AttachPopoverPositionAsync();
+            }
         }
     }
 
@@ -431,6 +452,7 @@
         IsOpen = true;
         SearchText = string.Empty; // reset search each time we reopen
         _activeModelIndex = -1;
+        _needsPositionPopover = true;
         StateHasChanged();
         await AttachOutsideClickAsync();
         if (_shouldAutoFocusSearch)
@@ -447,8 +469,10 @@
     {
         if (!IsOpen) return;
         IsOpen = false;
+        _needsPositionPopover = false;
         StateHasChanged();
         await DetachOutsideClickAsync();
+        await DetachPopoverPositionAsync();
     }
 
     private async Task SelectAsync(string modelId)
@@ -526,7 +550,7 @@
             : "model-picker-sort-desc";
     }
 
-    // ── JS interop for click-outside ─────────────────────────────────────
+    // ── JS interop for click-outside + viewport clamp ────────────────────
     private async Task AttachOutsideClickAsync()
     {
         if (_module is null || _dotnetRef is null || _cleanupFn is not null) return;
@@ -555,14 +579,36 @@
         catch { /* already disposed */ }
     }
 
-    [JSInvokable]
-    public async Task ClosePopover()
+    private async Task AttachPopoverPositionAsync()
     {
-        if (!IsOpen) return;
-        IsOpen = false;
-        StateHasChanged();
-        await DetachOutsideClickAsync();
+        if (_module is null || _positionCleanupFn is not null) return;
+        try
+        {
+            _positionCleanupFn = await _module.InvokeAsync<IJSObjectReference>(
+                "listenForPopoverReposition", _wrapper);
+        }
+        catch
+        {
+            // Positioning failure is non-fatal — CSS fallback still applies.
+        }
     }
+
+    private async Task DetachPopoverPositionAsync()
+    {
+        if (_positionCleanupFn is null) return;
+        var fn = _positionCleanupFn;
+        _positionCleanupFn = null;
+        if (_module is not null)
+        {
+            try { await _module.InvokeVoidAsync("stopPopoverReposition", fn); }
+            catch { /* idempotent teardown */ }
+        }
+        try { await fn.DisposeAsync(); }
+        catch { /* already disposed */ }
+    }
+
+    [JSInvokable]
+    public Task ClosePopover() => CloseAsync();
 
     // ── Formatting helpers ───────────────────────────────────────────────
     private static string Capitalize(string slug)
@@ -623,6 +669,7 @@
         Preferences.OnChange -= HandleSelectedChanged;
         _dotnetRef?.Dispose();
         await DetachOutsideClickAsync();
+        await DetachPopoverPositionAsync();
         if (_module is not null)
         {
             try { await _module.DisposeAsync(); }

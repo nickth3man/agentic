@@ -27,6 +27,8 @@ test.describe('Chat with fake OpenRouter SSE', () => {
     await expect(assistant.locator('.thinking-text')).toContainText('I will reason through this.');
     await expect(assistant.locator('.markdown-body')).toContainText('Streamed answer.');
     await expect(assistant).not.toHaveClass(/is-streaming/);
+    await expect(assistant.locator('.thinking-panel')).not.toHaveClass(/is-active/);
+    await expect(assistant.locator('.think-pulse')).toHaveCount(0);
     await expect(page.locator('.chat-bubble.user')).toHaveCount(1);
     await expect(page.locator('.chat-bubble.assistant')).toHaveCount(1);
   });

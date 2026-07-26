@@ -22,13 +22,34 @@ public class ChatDisplayMessageTests
     {
         var message = new ChatDisplayMessage { Role = "assistant", IsStreaming = true };
 
+        Assert.True(message.IsThinking);
         Assert.True(message.IsThinkingOpen);
 
         message.ApplyDelta(
             new StreamDelta(null, "Working through the problem."),
             DateTimeOffset.UnixEpoch);
 
+        Assert.True(message.IsThinking);
         Assert.True(message.IsThinkingOpen);
+    }
+
+    [Fact]
+    public void IsThinking_StopsWhenAnswerStartsOrStreamCompletes()
+    {
+        var message = new ChatDisplayMessage { Role = "assistant", IsStreaming = true };
+        message.ApplyDelta(new StreamDelta(null, "Reasoning"), DateTimeOffset.UnixEpoch);
+        Assert.True(message.IsThinking);
+
+        message.ApplyDelta(new StreamDelta("Answer", null), DateTimeOffset.UnixEpoch.AddSeconds(1));
+        Assert.False(message.IsThinking);
+
+        // User can re-open the panel without restarting the pulse.
+        message.SetThinkingOpenByUser(true);
+        Assert.True(message.IsThinkingOpen);
+        Assert.False(message.IsThinking);
+
+        message.MarkCompleted(DateTimeOffset.UnixEpoch.AddSeconds(2));
+        Assert.False(message.IsThinking);
     }
 
     [Fact]

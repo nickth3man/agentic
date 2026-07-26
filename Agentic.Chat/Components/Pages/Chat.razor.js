@@ -60,7 +60,13 @@ export function initialize(container, sentinel, jumpButton) {
     const follow = () => {
         isFollowing = true;
         updateJumpButton();
-        scheduleScrollToLatest();
+        // Jump / send-start must scroll immediately; rAF coalescing is only
+        // for high-frequency streaming updates via update(true).
+        if (frame) {
+            cancelAnimationFrame(frame);
+            frame = 0;
+        }
+        scrollToLatest();
     };
 
     const jumpToLatest = () => follow();

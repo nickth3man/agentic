@@ -14,6 +14,7 @@
 
 <div class="model-picker" @ref="_wrapper">
     <button type="button"
+            @ref="_trigger"
             class="model-picker-trigger @(IsOpen ? "is-open" : "")"
             aria-haspopup="dialog"
             aria-expanded="@IsOpen"
@@ -34,9 +35,12 @@
 
     @if (IsOpen)
     {
-        <div class="model-picker-popover"
-             role="dialog"
+        <dialog class="model-picker-popover"
+             open
+             @ref="_popover"
              aria-label="Select a model"
+             aria-modal="true"
+             tabindex="-1"
              @onkeydown="OnPopoverKeyAsync">
             <div class="model-picker-search-row">
                 <span class="model-picker-search-icon" aria-hidden="true">
@@ -69,6 +73,12 @@
                         <path d="M4 20v-4h4"
                               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
+                </button>
+                <button type="button"
+                        class="model-picker-close"
+                        aria-label="Close model picker"
+                        @onclick="CloseAsync">
+                    ×
                 </button>
             </div>
 
@@ -159,7 +169,7 @@
                             }
                             @foreach (var group in ModelGroups)
                             {
-                                <tr class="model-picker-section-row">
+                                <tr class="model-picker-section-row" @key="group.Name">
                                     <th colspan="6" scope="rowgroup">@group.Name</th>
                                 </tr>
                                 @foreach (var model in group.Models)
@@ -168,6 +178,7 @@
                                     var isActive = model.Id == ActiveModel?.Id;
                                     var isFavorite = Preferences.IsFavorite(model.Id);
                                     <tr class="model-picker-row @(isSelected ? "is-selected" : "") @(isActive ? "is-active" : "")"
+                                        @key="model.Id"
                                         aria-selected="@(isSelected ? "true" : "false")"
                                         @onclick="() => SelectAsync(model.Id)">
                                         <td class="model-picker-cell-provider col-provider">
@@ -215,23 +226,36 @@
                                     </tr>
                                 }
                             }
+                            @if (HiddenModelCount > 0)
+                            {
+                                <tr class="model-picker-limit-row">
+                                    <td colspan="6" class="model-picker-limit">
+                                        Showing @VisibleModels.Count of @SortedAndFiltered.Count models.
+                                        Search to narrow the catalog.
+                                    </td>
+                                </tr>
+                            }
                         </tbody>
                     </table>
                 }
             </div>
-        </div>
+        </dialog>
     }
 </div>
 
 @code {
     // ── Element / JS refs ────────────────────────────────────────────────
     private ElementReference _wrapper;
+    private ElementReference _trigger;
+    private ElementReference _popover;
     private ElementReference _searchInput;
     private IJSObjectReference? _module;
     private DotNetObjectReference<ModelPicker>? _dotnetRef;
     private IJSObjectReference? _cleanupFn;
     private IJSObjectReference? _positionCleanupFn;
+    private IJSObjectReference? _modalCleanupFn;
     private bool _needsPositionPopover;
+    private bool _needsModalInitialize;
 
     // ── Catalog state ────────────────────────────────────────────────────
     private List<OpenRouterModel> AllModels = new();
@@ -246,6 +270,7 @@
     private int _activeModelIndex = -1;
     private bool _shouldAutoFocusSearch;
     private bool _scrollActiveModelIntoView;
+    private const int MaxRenderedModels = 80;
 
     // ── Sort state ───────────────────────────────────────────────────────
     private enum SortCol { Provider, Model, InputCost, OutputCost, Context, Added }
@@ -323,15 +348,32 @@
                 .ToList();
 
             var groups = new List<ModelGroup>();
-            if (favorites.Count > 0) groups.Add(new("Favorites", favorites));
-            if (recent.Count > 0) groups.Add(new("Recent", recent));
-            if (remaining.Count > 0) groups.Add(new("All models", remaining));
+            var remainingSlots = MaxRenderedModels;
+            if (favorites.Count > 0)
+            {
+                var visibleFavorites = favorites.Take(remainingSlots).ToList();
+                groups.Add(new("Favorites", visibleFavorites));
+                remainingSlots -= visibleFavorites.Count;
+            }
+            if (recent.Count > 0 && remainingSlots > 0)
+            {
+                var visibleRecent = recent.Take(remainingSlots).ToList();
+                groups.Add(new("Recent", visibleRecent));
+                remainingSlots -= visibleRecent.Count;
+            }
+            if (remaining.Count > 0 && remainingSlots > 0)
+            {
+                groups.Add(new(SearchText.Length > 0 ? "Search results" : "Browse models",
+                    remaining.Take(remainingSlots).ToList()));
+            }
             return groups;
         }
     }
 
     private IReadOnlyList<OpenRouterModel> VisibleModels =>
         ModelGroups.SelectMany(group => group.Models).ToList();
+
+    private int HiddenModelCount => Math.Max(0, SortedAndFiltered.Count - VisibleModels.Count);
 
     private OpenRouterModel? ActiveModel =>
         _activeModelIndex is >= 0 && _activeModelIndex < VisibleModels.Count
@@ -361,6 +403,12 @@
     {
         if (!firstRender)
         {
+            if (_needsModalInitialize && _module is not null)
+            {
+                _needsModalInitialize = false;
+                await InitializeModalAsync();
+            }
+
             if (_needsPositionPopover && _module is not null)
             {
                 _needsPositionPopover = false;
@@ -382,7 +430,7 @@
         try
         {
             _module = await JS.InvokeAsync<IJSObjectReference>(
-                "import", "./Components/ModelPicker.razor.js");
+                "import", "./js/model-picker.js");
             _dotnetRef = DotNetObjectReference.Create(this);
             _shouldAutoFocusSearch = await _module.InvokeAsync<bool>("shouldAutoFocusSearch");
         }
@@ -398,6 +446,11 @@
         if (_module is not null && IsOpen)
         {
             await AttachOutsideClickAsync();
+            if (_needsModalInitialize)
+            {
+                _needsModalInitialize = false;
+                await InitializeModalAsync();
+            }
             if (_needsPositionPopover)
             {
                 _needsPositionPopover = false;
@@ -453,23 +506,18 @@
         SearchText = string.Empty; // reset search each time we reopen
         _activeModelIndex = -1;
         _needsPositionPopover = true;
+        _needsModalInitialize = true;
         StateHasChanged();
         await AttachOutsideClickAsync();
-        if (_shouldAutoFocusSearch)
-        {
-            // By the time the await chain completes, Blazor has flushed the render
-            // that put the input in the DOM. Coarse pointers skip this to avoid
-            // opening the virtual keyboard before the user requests it.
-            try { await _searchInput.FocusAsync(); }
-            catch { /* focus failure is non-fatal */ }
-        }
     }
 
     private async Task CloseAsync()
     {
         if (!IsOpen) return;
+        await CloseModalAsync();
         IsOpen = false;
         _needsPositionPopover = false;
+        _needsModalInitialize = false;
         StateHasChanged();
         await DetachOutsideClickAsync();
         await DetachPopoverPositionAsync();
@@ -610,6 +658,50 @@
     [JSInvokable]
     public Task ClosePopover() => CloseAsync();
 
+    [JSInvokable]
+    public Task CloseModal() => CloseAsync();
+
+    private async Task InitializeModalAsync()
+    {
+        if (_module is null || _dotnetRef is null || _modalCleanupFn is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            _modalCleanupFn = await _module.InvokeAsync<IJSObjectReference>(
+                "openModal",
+                _popover,
+                _trigger,
+                _dotnetRef,
+                "CloseModal",
+                _shouldAutoFocusSearch ? ".model-picker-search" : null);
+        }
+        catch
+        {
+            // The picker still renders as a non-modal dialog if top-layer setup fails.
+        }
+    }
+
+    private async Task CloseModalAsync()
+    {
+        if (_modalCleanupFn is null)
+        {
+            return;
+        }
+
+        var cleanup = _modalCleanupFn;
+        _modalCleanupFn = null;
+        if (_module is not null)
+        {
+            try { await _module.InvokeVoidAsync("closeModal", cleanup, true); }
+            catch { /* browser context may already be gone */ }
+        }
+        try { await cleanup.DisposeAsync(); }
+        catch { /* already disposed */ }
+    }
+
     // ── Formatting helpers ───────────────────────────────────────────────
     private static string Capitalize(string slug)
     {
@@ -668,6 +760,7 @@
         SelectedModel.OnChange -= HandleSelectedChanged;
         Preferences.OnChange -= HandleSelectedChanged;
         _dotnetRef?.Dispose();
+        await CloseModalAsync();
         await DetachOutsideClickAsync();
         await DetachPopoverPositionAsync();
         if (_module is not null)

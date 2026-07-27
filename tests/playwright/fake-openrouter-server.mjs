@@ -32,6 +32,18 @@ const models = {
   ],
 };
 
+// Keep the browser fixture large enough to exercise the model picker's bounded
+// rendering path without relying on the live OpenRouter catalog.
+models.data.push(...Array.from({ length: 100 }, (_, index) => ({
+  id: `fixture/catalog-${String(index + 1).padStart(3, '0')}`,
+  name: `Catalog Model ${String(index + 1).padStart(3, '0')}`,
+  context_length: 131072,
+  created: 1753488000 - index,
+  architecture: { modality: 'text->text' },
+  pricing: { prompt: '0.000001', completion: '0.000002' },
+  supported_parameters: [],
+})));
+
 function json(response, statusCode, body) {
   response.writeHead(statusCode, { 'content-type': 'application/json' });
   response.end(JSON.stringify(body));

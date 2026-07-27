@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function selectReasoningModel(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Select model' }).click();
+  await page.getByRole('searchbox', { name: 'Search models' }).fill('Test Reasoner');
   await page.locator('.model-picker-row').filter({ hasText: 'Test Reasoner' }).click();
   await expect(page.getByRole('button', { name: 'Select model' })).toContainText('Test Reasoner');
 }

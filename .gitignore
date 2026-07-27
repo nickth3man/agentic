@@ -492,3 +492,6 @@ App_Data/
 
 .build-tmp/
 .tmp-merge/
+# Local browser-verification artifacts.
+.playwright-cli/
+output/

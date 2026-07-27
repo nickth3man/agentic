@@ -36,6 +36,22 @@ public sealed class ClientSharedAssetsTests
         Assert.Equal(serverModule, clientModule);
     }
 
+    [Fact]
+    public void HomeRedirect_IsRelativeToTheConfiguredBasePath()
+    {
+        var root = FindRepoRoot();
+        var homeComponent = File.ReadAllText(
+            Path.Combine(
+                root,
+                "Agentic.Chat",
+                "Components",
+                "Pages",
+                "Home.razor"));
+
+        Assert.Contains("Navigation.NavigateTo(\"chat\", replace: true)", homeComponent);
+        Assert.DoesNotContain("Navigation.NavigateTo(\"/chat\"", homeComponent);
+    }
+
     private static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

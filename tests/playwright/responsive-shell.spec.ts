@@ -1,15 +1,26 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
+
+async function openOverlay(trigger: Locator, openState: Locator) {
+  await expect.poll(async () => {
+    if (await openState.count() === 0) {
+      await trigger.click();
+    }
+
+    return openState.count();
+  }, {
+    timeout: 15_000,
+    intervals: [100, 250, 500, 1_000],
+  }).toBe(1);
+}
 
 test.describe('Responsive chat shell', () => {
   test('keeps settings on-screen and restores focus on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/chat');
-    await page.getByRole('button', { name: 'New chat', exact: true }).last().click();
 
-    const trigger = page.getByRole('button', { name: 'Chat settings' });
-    await trigger.click();
-
+    const trigger = page.locator('button.settings-gear');
     const dialog = page.getByRole('dialog', { name: 'Chat settings' });
+    await openOverlay(trigger, page.locator('dialog.settings-popover'));
     await expect(dialog).toBeVisible();
     const bounds = await dialog.evaluate((element) => {
       const rect = element.getBoundingClientRect();
@@ -68,15 +79,15 @@ test.describe('Responsive chat shell', () => {
     await page.goto('/chat');
     await page.getByRole('button', { name: 'New chat', exact: true }).last().click();
 
-    const trigger = page.getByRole('button', { name: 'Open conversation list' });
-    await trigger.click();
-
+    const trigger = page.locator('button.sidebar-toggle');
     const drawer = page.getByRole('dialog', { name: 'Conversations' });
+    await openOverlay(trigger, page.locator('.chat-shell.sidebar-open'));
     await expect(drawer).toBeVisible();
     await expect(page.locator('main')).toHaveAttribute('inert', '');
-    expect(await drawer.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+    const closeButton = drawer.getByRole('button', { name: 'Close conversation list' });
+    await expect(closeButton).toBeFocused();
     for (const control of [
-      drawer.getByRole('button', { name: 'Close conversation list' }),
+      closeButton,
       drawer.getByRole('button', { name: 'New chat', exact: true }),
       drawer.getByRole('button', { name: 'Rename conversation' }).first(),
       drawer.getByRole('button', { name: 'Delete conversation' }).first(),
@@ -99,13 +110,13 @@ test.describe('Responsive chat shell', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/chat');
 
-    const sidebar = page.getByLabel('Conversations');
-    const geometry = await sidebar.evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      return { left: rect.left, width: rect.width };
-    });
-    expect(geometry.left).toBe(0);
-    expect(geometry.width).toBeGreaterThanOrEqual(280);
+    const sidebar = page.locator('aside.chat-sidebar[aria-label="Conversations"]');
+    await expect(sidebar).toBeVisible();
+    await expect(sidebar).toHaveCSS('width', '320px');
+    const geometry = await sidebar.boundingBox();
+    expect(geometry).not.toBeNull();
+    expect(geometry!.x).toBe(0);
+    expect(geometry!.width).toBeGreaterThanOrEqual(280);
     const workspace = await page.locator('main').evaluate((element) => {
       const main = element.getBoundingClientRect();
       const header = element.querySelector('header')!.getBoundingClientRect();

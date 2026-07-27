@@ -1255,6 +1255,11 @@ h1[tabindex="-1"]:focus-visible {
         grid-column: 1 / -1;
         grid-row: 2;
         justify-self: stretch;
+        /* The wide-viewport rule pushes the pills right; on the stacked mobile
+           header they belong at the left edge, lined up with the drawer
+           toggle above them. */
+        justify-content: flex-start;
+        margin-left: 0;
         width: 100%;
         max-width: 100%;
         flex-wrap: nowrap;

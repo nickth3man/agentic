@@ -142,6 +142,10 @@
                 {
                     <div class="conversation-usage" aria-label="Conversation cost">@_sessionUsage</div>
                 }
+                @* Hosts host-specific header controls. The WebAssembly client
+                   fills this with its OpenRouter credential switcher; the
+                   server app renders nothing here. *@
+                <SectionOutlet SectionName="chat-header-actions" />
                 <SystemPromptSettings />
                 <button type="button"
                         class="new-chat-btn"

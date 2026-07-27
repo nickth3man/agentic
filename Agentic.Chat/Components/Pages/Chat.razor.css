@@ -7,15 +7,25 @@
 }
 
 .composer-attach {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     width: 2.25rem;
     height: 2.25rem;
     border-radius: 999px;
     border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.6);
+    /* Token, not a literal white: the hardcoded value rendered as a bright
+       grey disc floating in the dark composer. */
+    background: var(--color-16);
     font-size: 1rem;
     line-height: 1;
     cursor: pointer;
+}
+
+.composer-attach:focus-within {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
 }
 
 .composer-image-chip {
@@ -25,7 +35,7 @@
     padding: 0.25rem 0.35rem;
     border-radius: 0.6rem;
     border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.65);
+    background: var(--color-16);
 }
 
 .composer-image-chip img {
@@ -333,6 +343,20 @@
     cursor: pointer;
 }
 
+/* Without these the drawer controls fall back to the square white UA ring,
+   which is what the user sees first: opening the drawer moves focus to the
+   close button. */
+.sidebar-close:focus-visible,
+.sidebar-icon-btn:focus-visible,
+.sidebar-new:focus-visible,
+.sidebar-toggle:focus-visible,
+.sidebar-item-main:focus-visible,
+.sidebar-rename-input:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+}
+
 .sidebar-close {
     border: none;
     background: var(--color-3);
@@ -614,9 +638,9 @@
     gap: 0.35rem;
     margin: -3rem 0 0;
     padding: 0.45rem 0.8rem;
-    border: 1px solid rgba(13, 124, 124, 0.35);
+    border: 1px solid var(--color-17);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--color-76);
     box-shadow: 0 0.45rem 1.1rem rgba(20, 34, 42, 0.18);
     color: var(--teal-deep);
     font: 650 0.8rem var(--font-body);
@@ -626,7 +650,7 @@
 }
 
 .jump-to-latest:hover {
-    background: rgba(232, 246, 244, 0.98);
+    background: var(--color-18);
 }
 
 .jump-to-latest:focus-visible {

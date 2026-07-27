@@ -297,3 +297,8 @@
         animation: none;
     }
 }
+.settings-error {
+    color: var(--color-56);
+    flex-basis: 100%;
+    margin: 0;
+}

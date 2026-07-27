@@ -33,7 +33,7 @@ export function openModal(dialog, trigger, dotnetRef, closeMethod, focusSelector
         if (!active || closing) return;
         closing = true;
         cleanup(true);
-        dotnetRef.invokeMethodAsync(closeMethod);
+        void dotnetRef.invokeMethodAsync(closeMethod).catch(() => {});
     };
 
     const handleCancel = (event) => {
@@ -86,7 +86,7 @@ export function listenForOutsideClick(element, dotnetRef) {
         active = false;
         document.removeEventListener('pointerdown', handler);
         // Fire-and-forget; .NET side will tear down its own state.
-        dotnetRef.invokeMethodAsync('ClosePopover');
+        void dotnetRef.invokeMethodAsync('ClosePopover').catch(() => {});
     };
 
     // `passive: true` so we never block the click from doing its primary job.

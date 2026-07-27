@@ -36,6 +36,7 @@
     @if (IsOpen)
     {
         <dialog class="model-picker-popover"
+             open
              @ref="_popover"
              aria-label="Select a model"
              aria-modal="true"
@@ -92,7 +93,7 @@
                 else if (LoadError is not null)
                 {
                     <div class="model-picker-error" role="alert">
-                        <p>Couldn't load models: @LoadError.Message</p>
+                        <p>Couldn't load models.</p>
                         <button type="button" class="model-picker-retry" disabled="@IsLoading" @onclick="RefreshAsync">
                             @(IsLoading ? "Retrying…" : "Retry")
                         </button>
@@ -168,7 +169,7 @@
                             }
                             @foreach (var group in ModelGroups)
                             {
-                                <tr class="model-picker-section-row">
+                                <tr class="model-picker-section-row" @key="group.Name">
                                     <th colspan="6" scope="rowgroup">@group.Name</th>
                                 </tr>
                                 @foreach (var model in group.Models)
@@ -177,6 +178,7 @@
                                     var isActive = model.Id == ActiveModel?.Id;
                                     var isFavorite = Preferences.IsFavorite(model.Id);
                                     <tr class="model-picker-row @(isSelected ? "is-selected" : "") @(isActive ? "is-active" : "")"
+                                        @key="model.Id"
                                         aria-selected="@(isSelected ? "true" : "false")"
                                         @onclick="() => SelectAsync(model.Id)">
                                         <td class="model-picker-cell-provider col-provider">

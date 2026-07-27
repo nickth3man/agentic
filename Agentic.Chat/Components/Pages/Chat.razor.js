@@ -13,6 +13,7 @@ export function openDrawer(drawer, main, trigger, dotnetRef) {
     }
 
     let active = true;
+    let focusFrame = 0;
     const focusableSelector = [
         "button:not([disabled])",
         "input:not([disabled])",
@@ -31,6 +32,10 @@ export function openDrawer(drawer, main, trigger, dotnetRef) {
         active = false;
         document.removeEventListener("keydown", handleKeyDown, true);
         mobile.removeEventListener("change", handleBreakpointChange);
+        if (focusFrame) {
+            cancelAnimationFrame(focusFrame);
+            focusFrame = 0;
+        }
         if (main instanceof HTMLElement) main.inert = false;
         drawer.removeAttribute("tabindex");
         if (restoreFocus && trigger instanceof HTMLElement) {
@@ -41,12 +46,13 @@ export function openDrawer(drawer, main, trigger, dotnetRef) {
     const close = () => {
         if (!active) return;
         dispose(true);
-        dotnetRef.invokeMethodAsync("CloseDrawer");
+        void dotnetRef.invokeMethodAsync("CloseDrawer").catch(() => {});
     };
 
     const handleKeyDown = (event) => {
         if (event.key === "Escape") {
             event.preventDefault();
+            close();
             return;
         }
         if (event.key !== "Tab") return;
@@ -77,7 +83,9 @@ export function openDrawer(drawer, main, trigger, dotnetRef) {
     if (main instanceof HTMLElement) main.inert = true;
     document.addEventListener("keydown", handleKeyDown, true);
     mobile.addEventListener("change", handleBreakpointChange);
-    requestAnimationFrame(() => {
+    focusFrame = requestAnimationFrame(() => {
+        focusFrame = 0;
+        if (!active) return;
         const first = focusable()[0];
         (first ?? drawer).focus({ preventScroll: true });
     });

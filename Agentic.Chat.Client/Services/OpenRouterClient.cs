@@ -8,21 +8,24 @@ using Microsoft.Extensions.Options;
 namespace Agentic.Chat.Services;
 
 public sealed class OpenRouterClient(
+    HttpClient http,
     OpenRouterCredentialService credentials,
-    IOptions<OpenRouterOptions> options) : IOpenRouterClient
+    IOptions<OpenRouterOptions> options,
+    ILogger<OpenRouterClient> logger) : IOpenRouterClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly OpenRouterCredentialService _credentials = credentials;
+    private readonly HttpClient _http = http;
     private readonly OpenRouterOptions _options = options.Value;
 
     public async IAsyncEnumerable<StreamDelta> StreamChatAsync(
         ChatCompletionRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         var apiKey = await _credentials
             .GetKeyForModelAsync(request.Model)
             .ConfigureAwait(false);
-        using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         using var httpRequest = new HttpRequestMessage(
             HttpMethod.Post,
             $"{_options.BaseUrl.TrimEnd('/')}/chat/completions")
@@ -36,7 +39,7 @@ public sealed class OpenRouterClient(
         httpRequest.Headers.TryAddWithoutValidation("HTTP-Referer", _options.HttpReferer);
         httpRequest.Headers.TryAddWithoutValidation("X-OpenRouter-Title", _options.AppTitle);
 
-        using var response = await client
+        using var response = await _http
             .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
@@ -63,18 +66,26 @@ public sealed class OpenRouterClient(
         }
     }
 
-    private static StreamDelta? DecodeDelta(string payload)
+    private StreamDelta? DecodeDelta(string payload)
     {
         try
         {
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
             if (root.TryGetProperty("error", out var error))
             {
-                var message = error.TryGetProperty("message", out var messageElement)
+                var message = error.ValueKind == JsonValueKind.Object
+                    && error.TryGetProperty("message", out var messageElement)
+                    && messageElement.ValueKind == JsonValueKind.String
                     ? messageElement.GetString()
                     : "OpenRouter stopped the stream.";
-                var code = error.TryGetProperty("code", out var codeElement)
+                var code = error.ValueKind == JsonValueKind.Object
+                    && error.TryGetProperty("code", out var codeElement)
+                    && codeElement.ValueKind == JsonValueKind.Number
                     && codeElement.TryGetInt32(out var parsedCode)
                         ? parsedCode
                         : 500;
@@ -85,20 +96,24 @@ public sealed class OpenRouterClient(
             if (!root.TryGetProperty("choices", out var choices)
                 || choices.ValueKind != JsonValueKind.Array
                 || choices.GetArrayLength() == 0
-                || !choices[0].TryGetProperty("delta", out var delta))
+                || choices[0].ValueKind != JsonValueKind.Object
+                || !choices[0].TryGetProperty("delta", out var delta)
+                || delta.ValueKind != JsonValueKind.Object)
             {
                 return usage is null ? null : new StreamDelta(null, null, usage);
             }
 
             var content = ReadNonEmptyString(delta, "content");
-            var reasoning = ReadNonEmptyString(delta, "reasoning")
-                ?? ReadReasoningDetails(delta);
+            var reasoning = delta.TryGetProperty("reasoning", out _)
+                ? ReadNonEmptyString(delta, "reasoning")
+                : ReadReasoningDetails(delta);
             return content is null && reasoning is null && usage is null
                 ? null
                 : new StreamDelta(content, reasoning, usage);
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            ClientLog.MalformedPayload(logger, exception, payload.Length);
             return null;
         }
     }
@@ -124,7 +139,10 @@ public sealed class OpenRouterClient(
         var result = new StringBuilder();
         foreach (var detail in details.EnumerateArray())
         {
-            result.Append(ReadNonEmptyString(detail, "text"));
+            if (detail.ValueKind == JsonValueKind.Object)
+            {
+                result.Append(ReadNonEmptyString(detail, "text"));
+            }
         }
         return result.Length == 0 ? null : result.ToString();
     }
@@ -132,8 +150,11 @@ public sealed class OpenRouterClient(
     private static MessageUsage? ParseUsage(JsonElement root)
     {
         if (!root.TryGetProperty("usage", out var usage)
+            || usage.ValueKind != JsonValueKind.Object
             || !usage.TryGetProperty("prompt_tokens", out var prompt)
             || !usage.TryGetProperty("completion_tokens", out var completion)
+            || prompt.ValueKind != JsonValueKind.Number
+            || completion.ValueKind != JsonValueKind.Number
             || !prompt.TryGetInt32(out var promptTokens)
             || !completion.TryGetInt32(out var completionTokens))
         {
@@ -142,11 +163,13 @@ public sealed class OpenRouterClient(
 
         decimal? cost = null;
         if (usage.TryGetProperty("total_cost", out var totalCost)
+            && totalCost.ValueKind == JsonValueKind.Number
             && totalCost.TryGetDecimal(out var parsedTotal))
         {
             cost = parsedTotal;
         }
         else if (usage.TryGetProperty("cost", out var costElement)
+            && costElement.ValueKind == JsonValueKind.Number
             && costElement.TryGetDecimal(out var parsedCost))
         {
             cost = parsedCost;

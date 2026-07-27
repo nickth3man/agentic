@@ -1,17 +1,71 @@
+// Keeps a streaming response in view until the reader deliberately scrolls away.
+// The controller owns its DOM-only state so streaming render updates do not need a
+// Blazor round trip to show or hide the jump control.
+
+const BOTTOM_THRESHOLD = 48;
+
 export function openDrawer(drawer, main, trigger, dotnetRef) {
-    const previous = document.activeElement;
-    const selector = "button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex='-1'])";
-    const onKeyDown = event => {
+    const mobile = window.matchMedia("(max-width: 1099px)");
+    if (!(drawer instanceof HTMLElement) || !mobile.matches) {
+        return {
+            dispose() {},
+        };
+    }
+
+    let active = true;
+    let focusFrame = 0;
+    const focusableSelector = [
+        "button:not([disabled])",
+        "input:not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        "a[href]",
+        "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+
+    const focusable = () =>
+        [...drawer.querySelectorAll(focusableSelector)]
+            .filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+
+    const dispose = (restoreFocus = true) => {
+        if (!active) return;
+        active = false;
+        document.removeEventListener("keydown", handleKeyDown, true);
+        mobile.removeEventListener("change", handleBreakpointChange);
+        if (focusFrame) {
+            cancelAnimationFrame(focusFrame);
+            focusFrame = 0;
+        }
+        if (main instanceof HTMLElement) main.inert = false;
+        drawer.removeAttribute("tabindex");
+        if (restoreFocus && trigger instanceof HTMLElement) {
+            trigger.focus({ preventScroll: true });
+        }
+    };
+
+    const close = () => {
+        if (!active) return;
+        dispose(true);
+        void dotnetRef.invokeMethodAsync("CloseDrawer").catch(() => {});
+    };
+
+    const handleKeyDown = (event) => {
         if (event.key === "Escape") {
             event.preventDefault();
-            dotnetRef.invokeMethodAsync("CloseSidebarFromJs");
+            close();
             return;
         }
         if (event.key !== "Tab") return;
-        const focusable = [...drawer.querySelectorAll(selector)];
-        if (!focusable.length) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
+
+        const items = focusable();
+        if (items.length === 0) {
+            event.preventDefault();
+            drawer.focus();
+            return;
+        }
+
+        const first = items[0];
+        const last = items[items.length - 1];
         if (event.shiftKey && document.activeElement === first) {
             event.preventDefault();
             last.focus();
@@ -20,77 +74,222 @@ export function openDrawer(drawer, main, trigger, dotnetRef) {
             first.focus();
         }
     };
-    document.addEventListener("keydown", onKeyDown);
-    drawer.querySelector(selector)?.focus();
+
+    const handleBreakpointChange = (event) => {
+        if (!event.matches) close();
+    };
+
+    drawer.setAttribute("tabindex", "-1");
+    if (main instanceof HTMLElement) main.inert = true;
+    document.addEventListener("keydown", handleKeyDown, true);
+    mobile.addEventListener("change", handleBreakpointChange);
+    focusFrame = requestAnimationFrame(() => {
+        focusFrame = 0;
+        if (!active) return;
+        const first = focusable()[0];
+        (first ?? drawer).focus({ preventScroll: true });
+    });
+
     return {
-        dispose(restoreFocus = true) {
-            document.removeEventListener("keydown", onKeyDown);
-            if (restoreFocus) (trigger ?? previous)?.focus?.();
-            main?.removeAttribute("aria-hidden");
-        }
+        dispose,
     };
 }
 
 export function initialize(container, sentinel, jumpButton) {
-    let streaming = false;
-    let following = true;
-    const nearBottom = () =>
-        container.scrollHeight - container.scrollTop - container.clientHeight < 96;
-    const render = () => { jumpButton.hidden = !streaming || following; };
+    if (!container || !sentinel || !jumpButton) return null;
+
+    let isStreaming = false;
+    let isFollowing = true;
+    let frame = 0;
+
+    const isAtBottom = () =>
+        container.scrollHeight - container.scrollTop - container.clientHeight <= BOTTOM_THRESHOLD;
+
+    const updateJumpButton = () => {
+        jumpButton.hidden = !isStreaming || isFollowing;
+    };
+
+    const scrollToLatest = () => {
+        frame = 0;
+        if (!isFollowing) return;
+
+        // The app's default smooth scrolling is pleasant for user-initiated
+        // navigation, but it falls behind streamed deltas. Bypass it here.
+        const originalBehavior = container.style.scrollBehavior;
+        container.style.scrollBehavior = "auto";
+        container.scrollTop = container.scrollHeight;
+        container.style.scrollBehavior = originalBehavior;
+    };
+
+    const scheduleScrollToLatest = () => {
+        if (!isFollowing || frame) return;
+        frame = requestAnimationFrame(scrollToLatest);
+    };
+
+    const handleScroll = () => {
+        if (isAtBottom()) {
+            isFollowing = true;
+        } else if (isStreaming) {
+            isFollowing = false;
+        }
+        updateJumpButton();
+    };
+
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            if (entry.isIntersecting) {
+                isFollowing = true;
+                updateJumpButton();
+            }
+        },
+        {
+            root: container,
+            rootMargin: `0px 0px ${BOTTOM_THRESHOLD}px 0px`,
+            threshold: 1,
+        });
+
     const follow = () => {
-        following = true;
-        sentinel.scrollIntoView({ block: "end" });
-        render();
+        isFollowing = true;
+        updateJumpButton();
+        // Jump / send-start must scroll immediately; rAF coalescing is only
+        // for high-frequency streaming updates via update(true).
+        if (frame) {
+            cancelAnimationFrame(frame);
+            frame = 0;
+        }
+        scrollToLatest();
     };
-    const onScroll = () => {
-        following = nearBottom();
-        render();
-    };
-    container.addEventListener("scroll", onScroll, { passive: true });
-    jumpButton.addEventListener("click", follow);
-    render();
+
+    const jumpToLatest = () => follow();
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    jumpButton.addEventListener("click", jumpToLatest);
+    observer.observe(sentinel);
+    updateJumpButton();
+
     return {
-        update(isStreaming) {
-            streaming = isStreaming;
-            if (streaming && following) requestAnimationFrame(follow);
-            render();
+        update(streaming) {
+            isStreaming = streaming;
+            if (isStreaming) scheduleScrollToLatest();
+            updateJumpButton();
         },
         follow,
         dispose() {
-            container.removeEventListener("scroll", onScroll);
-            jumpButton.removeEventListener("click", follow);
-        }
+            if (frame) cancelAnimationFrame(frame);
+            container.removeEventListener("scroll", handleScroll);
+            jumpButton.removeEventListener("click", jumpToLatest);
+            observer.disconnect();
+        },
     };
 }
 
-export async function writeText(text) {
+async function copyText(text) {
     try {
+        if (!navigator.clipboard?.writeText) {
+            throw new Error("Clipboard API is unavailable.");
+        }
+
         await navigator.clipboard.writeText(text);
         return true;
-    } catch {
+    } catch (error) {
+        console.warn("Could not copy to the clipboard.", error);
         return false;
     }
 }
 
-export function addCodeCopyButtons() {
-    for (const block of document.querySelectorAll(".markdown-body pre")) {
-        if (block.querySelector(":scope > .code-copy-btn")) continue;
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "code-copy-btn";
-        button.textContent = "Copy";
-        button.addEventListener("click", async () => {
-            const code = block.querySelector("code")?.textContent ?? block.textContent ?? "";
-            if (await writeText(code)) {
-                button.textContent = "Copied";
-                setTimeout(() => { button.textContent = "Copy"; }, 1200);
-            }
-        });
-        block.append(button);
+function announceCopied() {
+    const status = document.getElementById("chat-status");
+    if (status) {
+        status.textContent = "Copied";
     }
 }
 
-export function shouldSubmitOnEnter(event, hasFinePointer) {
-    if (event.key !== "Enter" || event.isComposing) return false;
-    return hasFinePointer ? !event.shiftKey : event.ctrlKey || event.metaKey;
+export async function writeText(text) {
+    return copyText(text);
 }
+
+export function addCodeCopyButtons() {
+    for (const pre of document.querySelectorAll(".markdown-body[data-copyable='true'] pre")) {
+        if (pre.dataset.copyCodeReady) {
+            continue;
+        }
+
+        const code = pre.querySelector("code");
+        if (!code) {
+            continue;
+        }
+
+        pre.dataset.copyCodeReady = "true";
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "code-copy-btn";
+        button.setAttribute("aria-label", "Copy code");
+        button.textContent = "Copy";
+        button.addEventListener("click", async () => {
+            if (!await copyText(code.textContent ?? "")) {
+                return;
+            }
+
+            button.classList.add("is-copied");
+            button.setAttribute("aria-label", "Code copied");
+            button.textContent = "Copied";
+            announceCopied();
+
+            window.clearTimeout(button.copyResetTimer);
+            button.copyResetTimer = window.setTimeout(() => {
+                button.classList.remove("is-copied");
+                button.setAttribute("aria-label", "Copy code");
+                button.textContent = "Copy";
+            }, 1500);
+        });
+        pre.append(button);
+    }
+}
+
+const maxRows = 6;
+
+export function shouldSubmitOnEnter(event, hasFinePointer) {
+    return event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.isComposing &&
+        hasFinePointer;
+}
+
+function resizeTextarea(textarea) {
+    if (CSS.supports("field-sizing", "content")) {
+        return;
+    }
+
+    const styles = getComputedStyle(textarea);
+    const lineHeight = Number.parseFloat(styles.lineHeight);
+    const verticalPadding =
+        Number.parseFloat(styles.paddingBlockStart) +
+        Number.parseFloat(styles.paddingBlockEnd);
+    const maxHeight = (lineHeight * maxRows) + verticalPadding;
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
+document.addEventListener("input", (event) => {
+    if (event.target instanceof HTMLTextAreaElement && event.target.id === "chat-input") {
+        resizeTextarea(event.target);
+    }
+});
+
+document.addEventListener("keydown", (event) => {
+    if (!(event.target instanceof HTMLTextAreaElement) || event.target.id !== "chat-input") {
+        return;
+    }
+
+    if (!shouldSubmitOnEnter(event, matchMedia("(pointer: fine)").matches)) {
+        return;
+    }
+
+    event.preventDefault();
+    event.target.form?.requestSubmit();
+});
+
+document.querySelectorAll("#chat-input").forEach(resizeTextarea);

@@ -14,6 +14,9 @@ function openDatabase() {
         };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
+        request.onblocked = () => reject(new DOMException(
+            "IndexedDB upgrade is blocked by another tab.",
+            "InvalidStateError"));
     });
 }
 
@@ -29,12 +32,26 @@ function execute(mode, operation) {
             reject(error);
             return;
         }
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-        transaction.oncomplete = () => database.close();
+        let result;
+        request.onsuccess = () => {
+            result = request.result;
+        };
+        request.onerror = () => {
+            // The transaction error/abort handler owns rejection and cleanup.
+        };
+        transaction.oncomplete = () => {
+            database.close();
+            resolve(result);
+        };
         transaction.onerror = () => {
             database.close();
-            reject(transaction.error);
+            reject(transaction.error ?? request.error);
+        };
+        transaction.onabort = () => {
+            database.close();
+            reject(transaction.error ?? request.error ?? new DOMException(
+                "IndexedDB transaction was aborted.",
+                "AbortError"));
         };
     }));
 }

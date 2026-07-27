@@ -19,7 +19,7 @@
     --radius-bubble: 1.15rem;
     --font-display: "Syne", "Segoe UI", system-ui, sans-serif;
     --font-body: "Figtree", "Segoe UI", system-ui, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", consolas, monospace;
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
     --color-1: white;
@@ -705,7 +705,7 @@ body {
 /* Plain-text content (user messages): preserve whitespace + wrap long tokens. */
 .chat-content.is-plain {
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 /* Markdown content (assistant messages): normal flow. Blocks (pre/table) scroll
@@ -774,7 +774,7 @@ body {
     text-decoration: underline;
     text-decoration-color: var(--color-36);
     text-underline-offset: 2px;
-    word-break: break-word;
+    overflow-wrap: anywhere;
     transition: text-decoration-color 0.15s var(--ease-out);
 }
 .markdown-body a:hover { text-decoration-color: var(--teal-deep); }
@@ -818,7 +818,7 @@ body {
     border-radius: 0.3rem;
     background: var(--color-14);
     color: var(--teal-deep);
-    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 /* Fenced code blocks — dark ink-teal slab. HORIZONTAL SCROLL LIVES HERE:
@@ -939,7 +939,7 @@ body {
     width: 0.35rem;
     height: 0.35rem;
     border-radius: 50%;
-    background: currentColor;
+    background: currentcolor;
     opacity: 0.35;
 }
 
@@ -1720,7 +1720,7 @@ body {
 
 .model-picker-section-row th {
     padding: 0.36rem 0.55rem;
-    background: rgba(13, 124, 124, 0.08);
+    background: var(--color-18);
     border-bottom: 1px solid var(--line);
     color: var(--teal-deep);
     font-size: 0.66rem;

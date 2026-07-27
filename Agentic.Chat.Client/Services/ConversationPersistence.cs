@@ -22,6 +22,8 @@ public interface IActiveConversationWriter
 public sealed class ConversationPersistence(BrowserConversationStore store)
     : IActiveConversationWriter
 {
+    private const string UserRole = "user";
+    private const string AssistantRole = "assistant";
     private readonly BrowserConversationStore _store = store;
 
     public Guid? ActiveConversationId { get; set; }
@@ -32,14 +34,18 @@ public sealed class ConversationPersistence(BrowserConversationStore store)
         string? imageDataUrl = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(content);
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
         cancellationToken.ThrowIfCancellationRequested();
         var now = DateTimeOffset.UtcNow;
         var conversation = ActiveConversationId is { } activeId
             ? await _store.GetAsync(activeId).ConfigureAwait(false)
             : null;
+        Guid? newConversationId = null;
         if (conversation is null)
         {
             var id = Guid.NewGuid();
+            newConversationId = id;
             conversation = new StoredConversation
             {
                 Id = id.ToString("D"),
@@ -48,7 +54,6 @@ public sealed class ConversationPersistence(BrowserConversationStore store)
                 CreatedAt = now,
                 UpdatedAt = now
             };
-            ActiveConversationId = id;
         }
 
         conversation.Model = modelId;
@@ -56,12 +61,16 @@ public sealed class ConversationPersistence(BrowserConversationStore store)
         conversation.Messages.Add(new StoredMessage
         {
             Id = Guid.NewGuid().ToString("D"),
-            Role = "user",
+            Role = UserRole,
             Content = content,
             ImageDataUrl = imageDataUrl,
             CreatedAt = now
         });
         await _store.PutAsync(conversation).ConfigureAwait(false);
+        if (newConversationId is { } createdId)
+        {
+            ActiveConversationId = createdId;
+        }
     }
 
     public async Task OnAssistantFinalizedAsync(
@@ -77,13 +86,17 @@ public sealed class ConversationPersistence(BrowserConversationStore store)
             return;
         }
         var conversation = await _store.GetAsync(id).ConfigureAwait(false);
-        if (conversation is null) { return; }
+        if (conversation is null)
+        {
+            throw new InvalidOperationException(
+                $"The active conversation {id:D} no longer exists in browser storage.");
+        }
         var now = DateTimeOffset.UtcNow;
         conversation.UpdatedAt = now;
         conversation.Messages.Add(new StoredMessage
         {
             Id = Guid.NewGuid().ToString("D"),
-            Role = "assistant",
+            Role = AssistantRole,
             Content = content,
             Reasoning = ChatAgentService.NullIfWhiteSpace(reasoning),
             UsagePromptTokens = usage?.PromptTokens,
@@ -102,7 +115,7 @@ public sealed class ConversationPersistence(BrowserConversationStore store)
         if (ActiveConversationId is not { } id) { return; }
         var conversation = await _store.GetAsync(id).ConfigureAwait(false);
         if (conversation is null) { return; }
-        var index = conversation.Messages.FindLastIndex(message => message.Role == "assistant");
+        var index = conversation.Messages.FindLastIndex(message => message.Role == AssistantRole);
         if (index < 0) { return; }
         conversation.Messages.RemoveAt(index);
         conversation.UpdatedAt = DateTimeOffset.UtcNow;

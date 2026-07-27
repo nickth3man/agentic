@@ -1,6 +1,8 @@
 namespace Agentic.Chat.Services;
 
-public sealed class SystemPromptService(BrowserStorage storage)
+public sealed class SystemPromptService(
+    BrowserStorage storage,
+    ILogger<SystemPromptService> logger)
 {
     private const string StorageKey = "system-prompt";
     public const int MaxPromptLength = 8_000;
@@ -21,7 +23,14 @@ public sealed class SystemPromptService(BrowserStorage storage)
     public async Task LoadAsync()
     {
         if (IsLoaded) { return; }
-        CurrentPrompt = await _storage.GetLocalAsync<string>(StorageKey).ConfigureAwait(false);
+        try
+        {
+            CurrentPrompt = await _storage.GetLocalAsync<string>(StorageKey).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not load the system prompt.");
+        }
         if (CurrentPrompt?.Length > MaxPromptLength)
         {
             CurrentPrompt = CurrentPrompt[..MaxPromptLength];
@@ -40,16 +49,16 @@ public sealed class SystemPromptService(BrowserStorage storage)
                 $"System prompt must be at most {MaxPromptLength} characters.",
                 nameof(prompt));
         }
-        CurrentPrompt = trimmed;
         await _storage.SetLocalAsync(StorageKey, trimmed).ConfigureAwait(false);
+        CurrentPrompt = trimmed;
         IsLoaded = true;
         OnChange?.Invoke();
     }
 
     public async Task ClearAsync()
     {
-        CurrentPrompt = null;
         await _storage.RemoveLocalAsync(StorageKey).ConfigureAwait(false);
+        CurrentPrompt = null;
         IsLoaded = true;
         OnChange?.Invoke();
     }

@@ -2,7 +2,8 @@ namespace Agentic.Chat.Services;
 
 public sealed class SelectedModelService(
     BrowserStorage storage,
-    OpenRouterCredentialService credentials)
+    OpenRouterCredentialService credentials,
+    ILogger<SelectedModelService> logger)
 {
     private const string StorageKey = "selected-model";
     private readonly BrowserStorage _storage = storage;
@@ -22,7 +23,14 @@ public sealed class SelectedModelService(
         }
 
         await _credentials.InitializeAsync().ConfigureAwait(false);
-        CurrentModelId = await _storage.GetLocalAsync<string>(StorageKey).ConfigureAwait(false);
+        try
+        {
+            CurrentModelId = await _storage.GetLocalAsync<string>(StorageKey).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not load the selected model.");
+        }
         if (string.IsNullOrWhiteSpace(CurrentModelId)
             || (!_credentials.HasUserKey
                 && !OpenRouterCredentialService.IsSharedFreeModel(CurrentModelId)))
@@ -45,7 +53,14 @@ public sealed class SelectedModelService(
         }
 
         CurrentModelId = modelId.Trim();
-        await _storage.SetLocalAsync(StorageKey, CurrentModelId).ConfigureAwait(false);
+        try
+        {
+            await _storage.SetLocalAsync(StorageKey, CurrentModelId).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not persist the selected model.");
+        }
         IsLoaded = true;
         OnChange?.Invoke();
     }

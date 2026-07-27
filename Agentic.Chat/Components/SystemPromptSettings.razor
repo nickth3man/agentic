@@ -112,6 +112,10 @@
             </div>
 
             <div class="settings-actions">
+                @if (_error is not null)
+                {
+                    <p class="settings-error" role="alert">@_error</p>
+                }
                 <button type="button"
                         class="settings-apply"
                         disabled="@(_isSaving || string.IsNullOrWhiteSpace(_draft))"
@@ -135,6 +139,7 @@
     private string _selectedPreset = string.Empty;
     private bool _isSaving;
     private bool _loaded;
+    private string? _error;
 
     private bool _tempEnabled;
     private double _tempDraft = 1.0;
@@ -347,6 +352,7 @@
         }
 
         _isSaving = true;
+        _error = null;
         try
         {
             var preset = SystemPromptService.Presets
@@ -366,6 +372,10 @@
             ChatAgent.RefreshSystemMessageIfIdle();
             await CloseAsync();
         }
+        catch (Exception exception)
+        {
+            _error = $"Settings could not be saved: {exception.Message}";
+        }
         finally
         {
             _isSaving = false;
@@ -373,7 +383,11 @@
     }
 
     [JSInvokable]
-    public Task CloseModal() => CloseAsync();
+    public async Task CloseModal()
+    {
+        await CloseAsync();
+        await InvokeAsync(StateHasChanged);
+    }
 
     private async Task EnsureModuleAsync()
     {

@@ -14,6 +14,28 @@ public sealed class ClientSharedAssetsTests
         Assert.Equal(serverCss, clientCss);
     }
 
+    [Theory]
+    [InlineData("Pages", "Chat.razor.js", "chat.js")]
+    [InlineData("", "ModelPicker.razor.js", "model-picker.js")]
+    public void JavaScriptModule_MatchesServerVersion(
+        string componentDirectory,
+        string serverFile,
+        string clientFile)
+    {
+        var root = FindRepoRoot();
+        var serverModule = File.ReadAllText(
+            Path.Combine(
+                root,
+                "Agentic.Chat",
+                "Components",
+                componentDirectory,
+                serverFile));
+        var clientModule = File.ReadAllText(
+            Path.Combine(root, "Agentic.Chat.Client", "wwwroot", "js", clientFile));
+
+        Assert.Equal(serverModule, clientModule);
+    }
+
     private static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

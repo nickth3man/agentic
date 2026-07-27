@@ -1,6 +1,8 @@
 namespace Agentic.Chat.Services;
 
-public sealed class ModelPickerPreferencesService(BrowserStorage storage)
+public sealed class ModelPickerPreferencesService(
+    BrowserStorage storage,
+    ILogger<ModelPickerPreferencesService> logger)
 {
     private const string StorageKey = "model-picker-preferences";
     public const int RecentModelLimit = 5;
@@ -18,14 +20,24 @@ public sealed class ModelPickerPreferencesService(BrowserStorage storage)
     public async Task LoadAsync()
     {
         if (IsLoaded) { return; }
-        var value = await _storage.GetLocalAsync<ModelPickerPreferences>(StorageKey).ConfigureAwait(false);
+        ModelPickerPreferences? value = null;
+        try
+        {
+            value = await _storage.GetLocalAsync<ModelPickerPreferences>(StorageKey).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not load model-picker preferences.");
+        }
         if (value is not null)
         {
-            foreach (var id in value.FavoriteModelIds.Where(static id => !string.IsNullOrWhiteSpace(id)))
+            foreach (var id in (value.FavoriteModelIds ?? [])
+                .Where(static id => !string.IsNullOrWhiteSpace(id)))
             {
                 _favoriteModelIds.Add(id);
             }
-            foreach (var id in value.RecentModelIds.Where(static id => !string.IsNullOrWhiteSpace(id)))
+            foreach (var id in (value.RecentModelIds ?? [])
+                .Where(static id => !string.IsNullOrWhiteSpace(id)))
             {
                 if (!_recentModelIds.Contains(id, StringComparer.OrdinalIgnoreCase))
                 {
@@ -40,12 +52,14 @@ public sealed class ModelPickerPreferencesService(BrowserStorage storage)
 
     public async Task ToggleFavoriteAsync(string modelId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
         if (!_favoriteModelIds.Add(modelId)) { _favoriteModelIds.Remove(modelId); }
         await PersistAsync().ConfigureAwait(false);
     }
 
     public async Task RecordRecentAsync(string modelId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
         _recentModelIds.RemoveAll(id => string.Equals(id, modelId, StringComparison.OrdinalIgnoreCase));
         _recentModelIds.Insert(0, modelId);
         if (_recentModelIds.Count > RecentModelLimit)
@@ -57,14 +71,21 @@ public sealed class ModelPickerPreferencesService(BrowserStorage storage)
 
     private async Task PersistAsync()
     {
-        await _storage.SetLocalAsync(
-            StorageKey,
-            new ModelPickerPreferences(_favoriteModelIds.ToList(), _recentModelIds)).ConfigureAwait(false);
+        try
+        {
+            await _storage.SetLocalAsync(
+                StorageKey,
+                new ModelPickerPreferences(_favoriteModelIds.ToList(), _recentModelIds)).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not persist model-picker preferences.");
+        }
         IsLoaded = true;
         OnChange?.Invoke();
     }
 }
 
 public sealed record ModelPickerPreferences(
-    IReadOnlyList<string> FavoriteModelIds,
-    IReadOnlyList<string> RecentModelIds);
+    IReadOnlyList<string>? FavoriteModelIds,
+    IReadOnlyList<string>? RecentModelIds);

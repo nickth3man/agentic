@@ -18,7 +18,7 @@
         (() => {
             const query = window.location.search;
             if (!query.startsWith("?/")) return;
-            const decoded = query.slice(2).replace(/&/g, "?");
+            const decoded = query.slice(2).replace("&", "?");
             const base = window.location.pathname.endsWith("/")
                 ? window.location.pathname
                 : `${window.location.pathname}/`;
@@ -28,22 +28,37 @@
     <script>
         (() => {
             const key = "agentic-theme";
-            const theme = localStorage.getItem(key);
+            const readTheme = () => {
+                try {
+                    return localStorage.getItem(key);
+                } catch {
+                    return null;
+                }
+            };
+            const writeTheme = theme => {
+                try {
+                    if (theme === null) localStorage.removeItem(key);
+                    else localStorage.setItem(key, theme);
+                } catch {
+                    // Theme persistence is optional when browser storage is blocked.
+                }
+            };
+            const theme = readTheme();
             if (theme === "light" || theme === "dark") {
                 document.documentElement.dataset.theme = theme;
             }
             window.agenticTheme = {
                 set(theme) {
                     if (theme === "auto") {
-                        localStorage.removeItem(key);
+                        writeTheme(null);
                         delete document.documentElement.dataset.theme;
                     } else {
-                        localStorage.setItem(key, theme);
+                        writeTheme(theme);
                         document.documentElement.dataset.theme = theme;
                     }
                 },
                 get() {
-                    return localStorage.getItem(key) ?? "auto";
+                    return readTheme() ?? "auto";
                 },
                 cycle(button) {
                     const themes = ["auto", "light", "dark"];

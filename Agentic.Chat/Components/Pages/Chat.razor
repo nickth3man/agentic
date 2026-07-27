@@ -711,7 +711,11 @@
     }
 
     [JSInvokable]
-    public Task CloseDrawer() => CloseSidebarAsync();
+    public async Task CloseDrawer()
+    {
+        await CloseSidebarAsync();
+        await InvokeAsync(StateHasChanged);
+    }
 
     private Task OnSidebarKeyDown(KeyboardEventArgs e)
         => e.Key == "Escape" ? CloseSidebarAsync() : Task.CompletedTask;

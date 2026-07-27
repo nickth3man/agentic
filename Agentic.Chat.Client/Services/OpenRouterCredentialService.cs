@@ -3,7 +3,10 @@ using System.Net.Http.Json;
 
 namespace Agentic.Chat.Services;
 
-public sealed class OpenRouterCredentialService(HttpClient http, BrowserStorage storage)
+public sealed class OpenRouterCredentialService(
+    HttpClient http,
+    BrowserStorage storage,
+    ILogger<OpenRouterCredentialService> logger)
 {
     private const string PersistentUserKey = "openrouter-user-api-key";
     private const string SessionUserKey = "openrouter-session-api-key";
@@ -17,15 +20,32 @@ public sealed class OpenRouterCredentialService(HttpClient http, BrowserStorage 
 
     public bool HasSharedFreeKey => !string.IsNullOrWhiteSpace(_sharedFreeKey);
 
+    public string? SharedConfigurationError { get; private set; }
+
     public bool IsReady { get; private set; }
 
     public event Action? OnChange;
 
-    public Task InitializeAsync()
-        => _initialization ??= InitializeCoreAsync();
+    public async Task InitializeAsync()
+    {
+        var initialization = _initialization ??= InitializeCoreAsync();
+        try
+        {
+            await initialization.ConfigureAwait(false);
+        }
+        catch
+        {
+            if (ReferenceEquals(_initialization, initialization))
+            {
+                _initialization = null;
+            }
+            throw;
+        }
+    }
 
     public async Task<string> GetKeyForModelAsync(string modelId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
         await InitializeAsync().ConfigureAwait(false);
         if (HasUserKey)
         {
@@ -73,16 +93,28 @@ public sealed class OpenRouterCredentialService(HttpClient http, BrowserStorage 
         OnChange?.Invoke();
     }
 
-    public static bool IsSharedFreeModel(string modelId)
-        => string.Equals(modelId, "openrouter/free", StringComparison.OrdinalIgnoreCase)
-            || modelId.EndsWith(":free", StringComparison.OrdinalIgnoreCase);
+    public static bool IsSharedFreeModel(string? modelId)
+        => !string.IsNullOrWhiteSpace(modelId)
+            && (string.Equals(modelId, "openrouter/free", StringComparison.OrdinalIgnoreCase)
+                || modelId.EndsWith(":free", StringComparison.OrdinalIgnoreCase));
 
     private async Task InitializeCoreAsync()
     {
         try
         {
-            _userKey = await _storage.GetSessionAsync<string>(SessionUserKey).ConfigureAwait(false)
-                ?? await _storage.GetLocalAsync<string>(PersistentUserKey).ConfigureAwait(false);
+            try
+            {
+                _userKey = await _storage.GetSessionAsync<string>(SessionUserKey).ConfigureAwait(false)
+                    ?? await _storage.GetLocalAsync<string>(PersistentUserKey).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                _userKey = null;
+                ClientLog.Warning(
+                    logger,
+                    exception,
+                    "Browser storage is unavailable for the OpenRouter user key.");
+            }
 
             try
             {
@@ -90,11 +122,14 @@ public sealed class OpenRouterCredentialService(HttpClient http, BrowserStorage 
                     .GetFromJsonAsync<ClientAppConfig>("app-config.json")
                     .ConfigureAwait(false);
                 _sharedFreeKey = NullIfWhiteSpace(config?.OpenRouterFreeApiKey);
+                SharedConfigurationError = null;
             }
             catch (Exception exception)
                 when (exception is HttpRequestException or System.Text.Json.JsonException or NotSupportedException)
             {
-                // Local development intentionally works without a shared key.
+                _sharedFreeKey = null;
+                SharedConfigurationError = "The shared free-key configuration could not be loaded.";
+                ClientLog.Warning(logger, exception, "Could not load app-config.json.");
             }
         }
         finally
@@ -107,12 +142,14 @@ public sealed class OpenRouterCredentialService(HttpClient http, BrowserStorage 
     private static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static async Task ValidateAsync(string apiKey)
+    private async Task ValidateAsync(string apiKey)
     {
-        using var client = new HttpClient();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         using var request = new HttpRequestMessage(HttpMethod.Get, "https://openrouter.ai/api/v1/key");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        using var response = await client.SendAsync(request).ConfigureAwait(false);
+        using var response = await _http
+            .SendAsync(request, timeout.Token)
+            .ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(

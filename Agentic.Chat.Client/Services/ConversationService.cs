@@ -8,7 +8,8 @@ public sealed class ConversationService(
     BrowserConversationStore store,
     ChatAgentService chat,
     ConversationPersistence persistence,
-    BrowserStorage storage)
+    BrowserStorage storage,
+    ILogger<ConversationService> logger)
 {
     private const string ActiveConversationStorageKey = "active-conversation";
     private const int TitleMaxLength = 200;
@@ -25,10 +26,17 @@ public sealed class ConversationService(
     public async Task InitializeAsync()
     {
         if (IsLoaded) { return; }
-        await RefreshListCoreAsync().ConfigureAwait(false);
-        var storedId = await _storage
-            .GetLocalAsync<string>(ActiveConversationStorageKey)
-            .ConfigureAwait(false);
+        try
+        {
+            await RefreshListCoreAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Conversation history is unavailable.");
+            Conversations = [];
+        }
+
+        var storedId = await TryGetActiveIdAsync().ConfigureAwait(false);
         if (Guid.TryParse(storedId, out var id) && Conversations.Any(item => item.Id == id))
         {
             await SwitchAsync(id).ConfigureAwait(false);
@@ -50,7 +58,7 @@ public sealed class ConversationService(
         if (_chat.IsStreamActive) { return; }
         _persistence.ActiveConversationId = null;
         _chat.Reset();
-        await _storage.RemoveLocalAsync(ActiveConversationStorageKey).ConfigureAwait(false);
+        await TryRemoveActiveIdAsync().ConfigureAwait(false);
         await RefreshListAsync().ConfigureAwait(false);
     }
 
@@ -75,9 +83,7 @@ public sealed class ConversationService(
             })
             .ToList());
         _persistence.ActiveConversationId = conversationId;
-        await _storage
-            .SetLocalAsync(ActiveConversationStorageKey, conversationId.ToString("D"))
-            .ConfigureAwait(false);
+        await TrySetActiveIdAsync(conversationId).ConfigureAwait(false);
         await RefreshListCoreAsync().ConfigureAwait(false);
         IsLoaded = true;
         OnChange?.Invoke();
@@ -88,7 +94,8 @@ public sealed class ConversationService(
         if (string.IsNullOrWhiteSpace(title)) { return; }
         var conversation = await _store.GetAsync(conversationId).ConfigureAwait(false);
         if (conversation is null) { return; }
-        conversation.Title = title.Trim()[..Math.Min(title.Trim().Length, TitleMaxLength)];
+        var trimmed = title.Trim();
+        conversation.Title = trimmed[..Math.Min(trimmed.Length, TitleMaxLength)];
         conversation.UpdatedAt = DateTimeOffset.UtcNow;
         await _store.PutAsync(conversation).ConfigureAwait(false);
         await RefreshListAsync().ConfigureAwait(false);
@@ -126,20 +133,60 @@ public sealed class ConversationService(
         await RefreshListAsync().ConfigureAwait(false);
         if (ActiveConversationId is { } id)
         {
-            await _storage
-                .SetLocalAsync(ActiveConversationStorageKey, id.ToString("D"))
-                .ConfigureAwait(false);
+            await TrySetActiveIdAsync(id).ConfigureAwait(false);
         }
     }
 
     private async Task RefreshListCoreAsync()
     {
         Conversations = (await _store.ListAsync().ConfigureAwait(false))
-            .Select(conversation => new ConversationListItem(
-                Guid.Parse(conversation.Id),
-                conversation.Title,
-                conversation.UpdatedAt))
+            .Select(conversation => Guid.TryParse(conversation.Id, out var id)
+                ? new ConversationListItem(id, conversation.Title, conversation.UpdatedAt)
+                : null)
+            .Where(static conversation => conversation is not null)
+            .Select(static conversation => conversation!)
             .OrderByDescending(item => item.UpdatedAt)
             .ToList();
+    }
+
+    private async Task<string?> TryGetActiveIdAsync()
+    {
+        try
+        {
+            return await _storage
+                .GetLocalAsync<string>(ActiveConversationStorageKey)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not read the active conversation ID.");
+            return null;
+        }
+    }
+
+    private async Task TrySetActiveIdAsync(Guid id)
+    {
+        try
+        {
+            await _storage
+                .SetLocalAsync(ActiveConversationStorageKey, id.ToString("D"))
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not persist the active conversation ID.");
+        }
+    }
+
+    private async Task TryRemoveActiveIdAsync()
+    {
+        try
+        {
+            await _storage.RemoveLocalAsync(ActiveConversationStorageKey).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not clear the active conversation ID.");
+        }
     }
 }

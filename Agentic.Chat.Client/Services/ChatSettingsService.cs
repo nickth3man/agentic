@@ -1,6 +1,8 @@
 namespace Agentic.Chat.Services;
 
-public sealed class ChatSettingsService(BrowserStorage storage)
+public sealed class ChatSettingsService(
+    BrowserStorage storage,
+    ILogger<ChatSettingsService> logger)
 {
     private const string StorageKey = "chat-settings";
     public const double MinTemperature = 0d;
@@ -18,7 +20,15 @@ public sealed class ChatSettingsService(BrowserStorage storage)
     public async Task LoadAsync()
     {
         if (IsLoaded) { return; }
-        var state = await _storage.GetLocalAsync<ChatSettingsState>(StorageKey).ConfigureAwait(false);
+        ChatSettingsState? state = null;
+        try
+        {
+            state = await _storage.GetLocalAsync<ChatSettingsState>(StorageKey).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not load chat settings.");
+        }
         if (state is not null)
         {
             if (Enum.IsDefined(state.ReasoningEffort)) { ReasoningEffort = state.ReasoningEffort; }
@@ -31,6 +41,10 @@ public sealed class ChatSettingsService(BrowserStorage storage)
 
     public async Task SetReasoningEffortAsync(ReasoningEffortLevel effort)
     {
+        if (!Enum.IsDefined(effort))
+        {
+            throw new ArgumentOutOfRangeException(nameof(effort));
+        }
         ReasoningEffort = effort;
         await PersistAsync().ConfigureAwait(false);
     }
@@ -59,9 +73,16 @@ public sealed class ChatSettingsService(BrowserStorage storage)
 
     private async Task PersistAsync()
     {
-        await _storage
-            .SetLocalAsync(StorageKey, new ChatSettingsState(ReasoningEffort, Temperature, MaxTokens))
-            .ConfigureAwait(false);
+        try
+        {
+            await _storage
+                .SetLocalAsync(StorageKey, new ChatSettingsState(ReasoningEffort, Temperature, MaxTokens))
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            ClientLog.Warning(logger, exception, "Could not persist chat settings.");
+        }
         IsLoaded = true;
         OnChange?.Invoke();
     }

@@ -4,14 +4,12 @@ namespace Agentic.Chat.Services;
 
 public sealed class BrowserConversationStore(IJSRuntime js) : IAsyncDisposable
 {
-    private readonly Lazy<Task<IJSObjectReference>> _module = new(
-        () => js.InvokeAsync<IJSObjectReference>(
-            "import",
-            "./conversation-store.js").AsTask());
+    private readonly object _moduleLock = new();
+    private Task<IJSObjectReference>? _moduleTask;
 
     public async Task<IReadOnlyList<StoredConversation>> ListAsync()
     {
-        var module = await _module.Value.ConfigureAwait(false);
+        var module = await GetModuleAsync().ConfigureAwait(false);
         return await module
             .InvokeAsync<StoredConversation[]>("list")
             .ConfigureAwait(false);
@@ -19,7 +17,7 @@ public sealed class BrowserConversationStore(IJSRuntime js) : IAsyncDisposable
 
     public async Task<StoredConversation?> GetAsync(Guid id)
     {
-        var module = await _module.Value.ConfigureAwait(false);
+        var module = await GetModuleAsync().ConfigureAwait(false);
         return await module
             .InvokeAsync<StoredConversation?>("get", id.ToString("D"))
             .ConfigureAwait(false);
@@ -27,24 +25,46 @@ public sealed class BrowserConversationStore(IJSRuntime js) : IAsyncDisposable
 
     public async Task PutAsync(StoredConversation conversation)
     {
-        var module = await _module.Value.ConfigureAwait(false);
+        var module = await GetModuleAsync().ConfigureAwait(false);
         await module.InvokeVoidAsync("put", conversation).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(Guid id)
     {
-        var module = await _module.Value.ConfigureAwait(false);
+        var module = await GetModuleAsync().ConfigureAwait(false);
         await module.InvokeVoidAsync("remove", id.ToString("D")).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_module.IsValueCreated)
+        Task<IJSObjectReference>? moduleTask;
+        lock (_moduleLock)
         {
-            var module = await _module.Value.ConfigureAwait(false);
+            moduleTask = _moduleTask;
+            _moduleTask = null;
+        }
+
+        if (moduleTask is not null)
+        {
+            var module = await moduleTask.ConfigureAwait(false);
             await module.DisposeAsync().ConfigureAwait(false);
         }
         GC.SuppressFinalize(this);
+    }
+
+    private Task<IJSObjectReference> GetModuleAsync()
+    {
+        lock (_moduleLock)
+        {
+            if (_moduleTask is null || _moduleTask.IsFaulted || _moduleTask.IsCanceled)
+            {
+                _moduleTask = js
+                    .InvokeAsync<IJSObjectReference>("import", "./conversation-store.js")
+                    .AsTask();
+            }
+
+            return _moduleTask;
+        }
     }
 }
 

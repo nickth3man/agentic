@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agentic</title>
+    <base href="/" />
+    <link rel="preload" id="webassembly" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#10191d" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="Agentic.Chat.Client.styles.css" rel="stylesheet" />
+    <script type="importmap"></script>
+    <script>
+        // Restore routes redirected through 404.html on GitHub Pages.
+        (() => {
+            const query = window.location.search;
+            if (!query.startsWith("?/")) return;
+            const decoded = query.slice(2).replace(/&/g, "?");
+            const base = window.location.pathname.endsWith("/")
+                ? window.location.pathname
+                : `${window.location.pathname}/`;
+            window.history.replaceState(null, "", `${base}${decoded}${window.location.hash}`);
+        })();
+    </script>
+    <script>
+        (() => {
+            const key = "agentic-theme";
+            const theme = localStorage.getItem(key);
+            if (theme === "light" || theme === "dark") {
+                document.documentElement.dataset.theme = theme;
+            }
+            window.agenticTheme = {
+                set(theme) {
+                    if (theme === "auto") {
+                        localStorage.removeItem(key);
+                        delete document.documentElement.dataset.theme;
+                    } else {
+                        localStorage.setItem(key, theme);
+                        document.documentElement.dataset.theme = theme;
+                    }
+                },
+                get() {
+                    return localStorage.getItem(key) ?? "auto";
+                },
+                cycle(button) {
+                    const themes = ["auto", "light", "dark"];
+                    const theme = themes[(themes.indexOf(this.get()) + 1) % themes.length];
+                    this.set(theme);
+                    this.renderButton(button);
+                },
+                renderButton(button) {
+                    const theme = this.get();
+                    button.textContent = `Theme: ${theme[0].toUpperCase()}${theme.slice(1)}`;
+                    button.setAttribute("aria-label", `Theme: ${theme}. Activate to change.`);
+                }
+            };
+        })();
+    </script>
+</head>
+
+<body>
+    <div id="app">
+        <svg class="loading-progress">
+            <circle r="40%" cx="50%" cy="50%" />
+            <circle r="40%" cx="50%" cy="50%" />
+        </svg>
+        <div class="loading-progress-text"></div>
+    </div>
+
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+</body>
+
+</html>

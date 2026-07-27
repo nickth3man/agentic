@@ -1,0 +1,8 @@
+<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Agentic.Chat.Components.Pages.NotFound)">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(Agentic.Chat.Components.Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+</Router>
+
+<CredentialSettings />

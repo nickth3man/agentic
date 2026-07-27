@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <RootNamespace>Agentic.Chat</RootNamespace>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.3.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.10" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Agentic.Chat\Models\*.cs" Link="Models\%(Filename)%(Extension)" />
+    <Compile Include="..\Agentic.Chat\Services\ChatAgentService.cs" Link="Services\ChatAgentService.cs" />
+    <Compile Include="..\Agentic.Chat\Services\ContextWindow.cs" Link="Services\ContextWindow.cs" />
+    <Compile Include="..\Agentic.Chat\Services\ConversationTitle.cs" Link="Services\ConversationTitle.cs" />
+    <Compile Include="..\Agentic.Chat\Services\IOpenRouterClient.cs" Link="Services\IOpenRouterClient.cs" />
+    <Compile Include="..\Agentic.Chat\Services\MarkdownRenderer.cs" Link="Services\MarkdownRenderer.cs" />
+    <Compile Include="..\Agentic.Chat\Services\OpenRouterException.cs" Link="Services\OpenRouterException.cs" />
+    <Compile Include="..\Agentic.Chat\Services\OpenRouterOptions.cs" Link="Services\OpenRouterOptions.cs" />
+    <Compile Include="..\Agentic.Chat\Services\UsageFormatter.cs" Link="Services\UsageFormatter.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <RazorComponent Include="..\Agentic.Chat\Components\ModelPicker.razor" Link="Components\ModelPicker.razor" />
+    <RazorComponent Include="..\Agentic.Chat\Components\ReasoningEffortControl.razor" Link="Components\ReasoningEffortControl.razor" />
+    <RazorComponent Include="..\Agentic.Chat\Components\SystemPromptSettings.razor" Link="Components\SystemPromptSettings.razor" />
+    <RazorComponent Include="..\Agentic.Chat\Components\Layout\MainLayout.razor" Link="Components\Layout\MainLayout.razor" />
+    <RazorComponent Include="..\Agentic.Chat\Components\Pages\Chat.razor" Link="Components\Pages\Chat.razor" />
+    <RazorComponent Include="..\Agentic.Chat\Components\Pages\Home.razor" Link="Components\Pages\Home.razor" />
+    <RazorComponent Include="..\Agentic.Chat\Components\Pages\NotFound.razor" Link="Components\Pages\NotFound.razor" />
+    <None Include="..\Agentic.Chat\Components\**\*.razor.css"
+          Exclude="..\Agentic.Chat\Components\Layout\ReconnectModal.razor.css"
+          Link="Components\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

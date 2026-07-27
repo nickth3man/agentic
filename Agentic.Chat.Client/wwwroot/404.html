@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Agentic</title>
+    <script>
+        // GitHub Pages has no SPA rewrite rules. Preserve the requested route in
+        // the query string and let index.html restore it before Blazor starts.
+        const base = "__PAGES_BASE_PATH__";
+        const route = location.pathname
+            .slice(base.length)
+            .replace(/^\/+/, "");
+        const query = location.search ? `&${location.search.slice(1)}` : "";
+        location.replace(
+            `${location.protocol}//${location.host}${base}/?/${route}${query}${location.hash}`);
+    </script>
+</head>
+<body></body>
+</html>

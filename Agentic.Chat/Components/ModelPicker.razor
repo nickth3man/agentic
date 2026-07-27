@@ -92,7 +92,7 @@
                 else if (LoadError is not null)
                 {
                     <div class="model-picker-error" role="alert">
-                        <p>Couldn't load models.</p>
+                        <p>Couldn't load models: @LoadError.Message</p>
                         <button type="button" class="model-picker-retry" disabled="@IsLoading" @onclick="RefreshAsync">
                             @(IsLoading ? "Retrying…" : "Retry")
                         </button>
@@ -428,7 +428,7 @@
         try
         {
             _module = await JS.InvokeAsync<IJSObjectReference>(
-                "import", "./Components/ModelPicker.razor.js");
+                "import", "./js/model-picker.js");
             _dotnetRef = DotNetObjectReference.Create(this);
             _shouldAutoFocusSearch = await _module.InvokeAsync<bool>("shouldAutoFocusSearch");
         }

@@ -1,0 +1,1987 @@
+/* ─── Design tokens: Signal Lab ─── */
+:root {
+    --ink: #14222a;
+    --ink-soft: #3d5360;
+    --ink-mute: #6b8290;
+    --paper: #eef3f5;
+    --paper-elevated: rgba(255, 255, 255, 0.72);
+    --teal: #0d7c7c;
+    --teal-deep: #085858;
+    --teal-mist: #c5e8e6;
+    --copper: #c46b2e;
+    --copper-soft: #e8a06a;
+    --copper-mist: #f3dcc8;
+    --danger: #a12828;
+    --danger-bg: #fceeed;
+    --line: rgba(20, 34, 42, 0.1);
+    --shadow-soft: 0 18px 50px rgba(20, 34, 42, 0.08);
+    --shadow-lift: 0 8px 28px rgba(13, 124, 124, 0.18);
+    --radius-bubble: 1.15rem;
+    --font-display: "Syne", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Figtree", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+    --color-1: white;
+    --color-2: #d4ebe8;
+    --color-3: transparent;
+    --color-4: #f0dfd0;
+    --color-5: #f5f8f9;
+    --color-6: #e8eef1;
+    --color-7: #e4ecea;
+    --color-8: #7ec9c4;
+    --color-9: #e0a878;
+    --color-10: #a8cfd4;
+    --color-11: rgba(20, 34, 42, 0.04);
+    --color-12: black;
+    --color-13: rgba(13, 124, 124, 0.15);
+    --color-14: rgba(13, 124, 124, 0.1);
+    --color-15: rgba(13, 124, 124, 0.18);
+    --color-16: rgba(255, 255, 255, 0.55);
+    --color-17: rgba(13, 124, 124, 0.35);
+    --color-18: rgba(13, 124, 124, 0.08);
+    --color-19: rgba(196, 107, 46, 0.35);
+    --color-20: rgba(243, 220, 200, 0.55);
+    --color-21: rgba(13, 124, 124, 0.45);
+    --color-22: rgba(196, 107, 46, 0.5);
+    --color-23: rgba(196, 107, 46, 0);
+    --color-24: rgba(255, 255, 255, 0.7);
+    --color-25: rgba(61, 83, 96, 0.25);
+    --color-26: #0f8a8a;
+    --color-27: #0a6a6a;
+    --color-28: #f5fffe;
+    --color-29: #fff;
+    --color-30: rgba(20, 34, 42, 0.05);
+    --color-31: rgba(13, 124, 124, 0.28);
+    --color-32: rgba(255, 255, 255, 0.22);
+    --color-33: #f7ebe0;
+    --color-34: rgba(196, 107, 46, 0.25);
+    --color-35: #e6fffc;
+    --color-36: rgba(8, 88, 88, 0.35);
+    --color-37: rgba(13, 124, 124, 0.07);
+    --color-38: #122026;
+    --color-39: rgba(255, 255, 255, 0.04);
+    --color-40: #d9ecec;
+    --color-41: rgba(13, 124, 124, 0.4);
+    --color-42: rgba(20, 34, 42, 0.025);
+    --color-43: rgba(13, 124, 124, 0.06);
+    --color-44: #f4f8f8;
+    --color-45: rgba(13, 124, 124, 0.16);
+    --color-46: rgba(232, 160, 106, 0.18);
+    --color-47: rgba(196, 107, 46, 0.08);
+    --color-48: #f7f4f0;
+    --color-49: rgba(13, 124, 124, 0.22);
+    --color-50: #efc5c5;
+    --color-51: rgba(255, 255, 255, 0.78);
+    --color-52: rgba(255, 255, 255, 0.9);
+    --color-53: #a85620;
+    --color-54: rgba(196, 107, 46, 0.3);
+    --color-55: #26b050;
+    --color-56: #e50000;
+    --color-57: #b32121;
+    --color-58: #929292;
+    --color-59: rgba(13, 124, 124, 0.38);
+    --color-60: rgba(13, 124, 124, 0.42);
+    --color-61: rgba(255, 255, 255, 0.82);
+    --color-62: rgba(255, 255, 255, 0.85);
+    --color-63: rgba(20, 34, 42, 0.16);
+    --color-64: rgba(13, 124, 124, 0.05);
+    --color-65: rgba(196, 107, 46, 0.28);
+    --color-66: rgba(61, 83, 96, 0.22);
+    --color-67: rgba(238, 243, 245, 0.92);
+    --color-68: rgba(13, 124, 124, 0.12);
+    --color-69: rgba(196, 107, 46, 0.32);
+    --color-70: rgba(107, 130, 144, 0.14);
+    --color-71: rgba(13, 124, 124, 0.2);
+    --color-72: rgba(255, 255, 255, 0.75);
+    --color-73: rgba(161, 40, 40, 0.4);
+    --color-74: rgba(255, 255, 255, 0.6);
+    --color-75: rgba(20, 34, 42, 0.45);
+    --color-76: rgba(255, 255, 255, 0.92);
+    --color-77: rgba(20, 34, 42, 0.06);
+    --color-78: rgba(255, 255, 255, 0.65);
+    --color-79: #a12828;
+    --color-80: #7a1d1d;
+    --color-81: rgba(161, 40, 40, 0.3);
+    --color-82: rgba(255, 255, 255, 0.72);
+    --color-83: rgba(0, 0, 0, 0.05);
+    --color-84: rgba(0, 0, 0, 0.3);
+    --color-85: rgba(0, 0, 0, 0.4);
+    --color-86: #1d4f8c;
+    --color-87: #163d6d;
+    --color-88: #0087ff;
+    --color-89: lightyellow;
+    --color-90: rgba(0, 0, 0, 0.2);
+}
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+        color-scheme: light;
+        --ink: #14222a; --ink-soft: #3d5360; --ink-mute: #6b8290;
+        --paper: #eef3f5; --paper-elevated: rgba(255, 255, 255, .72);
+        --teal: #0d7c7c; --teal-deep: #085858; --teal-mist: #c5e8e6;
+        --copper: #c46b2e; --copper-soft: #e8a06a; --copper-mist: #f3dcc8;
+        --danger: #a12828; --danger-bg: #fceeed;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        color-scheme: dark;
+        --ink: #eff8f8; --ink-soft: #c0d2d7; --ink-mute: #91abb3; --paper: #10191d; --paper-elevated: rgba(23, 36, 42, .84); --line: rgba(239, 248, 248, .14); --teal: #4cb8b3; --teal-deep: #88d7d1; --teal-mist: #245d60; --copper: #e6a16f; --copper-soft: #f0bd94; --copper-mist: #533a2c; --danger: #ffaaa4; --danger-bg: #482729; --shadow-soft: 0 18px 50px rgba(0, 0, 0, .32); --shadow-lift: 0 8px 28px rgba(76, 184, 179, .18);
+        --color-2: #16383a; --color-4: #3b2c24; --color-5: #142126; --color-6: #17272d; --color-7: #182927; --color-8: #267875; --color-9: #89563a; --color-10: #376b75;
+        --color-16: rgba(29, 45, 52, .78); --color-20: rgba(83, 58, 44, .75); --color-24: rgba(29, 45, 52, .86); --color-26: #168c89; --color-27: #0c6e70; --color-29: #1d2d34; --color-33: #3d2c21; --color-44: #1a2b30; --color-48: #302820; --color-51: rgba(29, 45, 52, .90); --color-52: rgba(29, 45, 52, .96); --color-61: rgba(29, 45, 52, .92); --color-62: rgba(29, 45, 52, .94); --color-67: rgba(23, 36, 42, .96); --color-72: rgba(29, 45, 52, .88); --color-74: rgba(29, 45, 52, .82); --color-76: rgba(29, 45, 52, .94); --color-78: rgba(29, 45, 52, .85); --color-82: rgba(29, 45, 52, .82);
+        --color-75: rgba(0, 0, 0, .55); --color-77: rgba(255, 255, 255, .08); --color-83: rgba(255, 255, 255, .07); --color-89: #332f18;
+    }
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
+    --ink: #14222a; --ink-soft: #3d5360; --ink-mute: #6b8290;
+    --paper: #eef3f5; --paper-elevated: rgba(255, 255, 255, .72);
+    --teal: #0d7c7c; --teal-deep: #085858; --teal-mist: #c5e8e6;
+    --copper: #c46b2e; --copper-soft: #e8a06a; --copper-mist: #f3dcc8;
+    --danger: #a12828; --danger-bg: #fceeed;
+}
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --ink: #eff8f8; --ink-soft: #c0d2d7; --ink-mute: #91abb3; --paper: #10191d; --paper-elevated: rgba(23, 36, 42, .84); --line: rgba(239, 248, 248, .14); --teal: #4cb8b3; --teal-deep: #88d7d1; --teal-mist: #245d60; --copper: #e6a16f; --copper-soft: #f0bd94; --copper-mist: #533a2c; --danger: #ffaaa4; --danger-bg: #482729; --shadow-soft: 0 18px 50px rgba(0, 0, 0, .32); --shadow-lift: 0 8px 28px rgba(76, 184, 179, .18);
+    --color-2: #16383a; --color-4: #3b2c24; --color-5: #142126; --color-6: #17272d; --color-7: #182927; --color-8: #267875; --color-9: #89563a; --color-10: #376b75;
+    --color-16: rgba(29, 45, 52, .78); --color-20: rgba(83, 58, 44, .75); --color-24: rgba(29, 45, 52, .86); --color-26: #168c89; --color-27: #0c6e70; --color-29: #1d2d34; --color-33: #3d2c21; --color-44: #1a2b30; --color-48: #302820; --color-51: rgba(29, 45, 52, .90); --color-52: rgba(29, 45, 52, .96); --color-61: rgba(29, 45, 52, .92); --color-62: rgba(29, 45, 52, .94); --color-67: rgba(23, 36, 42, .96); --color-72: rgba(29, 45, 52, .88); --color-74: rgba(29, 45, 52, .82); --color-76: rgba(29, 45, 52, .94); --color-78: rgba(29, 45, 52, .85); --color-82: rgba(29, 45, 52, .82);
+    --color-75: rgba(0, 0, 0, .55); --color-77: rgba(255, 255, 255, .08); --color-83: rgba(255, 255, 255, .07); --color-89: #332f18;
+}
+
+/* ─── Base ─── */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    min-height: 100%;
+    font-family: var(--font-body);
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    position: relative;
+    overflow-x: hidden;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ─── Page shell ─── */
+.chat-page {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 760px;
+    min-width: 0;
+    height: 100%;
+    margin: 0 auto;
+    padding: 0.85rem 1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* ─── Animated atmosphere ─── */
+.chat-atmosphere {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    background:
+        radial-gradient(120% 80% at 10% -10%, var(--color-2) 0%, var(--color-3) 55%),
+        radial-gradient(90% 70% at 100% 0%, var(--color-4) 0%, var(--color-3) 50%),
+        linear-gradient(165deg, var(--color-5) 0%, var(--color-6) 45%, var(--color-7) 100%);
+}
+
+.orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(48px);
+    opacity: 0.55;
+    will-change: transform;
+}
+
+.orb-a {
+    width: 42vw;
+    height: 42vw;
+    max-width: 480px;
+    max-height: 480px;
+    top: -8%;
+    left: -6%;
+    background: radial-gradient(circle, var(--color-8) 0%, var(--color-3) 70%);
+    animation: drift-a 22s var(--ease-out) infinite alternate;
+}
+
+.orb-b {
+    width: 36vw;
+    height: 36vw;
+    max-width: 420px;
+    max-height: 420px;
+    top: 35%;
+    right: -10%;
+    background: radial-gradient(circle, var(--color-9) 0%, var(--color-3) 70%);
+    animation: drift-b 28s var(--ease-out) infinite alternate;
+}
+
+.orb-c {
+    width: 28vw;
+    height: 28vw;
+    max-width: 320px;
+    max-height: 320px;
+    bottom: 5%;
+    left: 30%;
+    background: radial-gradient(circle, var(--color-10) 0%, var(--color-3) 70%);
+    animation: drift-c 18s var(--ease-out) infinite alternate;
+}
+
+.grid-wash {
+    position: absolute;
+    inset: 0;
+    opacity: 0.35;
+    background-image:
+        linear-gradient(var(--color-11) 1px, var(--color-3) 1px),
+        linear-gradient(90deg, var(--color-11) 1px, var(--color-3) 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, var(--color-12) 20%, var(--color-3) 75%);
+}
+
+@keyframes drift-a {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(6%, 10%) scale(1.08); }
+}
+
+@keyframes drift-b {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(-8%, -6%) scale(1.12); }
+}
+
+@keyframes drift-c {
+    from { transform: translate(0, 0); }
+    to { transform: translate(4%, -12%); }
+}
+
+/* ─── Brand header ─── */
+.chat-brand {
+    position: relative;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.35rem 0.15rem;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    /* Opacity-only intro — a lingering transform (even translateY(0) from
+       fill-mode:both) creates a fixed containing block and traps the picker. */
+    animation: brand-in 0.7s var(--ease-out) both;
+}
+
+@keyframes brand-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.brand-copy {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.brand-mark {
+    position: relative;
+    width: 2.75rem;
+    height: 2.75rem;
+    flex-shrink: 0;
+}
+
+.brand-mark .core {
+    position: absolute;
+    inset: 32%;
+    border-radius: 50%;
+    background: linear-gradient(145deg, var(--teal) 0%, var(--teal-deep) 100%);
+    box-shadow: 0 0 0 3px var(--color-13);
+}
+
+.brand-mark .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1.5px solid var(--teal);
+    opacity: 0.45;
+}
+
+.brand-mark .ring-1 {
+    animation: ping-ring 2.8s var(--ease-out) infinite;
+}
+
+.brand-mark .ring-2 {
+    animation: ping-ring 2.8s var(--ease-out) 0.9s infinite;
+}
+
+@keyframes ping-ring {
+    0% { transform: scale(0.55); opacity: 0.55; }
+    100% { transform: scale(1.15); opacity: 0; }
+}
+
+.brand-name {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.85rem, 4vw, 2.35rem);
+    letter-spacing: -0.035em;
+    line-height: 1;
+    color: var(--ink);
+}
+
+.chat-subtitle {
+    margin: 0.35rem 0 0;
+    color: var(--ink-soft);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.45rem;
+}
+
+.model-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.35rem;
+    background: var(--color-14);
+    border: 1px solid var(--color-15);
+}
+
+.model-chip code {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--teal-deep);
+}
+
+.session-hint {
+    color: var(--ink-mute);
+    font-size: 0.8rem;
+}
+
+.live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.7rem;
+    border-radius: 999px;
+    background: var(--color-16);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(10px);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    transition: border-color 0.3s, color 0.3s, background 0.3s;
+}
+
+.chat-header-actions {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.theme-toggle {
+    min-width: 6.75rem;
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--color-16);
+    color: var(--ink-soft);
+    font: 600 0.75rem var(--font-body);
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+    border-color: var(--color-17);
+    color: var(--teal-deep);
+    background: var(--color-18);
+}
+
+.theme-toggle:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.new-chat-confirm {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.new-chat-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.7rem;
+    border-radius: 999px;
+    background: var(--color-16);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(10px);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.new-chat-btn:hover:not(:disabled) {
+    color: var(--teal-deep);
+    border-color: var(--color-17);
+    background: var(--color-18);
+}
+
+.new-chat-btn.is-confirm {
+    color: var(--copper);
+    border-color: var(--color-19);
+    background: var(--color-20);
+}
+
+.new-chat-btn:disabled,
+.new-chat-cancel:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.new-chat-btn:focus-visible,
+.new-chat-cancel:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.new-chat-cancel {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.55rem;
+    border-radius: 999px;
+    background: var(--color-3);
+    border: 1px solid var(--color-3);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.new-chat-cancel:hover:not(:disabled) {
+    color: var(--ink-soft);
+    border-color: var(--line);
+}
+
+.live-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 0 0 var(--color-21);
+}
+
+.live-badge.is-live {
+    color: var(--copper);
+    border-color: var(--color-19);
+    background: var(--color-20);
+}
+
+.live-badge.is-live .live-dot {
+    background: var(--copper);
+    animation: live-pulse 1.4s ease-out infinite;
+}
+
+@keyframes live-pulse {
+    0% { box-shadow: 0 0 0 0 var(--color-22); }
+    70% { box-shadow: 0 0 0 8px var(--color-23); }
+    100% { box-shadow: 0 0 0 0 var(--color-23); }
+}
+
+/* ─── Message stage ─── */
+.chat-stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: 1.35rem;
+    background: var(--paper-elevated);
+    border: 1px solid var(--color-24);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(18px) saturate(1.15);
+    overflow: hidden;
+}
+
+.chat-messages {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+    padding: 1.15rem 1rem 1.35rem;
+    min-height: 0;
+    scroll-behavior: smooth;
+}
+
+.chat-messages::-webkit-scrollbar {
+    width: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+    background: var(--color-25);
+    border-radius: 8px;
+}
+
+/* ─── Empty state ─── */
+.empty-state {
+    margin: auto;
+    text-align: center;
+    max-width: 280px;
+    padding: 2rem 1rem;
+    animation: rise-in 0.8s var(--ease-out) both;
+}
+
+.empty-glyph {
+    width: 4rem;
+    height: 4rem;
+    margin: 0 auto 1rem;
+    color: var(--teal);
+    opacity: 0.85;
+}
+
+.empty-glyph .spark {
+    color: var(--copper);
+    transform-origin: center;
+    animation: sparkle 2.4s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+    0%, 100% { opacity: 0.5; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.1); }
+}
+
+.empty-title {
+    margin: 0 0 0.35rem;
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.empty-body {
+    margin: 0;
+    color: var(--ink-mute);
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+@keyframes rise-in {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Bubbles ─── */
+.chat-bubble {
+    max-width: min(88%, 540px);
+    min-width: 0;
+    padding: 0.85rem 1rem 1rem;
+    border-radius: var(--radius-bubble);
+    animation: bubble-in 0.45s var(--ease-out) both;
+    position: relative;
+}
+
+@keyframes bubble-in {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.chat-bubble.user {
+    align-self: flex-end;
+    background: linear-gradient(145deg, var(--color-26) 0%, var(--color-27) 100%);
+    color: var(--color-28);
+    border-bottom-right-radius: 0.35rem;
+    box-shadow: var(--shadow-lift);
+}
+
+.chat-bubble.assistant {
+    align-self: flex-start;
+    background: var(--color-29);
+    border: 1px solid var(--line);
+    border-bottom-left-radius: 0.35rem;
+    box-shadow: 0 6px 20px var(--color-30);
+}
+
+.chat-bubble.is-streaming.assistant {
+    border-color: var(--color-31);
+}
+
+.bubble-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.45rem;
+}
+
+.avatar {
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 0.4rem;
+    display: grid;
+    place-items: center;
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.avatar-you {
+    background: var(--color-32);
+    color: var(--color-29);
+}
+
+.avatar-agent {
+    background: linear-gradient(145deg, var(--copper-mist), var(--color-33));
+    color: var(--copper);
+    border: 1px solid var(--color-34);
+}
+
+.chat-role {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.72;
+}
+
+.chat-bubble.user .chat-role {
+    color: var(--color-35);
+}
+
+.chat-bubble.assistant .chat-role {
+    color: var(--ink-mute);
+}
+
+.chat-content {
+    min-width: 0;
+    line-height: 1.55;
+    font-size: 0.98rem;
+}
+
+/* Plain-text content (user messages): preserve whitespace + wrap long tokens. */
+.chat-content.is-plain {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Markdown content (assistant messages): normal flow. Blocks (pre/table) scroll
+   internally; `min-width: 0` lets the bubble shrink so those scrolls engage
+   instead of pushing page-level overflow. */
+.chat-content.is-markdown {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* ─── Markdown body (assistant replies) ───
+   Markdig emits sanitized HTML (raw HTML stripped via DisableHtml on the
+   pipeline), injected here as a MarkupString. Styles are scoped to
+   .markdown-body under .chat-bubble.assistant so they never leak into user
+   bubbles, the Thinking <pre>, or the model picker. All sizing is tuned for
+   the bubble (max ~540px): headings are smaller than page-level, code/tables
+   pan inside the bubble rather than widening the page. */
+.chat-bubble.assistant .markdown-body {
+    min-width: 0;
+    color: var(--ink);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+/* Flush first/last block against the bubble padding (no doubled spacing). */
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+
+/* Streaming caret is a trailing sibling of .markdown-body; when the last block
+   is a <pre>/<ul> it lands on its own line, so give it a hair of breathing room. */
+.chat-content.is-markdown .caret {
+    margin-top: 0.2rem;
+}
+
+/* Headings — display font, tight rhythm, kept below the brand voice in size. */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--ink);
+    margin: 1.15em 0 0.45em;
+    letter-spacing: -0.015em;
+}
+
+.markdown-body h1 { font-size: 1.3rem; }
+.markdown-body h2 { font-size: 1.15rem; }
+.markdown-body h3 { font-size: 1.02rem; }
+.markdown-body h4 {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Paragraphs + emphasis. */
+.markdown-body p { margin: 0 0 0.65em; }
+.markdown-body strong { font-weight: 700; color: var(--ink); }
+.markdown-body em { font-style: italic; }
+
+/* Links — teal, underline lifts on hover; long URLs wrap, not overflow. */
+.markdown-body a {
+    color: var(--teal-deep);
+    text-decoration: underline;
+    text-decoration-color: var(--color-36);
+    text-underline-offset: 2px;
+    word-break: break-word;
+    transition: text-decoration-color 0.15s var(--ease-out);
+}
+.markdown-body a:hover { text-decoration-color: var(--teal-deep); }
+
+/* Lists — teal markers match the brand accent. */
+.markdown-body ul,
+.markdown-body ol {
+    margin: 0 0 0.65em;
+    padding-left: 1.4em;
+}
+.markdown-body li { margin: 0.25em 0; }
+.markdown-body li::marker { color: var(--teal); }
+.markdown-body ul ul,
+.markdown-body ol ol,
+.markdown-body ul ol,
+.markdown-body ol ul { margin: 0.25em 0; }
+
+/* Blockquote — teal accent rule on a soft wash, muted ink. */
+.markdown-body blockquote {
+    margin: 0 0 0.75em;
+    padding: 0.3em 0 0.3em 0.9em;
+    border-left: 3px solid var(--teal);
+    background: linear-gradient(90deg, var(--color-37), var(--color-3));
+    color: var(--ink-soft);
+    border-radius: 0 0.4rem 0.4rem 0;
+}
+.markdown-body blockquote p:last-child { margin-bottom: 0; }
+
+/* Horizontal rule — quiet divider. */
+.markdown-body hr {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 1.1em 0;
+}
+
+/* Inline code — teal-tinted pill. Inherits mono family from the bubble font stack. */
+.markdown-body code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    padding: 0.1em 0.35em;
+    border-radius: 0.3rem;
+    background: var(--color-14);
+    color: var(--teal-deep);
+    word-break: break-word;
+}
+
+/* Fenced code blocks — dark ink-teal slab. HORIZONTAL SCROLL LIVES HERE:
+   overflow-x:auto on the <pre> confines long lines to the bubble; combined
+   with min-width:0 up the ancestor chain, the bubble stays capped at max-width
+   and the page never gains a horizontal scrollbar. */
+.markdown-body pre {
+    margin: 0 0 0.75em;
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.6rem;
+    background: var(--color-38);
+    border: 1px solid var(--color-31);
+    box-shadow: inset 0 1px 0 var(--color-39);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.markdown-body pre code {
+    display: block;
+    background: var(--color-3);
+    color: var(--color-40);
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    white-space: pre;
+    word-break: normal;
+}
+
+/* Slim scrollbars on the code slab + tables so they don't crowd the bubble. */
+.markdown-body pre::-webkit-scrollbar,
+.markdown-body table::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+.markdown-body pre::-webkit-scrollbar-thumb,
+.markdown-body table::-webkit-scrollbar-thumb {
+    background: var(--color-41);
+    border-radius: 7px;
+}
+.markdown-body pre::-webkit-scrollbar-track,
+.markdown-body table::-webkit-scrollbar-track {
+    background: var(--color-3);
+}
+
+/* Tables — become their own scroll context so wide grids pan inside the bubble.
+   display:block + overflow-x:auto is the well-worn trick for Markdown tables
+   that have no wrapper element to lean on. */
+.markdown-body table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    border-collapse: collapse;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 0 0.75em;
+    font-size: 0.88rem;
+}
+
+.markdown-body thead {
+    background: var(--color-18);
+}
+
+.markdown-body th,
+.markdown-body td {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--line);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.markdown-body th {
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.markdown-body tbody tr:nth-child(even) {
+    background: var(--color-42);
+}
+
+.chat-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--ink-mute);
+    font-style: italic;
+}
+
+.caret {
+    display: inline-block;
+    width: 0.45em;
+    height: 1.05em;
+    margin-left: 0.1em;
+    vertical-align: text-bottom;
+    background: var(--teal);
+    border-radius: 1px;
+    animation: caret-blink 1s step-end infinite;
+}
+
+@keyframes caret-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* Typing dots — pattern inspired by real chat UIs (ollama, eliza, cesium) */
+.typing-dots,
+.think-pulse {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.22rem;
+}
+
+.typing-dots span,
+.think-pulse span {
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.35;
+}
+
+/* Typing dots always bounce; think-pulse only while reasoning is in flight. */
+.typing-dots span {
+    animation: typing-bounce 1.15s ease-in-out infinite;
+}
+
+.thinking-panel.is-active .think-pulse span {
+    animation: typing-bounce 1.15s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2),
+.thinking-panel.is-active .think-pulse span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.typing-dots span:nth-child(3),
+.thinking-panel.is-active .think-pulse span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+@keyframes typing-bounce {
+    0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.35;
+    }
+    30% {
+        transform: translateY(-4px);
+        opacity: 1;
+    }
+}
+
+/* ─── Thinking panel ─── */
+.thinking-panel {
+    margin: 0 0 0.7rem;
+    border-radius: 0.75rem;
+    background:
+        linear-gradient(180deg, var(--color-43), var(--color-3) 60%),
+        var(--color-44);
+    border: 1px solid var(--color-45);
+    padding: 0.15rem 0.55rem 0.25rem;
+    overflow: hidden;
+}
+
+.thinking-panel.is-active {
+    border-color: var(--color-19);
+    background:
+        linear-gradient(90deg, var(--color-3), var(--color-46), var(--color-3)),
+        linear-gradient(180deg, var(--color-47), var(--color-3) 55%),
+        var(--color-48);
+    background-size: 200% 100%, 100% 100%, 100% 100%;
+    animation: think-shimmer 2.2s linear infinite;
+}
+
+@keyframes think-shimmer {
+    0% { background-position: 100% 0, 0 0, 0 0; }
+    100% { background-position: -100% 0, 0 0, 0 0; }
+}
+
+.thinking-panel > summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.15rem;
+}
+
+.thinking-panel > summary::-webkit-details-marker {
+    display: none;
+}
+
+.thinking-panel > summary::after {
+    content: "";
+    margin-left: auto;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-right: 2px solid var(--ink-mute);
+    border-bottom: 2px solid var(--ink-mute);
+    transform: rotate(45deg);
+    transition: transform 0.2s var(--ease-out);
+    opacity: 0.7;
+}
+
+.thinking-panel[open] > summary::after {
+    transform: rotate(-135deg);
+    margin-top: 0.2rem;
+}
+
+.thinking-panel.is-active .think-pulse {
+    color: var(--copper);
+}
+
+.think-label {
+    letter-spacing: 0.02em;
+}
+
+.think-duration {
+    margin-left: auto;
+    color: var(--ink-mute);
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.thinking-text {
+    margin: 0 0 0.35rem;
+    padding: 0.55rem 0.25rem 0.35rem;
+    border-top: 1px dashed var(--color-49);
+    box-sizing: border-box;
+    max-width: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-height: 40vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+/* ─── Error ─── */
+.chat-error {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--color-50);
+    border-radius: 0.85rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.92rem;
+    animation: rise-in 0.35s var(--ease-out) both;
+}
+
+/* ─── Composer ─── */
+.chat-form {
+    margin-top: 0.15rem;
+}
+
+.composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    padding: 0.4rem 0.4rem 0.4rem 0.85rem;
+    border-radius: 1.15rem;
+    background: var(--color-51);
+    border: 1px solid var(--color-52);
+    box-shadow: var(--shadow-soft), 0 0 0 1px var(--line);
+    backdrop-filter: blur(16px);
+    transition: box-shadow 0.25s, border-color 0.25s;
+}
+
+.composer:focus-within {
+    box-shadow: var(--shadow-soft), 0 0 0 2px var(--color-17);
+}
+
+.chat-input {
+    flex: 1;
+    min-width: 0;
+    min-height: calc(1.5em + 1.4rem);
+    max-height: calc(6 * 1.5em + 1.4rem);
+    padding: 0.7rem 0.35rem;
+    border: none;
+    background: var(--color-3);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--ink);
+    outline: none;
+    resize: none;
+    overflow-y: auto;
+    field-sizing: content;
+}
+
+.chat-input::placeholder {
+    color: var(--ink-mute);
+}
+
+.chat-input:disabled {
+    opacity: 0.55;
+}
+
+.chat-send {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.7rem 1rem;
+    border: none;
+    border-radius: 0.85rem;
+    background: linear-gradient(145deg, var(--copper) 0%, var(--color-53) 100%);
+    color: var(--color-29);
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: transform 0.2s var(--ease-out), filter 0.2s, opacity 0.2s;
+    box-shadow: 0 6px 18px var(--color-54);
+}
+
+.chat-send:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+}
+
+.chat-send:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.chat-send:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.send-icon {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+
+.chat-send:focus-visible,
+#blazor-error-ui .dismiss:focus-visible,
+#components-reconnect-modal button:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+/* ─── Framework leftovers ─── */
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--color-55);
+}
+
+.invalid {
+    outline: 1px solid var(--color-56);
+}
+
+.validation-message {
+    color: var(--color-56);
+}
+
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, var(--color-57);
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: var(--color-1);
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred.";
+}
+
+.darker-border-checkbox.form-check-input {
+    border-color: var(--color-58);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 560px) {
+    .chat-page {
+        padding: 0.85rem 0.65rem 1rem;
+    }
+
+    .chat-brand {
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        gap: 0.35rem 0.55rem;
+        padding: 0;
+    }
+
+    .brand-mark,
+    .provider-label {
+        display: none;
+    }
+
+    .brand-copy {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .brand-name {
+        font-size: 1.55rem;
+    }
+
+    .chat-subtitle {
+        margin-top: 0.2rem;
+        gap: 0.25rem;
+    }
+
+    .model-picker-trigger {
+        min-height: 2.75rem;
+    }
+
+    .chat-header-actions {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-self: stretch;
+        width: 100%;
+        max-width: 100%;
+        flex-wrap: nowrap;
+        gap: 0.35rem;
+    }
+
+    .theme-toggle {
+        position: relative;
+        width: 2.75rem;
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+        padding: 0;
+        overflow: hidden;
+        color: transparent;
+    }
+
+    .theme-toggle::after {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: var(--ink-soft);
+        font-size: 1rem;
+        content: "◐";
+    }
+
+    .conversation-usage {
+        min-height: 2.75rem;
+        padding: 0.35rem 0.55rem;
+        font-size: 0.64rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .live-badge .live-label {
+        /* Keep the live dot; drop the Ready/Streaming word on narrow rows. */
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .live-badge {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+        justify-content: center;
+        padding: 0;
+    }
+
+    .chat-bubble {
+        max-width: 94%;
+    }
+
+    .send-text {
+        display: none;
+    }
+
+    .chat-send {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+        padding: 0.75rem;
+    }
+
+    .new-chat-btn {
+        position: relative;
+        width: 2.75rem;
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+        padding: 0;
+        overflow: hidden;
+        color: transparent;
+    }
+
+    .new-chat-btn::after {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: var(--ink-soft);
+        font-size: 1.25rem;
+        content: "+";
+    }
+
+    .composer {
+        padding-left: 0.7rem;
+    }
+}
+
+@media (min-width: 1100px) {
+    .chat-page {
+        max-width: 1040px;
+        padding-inline: 1.5rem;
+    }
+
+    .chat-bubble {
+        max-width: min(78%, 72ch);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .orb,
+    .brand-mark .ring,
+    .live-badge.is-live .live-dot,
+    .thinking-panel.is-active,
+    .typing-dots span,
+    .think-pulse span,
+    .caret,
+    .empty-glyph .spark,
+    .chat-bubble,
+    .chat-brand,
+    .empty-state,
+    .model-picker-popover,
+    .model-picker-spinner,
+    .model-picker-refresh .is-spinning {
+        animation: none !important;
+    }
+}
+
+/* ─── Model picker ───
+   Visual language: extends the existing `.model-chip` aesthetic (teal pill,
+   JetBrains Mono code font) into a clickable trigger, and uses the same
+   frosted-glass treatment as `.composer` and `.chat-stage` for the popover.
+   No new color tokens introduced — everything references Signal Lab vars. */
+
+.model-picker {
+    position: relative;
+    display: inline-flex;
+    max-width: 100%;
+}
+
+/* Trigger button — replaces the static `.model-chip` in the header. */
+.model-picker-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 100%;
+    padding: 0.22rem 0.45rem 0.22rem 0.55rem;
+    border-radius: 0.45rem;
+    background: var(--color-14);
+    border: 1px solid var(--color-49);
+    color: var(--teal-deep);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.18s var(--ease-out),
+                border-color 0.18s var(--ease-out),
+                transform 0.12s var(--ease-out);
+}
+
+.model-picker-trigger:hover:not(:disabled) {
+    background: var(--color-45);
+    border-color: var(--color-59);
+}
+
+.model-picker-trigger:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.model-picker-trigger.is-open {
+    background: var(--color-15);
+    border-color: var(--color-60);
+}
+
+.model-picker-trigger:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.model-picker-trigger:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.model-picker-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 14rem;
+}
+
+.model-picker-chevron {
+    display: inline-flex;
+    align-items: center;
+    color: var(--teal);
+    opacity: 0.75;
+    transition: transform 0.2s var(--ease-out);
+}
+
+.model-picker-chevron svg {
+    width: 0.65rem;
+    height: 0.65rem;
+}
+
+.model-picker-trigger.is-open .model-picker-chevron,
+.model-picker-trigger[aria-expanded="true"] .model-picker-chevron {
+    transform: rotate(180deg);
+}
+
+/* Popover panel — frosted glass, floats above chat content.
+   Default is viewport-safe fixed placement. JS listenForPopoverReposition
+   clamps top/left/width under the trigger so the panel never overshoots. */
+.model-picker-popover {
+    position: fixed;
+    top: 4.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-width: min(640px, calc(100vw - 1rem));
+    margin: 0;
+    padding: 0;
+    z-index: 50;
+    background: var(--color-61);
+    border: 1px solid var(--color-62);
+    border-radius: 1rem;
+    box-shadow:
+        0 24px 60px var(--color-63),
+        0 0 0 1px var(--line);
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    overflow: hidden;
+    animation: popover-in 0.18s var(--ease-out) both;
+}
+
+.model-picker-popover:not([open]) {
+    display: none;
+}
+
+.model-picker-popover::backdrop,
+.settings-popover::backdrop {
+    background: rgba(5, 12, 15, 0.66);
+    backdrop-filter: blur(2px);
+}
+
+@keyframes popover-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Search row — input + refresh button. */
+.model-picker-search-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--color-64), var(--color-3));
+}
+
+.model-picker-search-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ink-mute);
+    flex-shrink: 0;
+}
+
+.model-picker-search-icon svg {
+    width: 0.95rem;
+    height: 0.95rem;
+}
+
+.model-picker-search {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4rem 0;
+    border: none;
+    background: var(--color-3);
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    color: var(--ink);
+    outline: none;
+}
+
+.model-picker-search::placeholder {
+    color: var(--ink-mute);
+}
+
+/* For browsers that render a clear button on [type=search], keep it tidy. */
+.model-picker-search::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.model-picker-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    flex-shrink: 0;
+    padding: 0;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-3);
+    background: var(--color-3);
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: background 0.18s var(--ease-out),
+                color 0.18s var(--ease-out),
+                border-color 0.18s var(--ease-out);
+}
+
+.model-picker-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 0.65rem;
+    background: var(--color-3);
+    color: var(--ink-soft);
+    font: 1.35rem/1 var(--font-body);
+    cursor: pointer;
+}
+
+.model-picker-close:hover,
+.model-picker-close:focus-visible {
+    color: var(--teal-deep);
+    border-color: var(--color-17);
+    background: var(--color-18);
+}
+
+.model-picker-close:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.model-picker-refresh:hover:not(:disabled) {
+    background: var(--copper-mist);
+    color: var(--copper);
+    border-color: var(--color-65);
+}
+
+.model-picker-refresh:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.model-picker-refresh:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.model-picker-refresh svg {
+    width: 0.95rem;
+    height: 0.95rem;
+}
+
+.model-picker-refresh .is-spinning {
+    animation: model-picker-spin 0.9s linear infinite;
+    transform-origin: center;
+}
+
+@keyframes model-picker-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Table container — vertical scroll for long lists, horizontal scroll safety net. */
+.model-picker-table-wrap {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+.model-picker-table-wrap::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.model-picker-table-wrap::-webkit-scrollbar-thumb {
+    background: var(--color-66);
+    border-radius: 8px;
+}
+
+/* Column-driven table layout so header and body stay aligned. */
+.model-picker-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.model-picker-table colgroup .col-w-provider { width: 92px; }
+.model-picker-table colgroup .col-w-input { width: 78px; }
+.model-picker-table colgroup .col-w-output { width: 78px; }
+.model-picker-table colgroup .col-w-context { width: 60px; }
+.model-picker-table colgroup .col-w-added { width: 78px; }
+
+.model-picker-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-67);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 0;
+    text-align: left;
+    font-weight: 600;
+}
+
+.model-picker-head {
+    display: block;
+    width: 100%;
+    padding: 0.55rem 0.55rem;
+    background: var(--color-3);
+    border: none;
+    color: var(--ink-soft);
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.15s var(--ease-out),
+                background 0.15s var(--ease-out);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.model-picker-head:hover {
+    color: var(--teal-deep);
+    background: var(--color-43);
+}
+
+.model-picker-head:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: -2px;
+}
+
+.model-picker-head.model-picker-sort-asc,
+.model-picker-head.model-picker-sort-desc {
+    color: var(--teal-deep);
+}
+
+.model-picker-head.model-picker-sort-asc::after {
+    content: " ▲";
+    font-size: 0.58rem;
+}
+
+.model-picker-head.model-picker-sort-desc::after {
+    content: " ▼";
+    font-size: 0.58rem;
+}
+
+/* Body rows — clickable, with hover + selected state. */
+.model-picker-row {
+    cursor: pointer;
+    transition: background 0.12s var(--ease-out);
+    border-bottom: 1px solid var(--color-30);
+}
+
+.model-picker-row:hover {
+    background: var(--color-43);
+}
+
+.model-picker-row.is-selected {
+    background: var(--color-68);
+    box-shadow: inset 3px 0 0 var(--teal);
+}
+
+.model-picker-row.is-active {
+    outline: 2px solid var(--teal);
+    outline-offset: -2px;
+}
+
+.model-picker-row:last-child {
+    border-bottom: none;
+}
+
+.model-picker-section-row th {
+    padding: 0.36rem 0.55rem;
+    background: rgba(13, 124, 124, 0.08);
+    border-bottom: 1px solid var(--line);
+    color: var(--teal-deep);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.model-picker-row td {
+    padding: 0.5rem 0.55rem;
+    font-size: 0.82rem;
+    color: var(--ink);
+    vertical-align: top;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.model-picker-cell-provider {
+    font-weight: 600;
+    color: var(--ink-soft);
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+.model-picker-cell-model {
+    /* Rich cell: name + badges + id stacked/inline. */
+}
+
+.model-picker-name-text {
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 0.84rem;
+}
+
+.model-picker-favorite {
+    width: 1.4rem;
+    margin: 0 0.15rem 0 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    vertical-align: -0.05rem;
+}
+
+.model-picker-favorite:hover,
+.model-picker-favorite.is-favorite {
+    color: var(--copper);
+}
+
+.model-picker-favorite:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 1px;
+    border-radius: 0.2rem;
+}
+
+.model-picker-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+}
+
+.model-picker-badge-free {
+    display: inline-block;
+    padding: 0.04rem 0.35rem;
+    border-radius: 999px;
+    background: var(--copper-mist);
+    color: var(--copper);
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid var(--color-69);
+    line-height: 1.4;
+}
+
+.model-picker-tag-modality {
+    display: inline-block;
+    padding: 0.04rem 0.32rem;
+    border-radius: 0.25rem;
+    background: var(--color-70);
+    color: var(--ink-mute);
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: lowercase;
+    line-height: 1.4;
+}
+
+.model-picker-id {
+    display: block;
+    margin-top: 0.15rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--ink-mute);
+    word-break: break-all;
+    line-height: 1.3;
+}
+
+.model-picker-cell-cost,
+.model-picker-cell-context {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--ink-soft);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.model-picker-cell-added {
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* States: loading / error / empty. */
+.model-picker-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 1.6rem 1rem;
+    color: var(--teal-deep);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.model-picker-spinner {
+    display: inline-block;
+    width: 0.9rem;
+    height: 0.9rem;
+    border: 2px solid var(--color-71);
+    border-top-color: var(--teal);
+    border-radius: 50%;
+    animation: model-picker-spin 0.8s linear infinite;
+}
+
+.model-picker-error {
+    padding: 1.3rem 1rem;
+    text-align: center;
+    color: var(--ink-mute);
+    font-size: 0.85rem;
+}
+
+.model-picker-error p {
+    margin: 0 0 0.6rem;
+    color: var(--danger);
+    font-weight: 500;
+}
+
+.model-picker-retry {
+    padding: 0.32rem 0.85rem;
+    border-radius: 0.45rem;
+    border: 1px solid var(--copper);
+    background: var(--copper-mist);
+    color: var(--copper);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out);
+}
+
+.model-picker-retry:hover:not(:disabled) {
+    background: var(--copper);
+    color: var(--color-29);
+}
+
+.model-picker-retry:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+}
+
+.model-picker-empty {
+    padding: 1.3rem 1rem;
+    text-align: center;
+    color: var(--ink-mute);
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+.model-picker-limit {
+    padding: 0.8rem 1rem;
+    text-align: center;
+    color: var(--ink-mute);
+    font-size: 0.76rem;
+    border-top: 1px solid var(--line);
+}
+
+/* ─── Model picker: responsive ───
+   On narrow viewports, hide least-critical columns so the clamped panel stays
+   readable. Horizontal scroll inside .model-picker-table-wrap remains as a
+   safety net. Positioning is owned by JS (listenForPopoverReposition); these
+   rules only affect table columns / trigger ellipsis. */
+@media (max-width: 640px) {
+    .model-picker-popover {
+        inset: 0;
+        width: 100vw;
+        max-width: none;
+        height: 100dvh;
+        max-height: 100dvh;
+        border: 0;
+        border-radius: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .model-picker-search-row {
+        flex-shrink: 0;
+        padding:
+            max(0.55rem, env(safe-area-inset-top))
+            max(0.7rem, env(safe-area-inset-right))
+            0.55rem
+            max(0.7rem, env(safe-area-inset-left));
+    }
+
+    .model-picker-table-wrap {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .model-picker-search {
+        min-height: 2.75rem;
+    }
+
+    .model-picker-refresh {
+        width: 2.75rem;
+        height: 2.75rem;
+    }
+
+    .model-picker-name {
+        max-width: 9rem;
+    }
+
+    /* Hide Output $/M and Added columns — least-lossy cut for narrow screens.
+       The user still sees Provider, Model, Input $/M, and Context, which is
+       enough to make a selection. Output is often the same shape as Input
+       across providers, and Added is rarely decisive. */
+    .model-picker-table .col-output,
+    .model-picker-table .col-added {
+        display: none;
+    }
+}
+
+@media (max-width: 420px) {
+    /* On very narrow phones, also drop Provider (the model name + id already
+       carries provider info via the `provider/name` slug). Keeps the picker
+       usable down to ~320px viewports. */
+    .model-picker-table .col-provider {
+        display: none;
+    }
+
+    .model-picker-name {
+        max-width: 7rem;
+    }
+}

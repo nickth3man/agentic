@@ -1,5 +1,4 @@
 @page "/chat"
-@rendermode InteractiveServer
 @inject ChatAgentService ChatAgent
 @inject ConversationService Conversations
 @inject IJSRuntime JS
@@ -11,7 +10,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 
 <PageTitle>Agentic</PageTitle>
-<script type="module" src="@Assets["Components/Pages/Chat.razor.js"]"></script>
+<script type="module" src="@Assets["js/chat.js"]"></script>
 
 <div class="chat-shell @(_sidebarOpen ? "sidebar-open" : null)">
     <div class="sidebar-backdrop" @onclick="CloseSidebarAsync" aria-hidden="@(!_sidebarOpen)"></div>
@@ -448,7 +447,7 @@
             try
             {
                 _scrollModule = await JS.InvokeAsync<IJSObjectReference>(
-                    "import", "./Components/Pages/Chat.razor.js");
+                    "import", "./js/chat.js");
                 _scrollController = await _scrollModule.InvokeAsync<IJSObjectReference>(
                     "initialize", _messagesContainer, _scrollSentinel, _jumpToLatestButton);
                 _selfReference = DotNetObjectReference.Create(this);
@@ -682,7 +681,7 @@
         try
         {
             _chatModule = await JS.InvokeAsync<IJSObjectReference>(
-                "import", "./Components/Pages/Chat.razor.js");
+                "import", "./js/chat.js");
         }
         catch
         {

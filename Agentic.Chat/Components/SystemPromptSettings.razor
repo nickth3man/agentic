@@ -385,7 +385,7 @@
         try
         {
             _module = await JS.InvokeAsync<IJSObjectReference>(
-                "import", "./Components/ModelPicker.razor.js");
+                "import", "./js/model-picker.js");
             _dotnetRef ??= DotNetObjectReference.Create(this);
         }
         catch

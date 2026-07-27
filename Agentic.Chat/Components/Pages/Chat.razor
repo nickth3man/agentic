@@ -121,15 +121,7 @@
             </div>
             <div class="brand-copy">
                 <h1 class="brand-name">Agentic</h1>
-                <div class="chat-subtitle">
-                    <span class="provider-label">Multi-turn via OpenRouter</span>
-                    <ModelPicker />
-                    <ReasoningEffortControl />
-                    @if (_contextMeterText is not null)
-                    {
-                        <span class="context-meter" title="@_contextMeterTitle">@_contextMeterText</span>
-                    }
-                </div>
+                <span class="provider-label">Multi-turn via OpenRouter</span>
             </div>
             <div class="chat-header-actions">
                 <button type="button"
@@ -158,6 +150,18 @@
                     <span class="live-dot"></span>
                     <span class="live-label">@(isBusy ? "Streaming" : "Ready")</span>
                 </div>
+            </div>
+
+            @* Its own row rather than nested under the title: as a child of
+               .brand-copy the model controls competed with the action pills for
+               the same track and collapsed to slivers on mid-width screens. *@
+            <div class="chat-subtitle">
+                <ModelPicker />
+                <ReasoningEffortControl />
+                @if (_contextMeterText is not null)
+                {
+                    <span class="context-meter" title="@_contextMeterTitle">@_contextMeterText</span>
+                }
             </div>
         </header>
 
@@ -214,7 +218,22 @@
                                         aria-label="@(_copiedMessage == message ? "Message copied" : "Copy message")"
                                         title="Copy message"
                                         @onclick="() => CopyMessageAsync(message)">
-                                    <span aria-hidden="true">@(_copiedMessage == message ? "✓" : "⧉")</span>
+                                    @if (_copiedMessage == message)
+                                    {
+                                        <svg class="msg-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                            <path d="M3.5 8.4l3 3 6-6.8" stroke="currentColor" stroke-width="1.7"
+                                                  stroke-linecap="round" stroke-linejoin="round" />
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        <svg class="msg-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                            <rect x="5.6" y="5.6" width="8" height="8" rx="2"
+                                                  stroke="currentColor" stroke-width="1.5" />
+                                            <path d="M10.4 3.4A1.8 1.8 0 008.6 2H4.2A2.2 2.2 0 002 4.2v4.4a1.8 1.8 0 001.4 1.76"
+                                                  stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                                        </svg>
+                                    }
                                     <span class="message-copy-label">@(_copiedMessage == message ? "Copied" : "Copy")</span>
                                 </button>
                             }
@@ -341,8 +360,12 @@
             <div class="composer">
                 @if (_modelSupportsImage)
                 {
-                    <label class="composer-attach" aria-label="Attach image">
-                        📷
+                    <label class="composer-attach" aria-label="Attach image" title="Attach image">
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <path d="M7.2 5.4l.7-1.2A1.4 1.4 0 019.1 3.5h1.8a1.4 1.4 0 011.2.7l.7 1.2h2.1A2.1 2.1 0 0118 7.5v6.4a2.1 2.1 0 01-2.1 2.1H4.1A2.1 2.1 0 012 13.9V7.5a2.1 2.1 0 012.1-2.1h3.1z"
+                                  stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                            <circle cx="10" cy="10.6" r="2.7" stroke="currentColor" stroke-width="1.4" />
+                        </svg>
                         <InputFile @key="_inputFileKey"
                                    id="chat-image-input"
                                    class="visually-hidden"

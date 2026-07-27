@@ -1,154 +1,326 @@
-/* ─── Design tokens: Signal Lab ─── */
+/* ─── Design tokens: Signal Lab ──────────────────────────────────────────
+   Two layers, and only two:
+
+   1. ~20 *primitives* (ink / paper / teal / copper / danger). These are the
+      only literal colours in the stylesheet, and the only thing a theme
+      block overrides.
+   2. Everything else — every surface, border, tint, wash and glow — is mixed
+      from a primitive with color-mix(), so redefining the primitives
+      redefines the entire palette.
+
+   The previous revision hand-wrote ninety --color-N literals of which the
+   dark theme only re-stated about thirty. The other sixty kept their
+   light-mode values in dark mode: pale mint atmosphere washes over a near
+   black page, ink-on-ink borders that vanished, light code backgrounds.
+   Deriving them removes that whole class of drift, and makes retuning the
+   brand a five-line edit instead of a ninety-line one. */
 :root {
-    --ink: #14222a;
-    --ink-soft: #3d5360;
-    --ink-mute: #6b8290;
-    --paper: #eef3f5;
-    --paper-elevated: rgba(255, 255, 255, 0.72);
+    color-scheme: light dark;
+
+    /* ── Primitives ───────────────────────────────────────────────────── */
+    --ink: #12212a;
+    --ink-soft: #3d5561;
+    --ink-mute: #536d79;
+    --paper: #eef2f4;
+    --paper-raised: #ffffff;
+
     --teal: #0d7c7c;
-    --teal-deep: #085858;
-    --teal-mist: #c5e8e6;
-    --copper: #c46b2e;
-    --copper-soft: #e8a06a;
-    --copper-mist: #f3dcc8;
+    --teal-bright: #12908f;
+    --teal-deep: #075252;
+    --teal-mist: #c9e9e6;
+
+    --copper: #bd6527;
+    --copper-soft: #e79f68;
+    --copper-deep: #99511c;
+    --copper-mist: #f6e2d1;
+
     --danger: #a12828;
-    --danger-bg: #fceeed;
-    --line: rgba(20, 34, 42, 0.1);
-    --shadow-soft: 0 18px 50px rgba(20, 34, 42, 0.08);
-    --shadow-lift: 0 8px 28px rgba(13, 124, 124, 0.18);
-    --radius-bubble: 1.15rem;
+    --danger-deep: #7a1d1d;
+    --danger-bg: #fcefee;
+
+    --on-accent: #ffffff;
+    --shade: #0a1417;
+
+    /* Filled controls are a deliberate design decision, not a derivation:
+       both themes want a *saturated mid* teal/copper with light text, so
+       neither can be mixed from --teal/--copper without one theme ending up
+       with a pale wash and unreadable ink. */
+    --accent-fill-from: #0d7877;
+    --accent-fill-to: #08514f;
+    --accent-fill-ink: #f2fffe;
+    --warm-fill-from: #c4712f;
+    --warm-fill-to: #a1521c;
+    --warm-fill-ink: #fff8f0;
+
+    /* The code surface is dark in *both* themes; deriving it from --ink would
+       flip it to near-white the moment --ink inverts. */
+    --surface-code: color-mix(in srgb, var(--shade) 90%, var(--teal));
+    --surface-code-edge: rgba(255, 255, 255, 0.07);
+    --surface-card: var(--paper-raised);
+
+    /* ── Typography ───────────────────────────────────────────────────── */
     --font-display: "Syne", "Segoe UI", system-ui, sans-serif;
     --font-body: "Figtree", "Segoe UI", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", consolas, monospace;
-    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
-    --color-1: white;
-    --color-2: #d4ebe8;
+    --text-2xs: 0.6875rem;
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-base: 0.9375rem;
+    --text-md: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.375rem;
+    --tracking-wide: 0.06em;
+    --tracking-tight: -0.015em;
+
+    /* ── Space, radius, elevation ─────────────────────────────────────── */
+    --space-1: 0.25rem;
+    --space-2: 0.375rem;
+    --space-3: 0.5rem;
+    --space-4: 0.75rem;
+    --space-5: 1rem;
+    --space-6: 1.5rem;
+
+    --radius-xs: 0.375rem;
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.25rem;
+    --radius-pill: 999px;
+    --radius-bubble: 1.15rem;
+
+    --line: color-mix(in srgb, var(--ink) 12%, transparent);
+    --line-strong: color-mix(in srgb, var(--ink) 20%, transparent);
+
+    --shadow-soft: 0 1px 2px color-mix(in srgb, var(--shade) 6%, transparent),
+                   0 12px 32px color-mix(in srgb, var(--shade) 8%, transparent);
+    --shadow-lift: 0 2px 6px color-mix(in srgb, var(--shade) 8%, transparent),
+                   0 18px 44px color-mix(in srgb, var(--teal) 16%, transparent);
+    --shadow-pop: 0 1px 3px color-mix(in srgb, var(--shade) 10%, transparent),
+                  0 24px 64px color-mix(in srgb, var(--shade) 18%, transparent);
+
+    /* ── Motion ───────────────────────────────────────────────────────── */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --dur-fast: 0.14s;
+    --dur-base: 0.22s;
+    --dur-slow: 0.4s;
+
+    /* ── Derived: neutrals ────────────────────────────────────────────── */
+    --color-1: var(--paper-raised);
     --color-3: transparent;
-    --color-4: #f0dfd0;
-    --color-5: #f5f8f9;
-    --color-6: #e8eef1;
-    --color-7: #e4ecea;
-    --color-8: #7ec9c4;
-    --color-9: #e0a878;
-    --color-10: #a8cfd4;
-    --color-11: rgba(20, 34, 42, 0.04);
     --color-12: black;
-    --color-13: rgba(13, 124, 124, 0.15);
-    --color-14: rgba(13, 124, 124, 0.1);
-    --color-15: rgba(13, 124, 124, 0.18);
-    --color-16: rgba(255, 255, 255, 0.55);
-    --color-17: rgba(13, 124, 124, 0.35);
-    --color-18: rgba(13, 124, 124, 0.08);
-    --color-19: rgba(196, 107, 46, 0.35);
-    --color-20: rgba(243, 220, 200, 0.55);
-    --color-21: rgba(13, 124, 124, 0.45);
-    --color-22: rgba(196, 107, 46, 0.5);
-    --color-23: rgba(196, 107, 46, 0);
-    --color-24: rgba(255, 255, 255, 0.7);
-    --color-25: rgba(61, 83, 96, 0.25);
-    --color-26: #0f8a8a;
-    --color-27: #0a6a6a;
-    --color-28: #f5fffe;
-    --color-29: #fff;
-    --color-30: rgba(20, 34, 42, 0.05);
-    --color-31: rgba(13, 124, 124, 0.28);
-    --color-32: rgba(255, 255, 255, 0.22);
-    --color-33: #f7ebe0;
-    --color-34: rgba(196, 107, 46, 0.25);
-    --color-35: #e6fffc;
-    --color-36: rgba(8, 88, 88, 0.35);
-    --color-37: rgba(13, 124, 124, 0.07);
-    --color-38: #122026;
-    --color-39: rgba(255, 255, 255, 0.04);
-    --color-40: #d9ecec;
-    --color-41: rgba(13, 124, 124, 0.4);
-    --color-42: rgba(20, 34, 42, 0.025);
-    --color-43: rgba(13, 124, 124, 0.06);
-    --color-44: #f4f8f8;
-    --color-45: rgba(13, 124, 124, 0.16);
-    --color-46: rgba(232, 160, 106, 0.18);
-    --color-47: rgba(196, 107, 46, 0.08);
-    --color-48: #f7f4f0;
-    --color-49: rgba(13, 124, 124, 0.22);
-    --color-50: #efc5c5;
-    --color-51: rgba(255, 255, 255, 0.78);
-    --color-52: rgba(255, 255, 255, 0.9);
-    --color-53: #a85620;
-    --color-54: rgba(196, 107, 46, 0.3);
-    --color-55: #26b050;
-    --color-56: #e50000;
-    --color-57: #b32121;
-    --color-58: #929292;
-    --color-59: rgba(13, 124, 124, 0.38);
-    --color-60: rgba(13, 124, 124, 0.42);
-    --color-61: rgba(255, 255, 255, 0.82);
-    --color-62: rgba(255, 255, 255, 0.85);
-    --color-63: rgba(20, 34, 42, 0.16);
-    --color-64: rgba(13, 124, 124, 0.05);
-    --color-65: rgba(196, 107, 46, 0.28);
-    --color-66: rgba(61, 83, 96, 0.22);
-    --color-67: rgba(238, 243, 245, 0.92);
-    --color-68: rgba(13, 124, 124, 0.12);
-    --color-69: rgba(196, 107, 46, 0.32);
-    --color-70: rgba(107, 130, 144, 0.14);
-    --color-71: rgba(13, 124, 124, 0.2);
-    --color-72: rgba(255, 255, 255, 0.75);
-    --color-73: rgba(161, 40, 40, 0.4);
-    --color-74: rgba(255, 255, 255, 0.6);
-    --color-75: rgba(20, 34, 42, 0.45);
-    --color-76: rgba(255, 255, 255, 0.92);
-    --color-77: rgba(20, 34, 42, 0.06);
-    --color-78: rgba(255, 255, 255, 0.65);
-    --color-79: #a12828;
-    --color-80: #7a1d1d;
-    --color-81: rgba(161, 40, 40, 0.3);
-    --color-82: rgba(255, 255, 255, 0.72);
-    --color-83: rgba(0, 0, 0, 0.05);
-    --color-84: rgba(0, 0, 0, 0.3);
-    --color-85: rgba(0, 0, 0, 0.4);
+    --color-11: color-mix(in srgb, var(--ink) 5%, transparent);
+    --color-30: color-mix(in srgb, var(--ink) 7%, transparent);
+    --color-42: color-mix(in srgb, var(--ink) 3%, transparent);
+    --color-77: color-mix(in srgb, var(--ink) 7%, transparent);
+    --color-83: color-mix(in srgb, var(--ink) 6%, transparent);
+    --color-25: color-mix(in srgb, var(--ink-soft) 28%, transparent);
+    --color-66: color-mix(in srgb, var(--ink-soft) 24%, transparent);
+    --color-70: color-mix(in srgb, var(--ink-mute) 16%, transparent);
+    --color-58: color-mix(in srgb, var(--ink-mute) 70%, transparent);
+
+    /* ── Derived: translucent surfaces ────────────────────────────────── */
+    --color-16: color-mix(in srgb, var(--paper-raised) 58%, transparent);
+    --color-24: color-mix(in srgb, var(--paper-raised) 72%, transparent);
+    --color-51: color-mix(in srgb, var(--paper-raised) 80%, transparent);
+    --color-52: color-mix(in srgb, var(--paper-raised) 92%, transparent);
+    --color-61: color-mix(in srgb, var(--paper-raised) 84%, transparent);
+    --color-62: color-mix(in srgb, var(--paper-raised) 88%, transparent);
+    --color-72: color-mix(in srgb, var(--paper-raised) 78%, transparent);
+    --color-74: color-mix(in srgb, var(--paper-raised) 64%, transparent);
+    --color-76: color-mix(in srgb, var(--paper-raised) 94%, transparent);
+    --color-78: color-mix(in srgb, var(--paper-raised) 68%, transparent);
+    --color-82: color-mix(in srgb, var(--paper-raised) 74%, transparent);
+    --color-32: color-mix(in srgb, var(--paper-raised) 24%, transparent);
+    --color-39: var(--surface-code-edge);
+    --paper-elevated: var(--color-24);
+    --color-67: color-mix(in srgb, var(--paper) 93%, transparent);
+    --color-5: color-mix(in srgb, var(--paper-raised) 45%, var(--paper));
+    --color-6: var(--paper);
+    --color-7: color-mix(in srgb, var(--teal) 5%, var(--paper));
+    --color-44: color-mix(in srgb, var(--teal) 3%, var(--paper));
+    --color-48: color-mix(in srgb, var(--copper) 4%, var(--paper));
+    --color-28: var(--accent-fill-ink);
+    --color-35: color-mix(in srgb, var(--accent-fill-ink) 88%, var(--accent-fill-from));
+    /* Ink for the always-dark code slab — deriving it from --paper turned
+       it into near-black text on a near-black surface in dark mode. */
+    --surface-code-ink: color-mix(in srgb, #dff2f0 92%, var(--teal));
+    --color-40: var(--surface-code-ink);
+    --color-33: color-mix(in srgb, var(--copper) 12%, var(--paper));
+    --color-38: var(--surface-code);
+
+    /* ── Derived: accent ramp ─────────────────────────────────────────── */
+    --color-18: color-mix(in srgb, var(--teal) 8%, transparent);
+    --color-37: color-mix(in srgb, var(--teal) 8%, transparent);
+    --color-64: color-mix(in srgb, var(--teal) 6%, transparent);
+    --color-43: color-mix(in srgb, var(--teal) 9%, transparent);
+    --color-14: color-mix(in srgb, var(--teal) 12%, transparent);
+    --color-68: color-mix(in srgb, var(--teal) 14%, transparent);
+    --color-13: color-mix(in srgb, var(--teal) 16%, transparent);
+    --color-45: color-mix(in srgb, var(--teal) 18%, transparent);
+    --color-15: color-mix(in srgb, var(--teal) 20%, transparent);
+    --color-71: color-mix(in srgb, var(--teal) 22%, transparent);
+    --color-49: color-mix(in srgb, var(--teal) 26%, transparent);
+    --color-31: color-mix(in srgb, var(--teal) 30%, transparent);
+    --color-17: color-mix(in srgb, var(--teal) 36%, transparent);
+    --color-59: color-mix(in srgb, var(--teal) 40%, transparent);
+    --color-60: color-mix(in srgb, var(--teal) 44%, transparent);
+    --color-41: color-mix(in srgb, var(--teal) 44%, transparent);
+    --color-21: color-mix(in srgb, var(--teal) 48%, transparent);
+    --color-36: color-mix(in srgb, var(--teal-deep) 38%, transparent);
+    --color-26: var(--accent-fill-from);
+    --color-27: var(--accent-fill-to);
+    --color-29: var(--accent-fill-ink);
+    --color-2: color-mix(in srgb, var(--teal) 22%, var(--paper));
+    --color-8: color-mix(in srgb, var(--teal) 58%, var(--paper));
+    --color-10: color-mix(in srgb, var(--teal) 34%, var(--paper));
+
+    /* ── Derived: warm ramp ───────────────────────────────────────────── */
+    --color-47: color-mix(in srgb, var(--copper) 9%, transparent);
+    --color-46: color-mix(in srgb, var(--copper-soft) 20%, transparent);
+    --color-20: color-mix(in srgb, var(--copper) 14%, transparent);
+    --color-34: color-mix(in srgb, var(--copper) 26%, transparent);
+    --color-65: color-mix(in srgb, var(--copper) 30%, transparent);
+    --color-69: color-mix(in srgb, var(--copper) 34%, transparent);
+    --color-19: color-mix(in srgb, var(--copper) 38%, transparent);
+    --color-22: color-mix(in srgb, var(--copper) 52%, transparent);
+    --color-23: color-mix(in srgb, var(--copper) 0%, transparent);
+    --color-54: color-mix(in srgb, var(--copper) 32%, transparent);
+    --color-53: var(--warm-fill-to);
+    --color-4: color-mix(in srgb, var(--copper) 20%, var(--paper));
+    --color-9: color-mix(in srgb, var(--copper) 52%, var(--paper));
+
+    /* ── Derived: status ──────────────────────────────────────────────── */
+    --color-50: color-mix(in srgb, var(--danger) 32%, var(--paper-raised));
+    --color-73: color-mix(in srgb, var(--danger) 42%, transparent);
+    --color-81: color-mix(in srgb, var(--danger) 32%, transparent);
+    --color-79: var(--danger);
+    --color-80: var(--danger-deep);
+    --color-57: color-mix(in srgb, var(--danger) 88%, var(--on-accent));
+    --color-55: #26a34c;
+    --color-56: #d92020;
     --color-86: #1d4f8c;
     --color-87: #163d6d;
     --color-88: #0087ff;
-    --color-89: lightyellow;
-    --color-90: rgba(0, 0, 0, 0.2);
+    --color-89: color-mix(in srgb, #f2d64b 26%, var(--paper-raised));
+
+    /* ── Derived: scrims ──────────────────────────────────────────────── */
+    --color-75: color-mix(in srgb, var(--shade) 48%, transparent);
+    --color-84: color-mix(in srgb, var(--shade) 32%, transparent);
+    --color-85: color-mix(in srgb, var(--shade) 42%, transparent);
+    --color-90: color-mix(in srgb, var(--shade) 22%, transparent);
+    --color-63: color-mix(in srgb, var(--shade) 18%, transparent);
 }
 
-@media (prefers-color-scheme: light) {
-    :root:not([data-theme]) {
-        color-scheme: light;
-        --ink: #14222a; --ink-soft: #3d5360; --ink-mute: #6b8290;
-        --paper: #eef3f5; --paper-elevated: rgba(255, 255, 255, .72);
-        --teal: #0d7c7c; --teal-deep: #085858; --teal-mist: #c5e8e6;
-        --copper: #c46b2e; --copper-soft: #e8a06a; --copper-mist: #f3dcc8;
-        --danger: #a12828; --danger-bg: #fceeed;
-    }
-}
-
+/* Dark theme: primitives only. Everything derived above re-resolves. */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) {
         color-scheme: dark;
-        --ink: #eff8f8; --ink-soft: #c0d2d7; --ink-mute: #91abb3; --paper: #10191d; --paper-elevated: rgba(23, 36, 42, .84); --line: rgba(239, 248, 248, .14); --teal: #4cb8b3; --teal-deep: #88d7d1; --teal-mist: #245d60; --copper: #e6a16f; --copper-soft: #f0bd94; --copper-mist: #533a2c; --danger: #ffaaa4; --danger-bg: #482729; --shadow-soft: 0 18px 50px rgba(0, 0, 0, .32); --shadow-lift: 0 8px 28px rgba(76, 184, 179, .18);
-        --color-2: #16383a; --color-4: #3b2c24; --color-5: #142126; --color-6: #17272d; --color-7: #182927; --color-8: #267875; --color-9: #89563a; --color-10: #376b75;
-        --color-16: rgba(29, 45, 52, .78); --color-20: rgba(83, 58, 44, .75); --color-24: rgba(29, 45, 52, .86); --color-26: #168c89; --color-27: #0c6e70; --color-29: #1d2d34; --color-33: #3d2c21; --color-44: #1a2b30; --color-48: #302820; --color-51: rgba(29, 45, 52, .90); --color-52: rgba(29, 45, 52, .96); --color-61: rgba(29, 45, 52, .92); --color-62: rgba(29, 45, 52, .94); --color-67: rgba(23, 36, 42, .96); --color-72: rgba(29, 45, 52, .88); --color-74: rgba(29, 45, 52, .82); --color-76: rgba(29, 45, 52, .94); --color-78: rgba(29, 45, 52, .85); --color-82: rgba(29, 45, 52, .82);
-        --color-75: rgba(0, 0, 0, .55); --color-77: rgba(255, 255, 255, .08); --color-83: rgba(255, 255, 255, .07); --color-89: #332f18;
+        --ink: #e9f4f4;
+        --ink-soft: #b0c6cc;
+        --ink-mute: #829da6;
+        --paper: #0b1418;
+        --paper-raised: #16242b;
+        --teal: #4ac9be;
+        --teal-bright: #5fd8cd;
+        --teal-deep: #8ae7dd;
+        --teal-mist: #1d4d4e;
+        --copper: #e9a874;
+        --copper-soft: #f3c69f;
+        --copper-deep: #f6d6b8;
+        --copper-mist: #47301f;
+        --danger: #ff9d97;
+        --danger-deep: #ffc3be;
+        --danger-bg: #44252a;
+        --on-accent: #08181c;
+        --shade: #000305;
+        --accent-fill-from: #23726e;
+        --accent-fill-to: #17544f;
+        --accent-fill-ink: #eafffb;
+        --warm-fill-from: #bd7a41;
+        --warm-fill-to: #925220;
+        --warm-fill-ink: #fff6ec;
+        --line: color-mix(in srgb, var(--ink) 14%, transparent);
+        --line-strong: color-mix(in srgb, var(--ink) 24%, transparent);
+        --shadow-soft: 0 1px 2px color-mix(in srgb, var(--shade) 40%, transparent),
+                       0 14px 38px color-mix(in srgb, var(--shade) 44%, transparent);
+        --shadow-lift: 0 2px 8px color-mix(in srgb, var(--shade) 45%, transparent),
+                       0 20px 48px color-mix(in srgb, var(--teal) 20%, transparent);
+        --shadow-pop: 0 2px 6px color-mix(in srgb, var(--shade) 50%, transparent),
+                      0 28px 70px color-mix(in srgb, var(--shade) 60%, transparent);
+        --color-55: #45c46a;
+        --color-56: #ff8a8a;
+        --color-86: #6fa8e6;
+        --color-87: #4d84c4;
+        --color-88: #4fb0ff;
+        --color-89: color-mix(in srgb, #f2d64b 18%, var(--paper-raised));
     }
 }
 
 :root[data-theme="light"] {
     color-scheme: light;
-    --ink: #14222a; --ink-soft: #3d5360; --ink-mute: #6b8290;
-    --paper: #eef3f5; --paper-elevated: rgba(255, 255, 255, .72);
-    --teal: #0d7c7c; --teal-deep: #085858; --teal-mist: #c5e8e6;
-    --copper: #c46b2e; --copper-soft: #e8a06a; --copper-mist: #f3dcc8;
-    --danger: #a12828; --danger-bg: #fceeed;
+    --ink: #12212a;
+    --ink-soft: #3d5561;
+    --ink-mute: #536d79;
+    --paper: #eef2f4;
+    --paper-raised: #ffffff;
+    --teal: #0d7c7c;
+    --teal-bright: #12908f;
+    --teal-deep: #075252;
+    --teal-mist: #c9e9e6;
+    --copper: #bd6527;
+    --copper-soft: #e79f68;
+    --copper-deep: #99511c;
+    --copper-mist: #f6e2d1;
+    --danger: #a12828;
+    --danger-deep: #7a1d1d;
+    --danger-bg: #fcefee;
+    --on-accent: #ffffff;
+    --shade: #0a1417;
 }
+
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --ink: #eff8f8; --ink-soft: #c0d2d7; --ink-mute: #91abb3; --paper: #10191d; --paper-elevated: rgba(23, 36, 42, .84); --line: rgba(239, 248, 248, .14); --teal: #4cb8b3; --teal-deep: #88d7d1; --teal-mist: #245d60; --copper: #e6a16f; --copper-soft: #f0bd94; --copper-mist: #533a2c; --danger: #ffaaa4; --danger-bg: #482729; --shadow-soft: 0 18px 50px rgba(0, 0, 0, .32); --shadow-lift: 0 8px 28px rgba(76, 184, 179, .18);
-    --color-2: #16383a; --color-4: #3b2c24; --color-5: #142126; --color-6: #17272d; --color-7: #182927; --color-8: #267875; --color-9: #89563a; --color-10: #376b75;
-    --color-16: rgba(29, 45, 52, .78); --color-20: rgba(83, 58, 44, .75); --color-24: rgba(29, 45, 52, .86); --color-26: #168c89; --color-27: #0c6e70; --color-29: #1d2d34; --color-33: #3d2c21; --color-44: #1a2b30; --color-48: #302820; --color-51: rgba(29, 45, 52, .90); --color-52: rgba(29, 45, 52, .96); --color-61: rgba(29, 45, 52, .92); --color-62: rgba(29, 45, 52, .94); --color-67: rgba(23, 36, 42, .96); --color-72: rgba(29, 45, 52, .88); --color-74: rgba(29, 45, 52, .82); --color-76: rgba(29, 45, 52, .94); --color-78: rgba(29, 45, 52, .85); --color-82: rgba(29, 45, 52, .82);
-    --color-75: rgba(0, 0, 0, .55); --color-77: rgba(255, 255, 255, .08); --color-83: rgba(255, 255, 255, .07); --color-89: #332f18;
+    --ink: #e9f4f4;
+    --ink-soft: #b0c6cc;
+    --ink-mute: #829da6;
+    --paper: #0b1418;
+    --paper-raised: #16242b;
+    --teal: #4ac9be;
+    --teal-bright: #5fd8cd;
+    --teal-deep: #8ae7dd;
+    --teal-mist: #1d4d4e;
+    --copper: #e9a874;
+    --copper-soft: #f3c69f;
+    --copper-deep: #f6d6b8;
+    --copper-mist: #47301f;
+    --danger: #ff9d97;
+    --danger-deep: #ffc3be;
+    --danger-bg: #44252a;
+    --on-accent: #08181c;
+    --shade: #000305;
+    --accent-fill-from: #23726e;
+    --accent-fill-to: #17544f;
+    --accent-fill-ink: #eafffb;
+    --warm-fill-from: #bd7a41;
+    --warm-fill-to: #925220;
+    --warm-fill-ink: #fff6ec;
+    --line: color-mix(in srgb, var(--ink) 14%, transparent);
+    --line-strong: color-mix(in srgb, var(--ink) 24%, transparent);
+    --shadow-soft: 0 1px 2px color-mix(in srgb, var(--shade) 40%, transparent),
+                   0 14px 38px color-mix(in srgb, var(--shade) 44%, transparent);
+    --shadow-lift: 0 2px 8px color-mix(in srgb, var(--shade) 45%, transparent),
+                   0 20px 48px color-mix(in srgb, var(--teal) 20%, transparent);
+    --shadow-pop: 0 2px 6px color-mix(in srgb, var(--shade) 50%, transparent),
+                  0 28px 70px color-mix(in srgb, var(--shade) 60%, transparent);
+    --color-55: #45c46a;
+    --color-56: #ff8a8a;
+    --color-86: #6fa8e6;
+    --color-87: #4d84c4;
+    --color-88: #4fb0ff;
+    --color-89: color-mix(in srgb, #f2d64b 18%, var(--paper-raised));
 }
 
 /* ─── Base ─── */
@@ -160,9 +332,25 @@ html, body {
     margin: 0;
     min-height: 100%;
     font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
     color: var(--ink);
     background: var(--paper);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-synthesis-weight: none;
+}
+
+/* Tabular numerals everywhere a figure is compared against another: token
+   meters, costs, context sizes. Proportional digits made these jitter as they
+   streamed. */
+.context-meter,
+.conversation-usage,
+.msg-usage,
+.model-picker-cell-cost,
+.model-picker-cell-context {
+    font-variant-numeric: tabular-nums;
 }
 
 body {
@@ -187,9 +375,47 @@ body {
    paints a full-width UA ring around the brand name. The heading is not
    keyboard-reachable, so suppressing the ring costs no affordance — every
    real control below still draws its own teal ring. */
+/* Containers that are focused programmatically to move the reading position —
+   the page <h1> via FocusOnNavigate, and the picker/settings dialogs when they
+   open. Chrome scores that focus as :focus-visible and paints its default ring
+   around the whole panel. None of them are keyboard-reachable, so suppressing
+   the ring costs no affordance; every real control still draws its own. */
 h1[tabindex="-1"]:focus,
-h1[tabindex="-1"]:focus-visible {
+h1[tabindex="-1"]:focus-visible,
+dialog[tabindex="-1"]:focus,
+dialog[tabindex="-1"]:focus-visible {
     outline: none;
+}
+
+/* Firefox/Chrome give <dialog> a default solid border and white background. */
+dialog {
+    color: inherit;
+}
+
+/* Form controls inherit the brand instead of the platform blue, and text
+   selection picks up the accent rather than the OS default. */
+input,
+textarea,
+select,
+button {
+    accent-color: var(--teal);
+}
+
+::selection {
+    background: color-mix(in srgb, var(--teal) 30%, transparent);
+    color: var(--ink);
+}
+
+.chat-bubble.user ::selection {
+    background: color-mix(in srgb, var(--accent-fill-ink) 32%, transparent);
+    color: var(--accent-fill-ink);
+}
+
+/* Backstop: any control that never got an explicit ring still gets the brand
+   one rather than the square platform default. */
+:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
 }
 
 /* ─── Page shell ─── */
@@ -201,10 +427,10 @@ h1[tabindex="-1"]:focus-visible {
     min-width: 0;
     height: 100%;
     margin: 0 auto;
-    padding: 0.85rem 1rem 1rem;
+    padding: var(--space-4) var(--space-5) var(--space-5);
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: var(--space-4);
     box-sizing: border-box;
     overflow: hidden;
 }
@@ -225,8 +451,10 @@ h1[tabindex="-1"]:focus-visible {
 .orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(48px);
-    opacity: 0.55;
+    filter: blur(72px);
+    /* Was 0.55 — loud enough to tint the text behind it. The atmosphere should
+       read as depth, not as a subject. */
+    opacity: 0.3;
     will-change: transform;
 }
 
@@ -266,7 +494,7 @@ h1[tabindex="-1"]:focus-visible {
 .grid-wash {
     position: absolute;
     inset: 0;
-    opacity: 0.35;
+    opacity: 0.22;
     background-image:
         linear-gradient(var(--color-11) 1px, var(--color-3) 1px),
         linear-gradient(90deg, var(--color-11) 1px, var(--color-3) 1px);
@@ -289,20 +517,21 @@ h1[tabindex="-1"]:focus-visible {
     to { transform: translate(4%, -12%); }
 }
 
-/* ─── Brand header ─── */
-/* Flex, not grid: a grid track cannot wrap, so between 561px and ~900px the
-   `auto` actions column claimed its max-content width, crushed the brand copy
-   to nothing (model name and effort buttons squeezed to slivers) and printed
-   the two on top of each other. As a wrapping flex line the action pills drop
-   to their own row instead. */
+/* ─── Brand header ───────────────────────────────────────────────────────
+   Two bands: an identity/actions bar, then the model controls on their own
+   full-width row. The controls used to be nested inside .brand-copy, which
+   put them in the same flex track as the action pills — on mid-width screens
+   the two fought and both collapsed. Separating the bands means neither can
+   starve the other at any width. */
 .chat-brand {
     position: relative;
     z-index: 10;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.85rem;
-    padding: 0.35rem 0.15rem;
+    column-gap: var(--space-4);
+    row-gap: var(--space-2);
+    padding: 0;
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -312,21 +541,26 @@ h1[tabindex="-1"]:focus-visible {
     animation: brand-in 0.7s var(--ease-out) both;
 }
 
+.chat-subtitle {
+    flex: 1 0 100%;
+    order: 5;
+}
+
 @keyframes brand-in {
     from { opacity: 0; }
     to { opacity: 1; }
 }
 
 .brand-copy {
-    flex: 1 1 17rem;
+    flex: 1 1 auto;
     min-width: 0;
     max-width: 100%;
 }
 
 .brand-mark {
     position: relative;
-    width: 2.75rem;
-    height: 2.75rem;
+    width: 2.1rem;
+    height: 2.1rem;
     flex-shrink: 0;
 }
 
@@ -362,22 +596,31 @@ h1[tabindex="-1"]:focus-visible {
 .brand-name {
     margin: 0;
     font-family: var(--font-display);
-    font-weight: 700;
-    font-size: clamp(1.85rem, 4vw, 2.35rem);
-    letter-spacing: -0.035em;
-    line-height: 1;
+    font-weight: 800;
+    font-size: clamp(1.4rem, 3vw, 1.75rem);
+    letter-spacing: -0.03em;
+    line-height: 1.1;
     color: var(--ink);
 }
 
+.provider-label {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: var(--ink-mute);
+}
+
 .chat-subtitle {
-    margin: 0.35rem 0 0;
+    margin: 0;
     color: var(--ink-soft);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     line-height: 1.4;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem 0.45rem;
+    gap: var(--space-2);
 }
 
 .model-chip {
@@ -400,20 +643,47 @@ h1[tabindex="-1"]:focus-visible {
     font-size: 0.8rem;
 }
 
-.live-badge {
+/* ── Shared header pill ──────────────────────────────────────────────────
+   Every control in the header action row resolves to this shape. They used to
+   be five separate declarations with different padding, radius, weight and
+   transition timings, which is why the row never optically aligned. */
+.live-badge,
+.theme-toggle,
+.new-chat-btn,
+.conversation-usage,
+.context-meter {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.4rem 0.7rem;
-    border-radius: 999px;
-    background: var(--color-16);
+    gap: var(--space-2);
+    height: 2.25rem;
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--paper-raised) 55%, transparent);
     border: 1px solid var(--line);
     backdrop-filter: blur(10px);
-    font-size: 0.75rem;
+    -webkit-backdrop-filter: blur(10px);
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
     font-weight: 600;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
     color: var(--ink-soft);
-    transition: border-color 0.3s, color 0.3s, background 0.3s;
+    white-space: nowrap;
+    transition: border-color var(--dur-base) var(--ease-out),
+                color var(--dur-base) var(--ease-out),
+                background var(--dur-base) var(--ease-out),
+                transform var(--dur-fast) var(--ease-out);
+}
+
+.theme-toggle:hover,
+.new-chat-btn:hover:not(:disabled) {
+    color: var(--teal-deep);
+    border-color: var(--color-17);
+    background: var(--color-18);
+}
+
+.theme-toggle:active,
+.new-chat-btn:active:not(:disabled) {
+    transform: translateY(1px);
 }
 
 .chat-header-actions {
@@ -428,23 +698,9 @@ h1[tabindex="-1"]:focus-visible {
 }
 
 .theme-toggle {
-    min-width: 6.75rem;
-    padding: 0.4rem 0.7rem;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--color-16);
-    color: var(--ink-soft);
-    font: 600 0.75rem var(--font-body);
-    letter-spacing: 0.02em;
+    justify-content: center;
+    min-width: 6.5rem;
     cursor: pointer;
-    transition: border-color 0.2s, color 0.2s, background 0.2s;
-}
-
-.theme-toggle:hover,
-.theme-toggle:focus-visible {
-    border-color: var(--color-17);
-    color: var(--teal-deep);
-    background: var(--color-18);
 }
 
 .theme-toggle:focus-visible {
@@ -459,26 +715,7 @@ h1[tabindex="-1"]:focus-visible {
 }
 
 .new-chat-btn {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.4rem 0.7rem;
-    border-radius: 999px;
-    background: var(--color-16);
-    border: 1px solid var(--line);
-    backdrop-filter: blur(10px);
-    font-family: inherit;
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--ink-soft);
     cursor: pointer;
-    transition: border-color 0.2s, color 0.2s, background 0.2s;
-}
-
-.new-chat-btn:hover:not(:disabled) {
-    color: var(--teal-deep);
-    border-color: var(--color-17);
-    background: var(--color-18);
 }
 
 .new-chat-btn.is-confirm {
@@ -512,7 +749,7 @@ h1[tabindex="-1"]:focus-visible {
     letter-spacing: 0.02em;
     color: var(--ink-mute);
     cursor: pointer;
-    transition: color 0.2s, border-color 0.2s;
+    transition: color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out);
 }
 
 .new-chat-cancel:hover:not(:disabled) {
@@ -521,9 +758,10 @@ h1[tabindex="-1"]:focus-visible {
 }
 
 .live-dot {
-    width: 0.5rem;
-    height: 0.5rem;
+    width: 0.45rem;
+    height: 0.45rem;
     border-radius: 50%;
+    flex-shrink: 0;
     background: var(--teal);
     box-shadow: 0 0 0 0 var(--color-21);
 }
@@ -551,11 +789,12 @@ h1[tabindex="-1"]:focus-visible {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    border-radius: 1.35rem;
-    background: var(--paper-elevated);
-    border: 1px solid var(--color-24);
+    border-radius: var(--radius-xl);
+    background: color-mix(in srgb, var(--paper-raised) 52%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
     box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(18px) saturate(1.15);
+    backdrop-filter: blur(20px) saturate(1.1);
+    -webkit-backdrop-filter: blur(20px) saturate(1.1);
     overflow: hidden;
 }
 
@@ -563,11 +802,13 @@ h1[tabindex="-1"]:focus-visible {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: var(--space-5);
     overflow-y: auto;
-    padding: 1.15rem 1rem 1.35rem;
+    overscroll-behavior: contain;
+    padding: var(--space-5) var(--space-4) var(--space-6);
     min-height: 0;
     scroll-behavior: smooth;
+    scrollbar-gutter: stable;
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -575,8 +816,15 @@ h1[tabindex="-1"]:focus-visible {
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-    background: var(--color-25);
-    border-radius: 8px;
+    background: color-mix(in srgb, var(--ink-mute) 30%, transparent);
+    border-radius: var(--radius-pill);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.chat-messages:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--ink-mute) 48%, transparent);
+    background-clip: padding-box;
 }
 
 /* ─── Empty state ─── */
@@ -631,16 +879,18 @@ h1[tabindex="-1"]:focus-visible {
 .chat-bubble {
     max-width: min(88%, 540px);
     min-width: 0;
-    padding: 0.85rem 1rem 1rem;
+    padding: var(--space-4) var(--space-5);
     border-radius: var(--radius-bubble);
-    animation: bubble-in 0.45s var(--ease-out) both;
+    font-size: var(--text-base);
+    line-height: 1.62;
+    animation: bubble-in var(--dur-slow) var(--ease-spring) both;
     position: relative;
 }
 
 @keyframes bubble-in {
     from {
         opacity: 0;
-        transform: translateY(14px) scale(0.98);
+        transform: translateY(10px) scale(0.985);
     }
     to {
         opacity: 1;
@@ -650,18 +900,18 @@ h1[tabindex="-1"]:focus-visible {
 
 .chat-bubble.user {
     align-self: flex-end;
-    background: linear-gradient(145deg, var(--color-26) 0%, var(--color-27) 100%);
-    color: var(--color-28);
-    border-bottom-right-radius: 0.35rem;
+    background: linear-gradient(150deg, var(--accent-fill-from) 0%, var(--accent-fill-to) 100%);
+    color: var(--accent-fill-ink);
+    border-bottom-right-radius: var(--radius-xs);
     box-shadow: var(--shadow-lift);
 }
 
 .chat-bubble.assistant {
     align-self: flex-start;
-    background: var(--color-29);
+    background: var(--surface-card);
     border: 1px solid var(--line);
-    border-bottom-left-radius: 0.35rem;
-    box-shadow: 0 6px 20px var(--color-30);
+    border-bottom-left-radius: var(--radius-xs);
+    box-shadow: var(--shadow-soft);
 }
 
 .chat-bubble.is-streaming.assistant {
@@ -671,19 +921,20 @@ h1[tabindex="-1"]:focus-visible {
 .bubble-meta {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    margin-bottom: 0.45rem;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
 }
 
 .avatar {
-    width: 1.4rem;
-    height: 1.4rem;
-    border-radius: 0.4rem;
+    width: 1.3rem;
+    height: 1.3rem;
+    border-radius: var(--radius-xs);
     display: grid;
     place-items: center;
-    font-family: var(--font-display);
-    font-size: 0.65rem;
-    font-weight: 700;
+    flex-shrink: 0;
+    font-family: var(--font-body);
+    font-size: var(--text-2xs);
+    font-weight: 800;
     letter-spacing: 0.02em;
 }
 
@@ -694,20 +945,22 @@ h1[tabindex="-1"]:focus-visible {
 
 .avatar-agent {
     background: linear-gradient(145deg, var(--copper-mist), var(--color-33));
-    color: var(--copper);
+    /* --copper on --copper-mist measured 3.3:1; the deep step clears AA in
+       both themes. */
+    color: var(--copper-deep);
     border: 1px solid var(--color-34);
 }
 
 .chat-role {
-    font-size: 0.7rem;
+    font-size: var(--text-2xs);
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    opacity: 0.72;
+    letter-spacing: var(--tracking-wide);
+    color: var(--ink-mute);
 }
 
 .chat-bubble.user .chat-role {
-    color: var(--color-35);
+    color: color-mix(in srgb, var(--accent-fill-ink) 92%, var(--accent-fill-from));
 }
 
 .chat-bubble.assistant .chat-role {
@@ -758,14 +1011,16 @@ h1[tabindex="-1"]:focus-visible {
     margin-top: 0.2rem;
 }
 
-/* Headings — display font, tight rhythm, kept below the brand voice in size. */
+/* Headings stay in the body face: Syne is a display type and message
+   headings land at 15-19px, well under the size it needs to read cleanly. */
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
 .markdown-body h4 {
-    font-family: var(--font-display);
+    font-family: var(--font-body);
     font-weight: 700;
-    line-height: 1.25;
+    letter-spacing: var(--tracking-tight);
+    line-height: 1.3;
     color: var(--ink);
     margin: 1.15em 0 0.45em;
     letter-spacing: -0.015em;
@@ -793,7 +1048,7 @@ h1[tabindex="-1"]:focus-visible {
     text-decoration-color: var(--color-36);
     text-underline-offset: 2px;
     overflow-wrap: anywhere;
-    transition: text-decoration-color 0.15s var(--ease-out);
+    transition: text-decoration-color var(--dur-fast) var(--ease-out);
 }
 .markdown-body a:hover { text-decoration-color: var(--teal-deep); }
 
@@ -993,13 +1248,11 @@ h1[tabindex="-1"]:focus-visible {
 
 /* ─── Thinking panel ─── */
 .thinking-panel {
-    margin: 0 0 0.7rem;
-    border-radius: 0.75rem;
-    background:
-        linear-gradient(180deg, var(--color-43), var(--color-3) 60%),
-        var(--color-44);
-    border: 1px solid var(--color-45);
-    padding: 0.15rem 0.55rem 0.25rem;
+    margin: 0 0 var(--space-4);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--teal) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--teal) 14%, transparent);
+    padding: 0 var(--space-3) var(--space-1);
     overflow: hidden;
 }
 
@@ -1020,8 +1273,9 @@ h1[tabindex="-1"]:focus-visible {
 
 .thinking-panel > summary {
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: var(--text-xs);
     font-weight: 600;
+    letter-spacing: 0.01em;
     color: var(--ink-soft);
     user-select: none;
     list-style: none;
@@ -1043,7 +1297,7 @@ h1[tabindex="-1"]:focus-visible {
     border-right: 2px solid var(--ink-mute);
     border-bottom: 2px solid var(--ink-mute);
     transform: rotate(45deg);
-    transition: transform 0.2s var(--ease-out);
+    transition: transform var(--dur-base) var(--ease-out);
     opacity: 0.7;
 }
 
@@ -1070,15 +1324,15 @@ h1[tabindex="-1"]:focus-visible {
 .thinking-text {
     margin: 0 0 0.35rem;
     padding: 0.55rem 0.25rem 0.35rem;
-    border-top: 1px dashed var(--color-49);
+    border-top: 1px solid color-mix(in srgb, var(--teal) 16%, transparent);
     box-sizing: border-box;
     max-width: 100%;
     white-space: pre-wrap;
     overflow-wrap: break-word;
     font-family: var(--font-mono);
-    font-size: 0.76rem;
-    line-height: 1.5;
-    color: var(--ink-soft);
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    color: var(--ink-mute);
     max-height: 40vh;
     overflow-x: hidden;
     overflow-y: auto;
@@ -1092,7 +1346,7 @@ h1[tabindex="-1"]:focus-visible {
     border-radius: 0.85rem;
     padding: 0.75rem 1rem;
     font-size: 0.92rem;
-    animation: rise-in 0.35s var(--ease-out) both;
+    animation: rise-in var(--dur-slow) var(--ease-spring) both;
 }
 
 /* ─── Composer ─── */
@@ -1110,7 +1364,7 @@ h1[tabindex="-1"]:focus-visible {
     border: 1px solid var(--color-52);
     box-shadow: var(--shadow-soft), 0 0 0 1px var(--line);
     backdrop-filter: blur(16px);
-    transition: box-shadow 0.25s, border-color 0.25s;
+    transition: box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out);
 }
 
 .composer:focus-within {
@@ -1150,23 +1404,25 @@ h1[tabindex="-1"]:focus-visible {
     padding: 0.7rem 1rem;
     border: none;
     border-radius: 0.85rem;
-    background: linear-gradient(145deg, var(--copper) 0%, var(--color-53) 100%);
-    color: var(--color-29);
+    background: linear-gradient(145deg, var(--warm-fill-from) 0%, var(--warm-fill-to) 100%);
+    color: var(--warm-fill-ink);
     font-family: var(--font-body);
     font-weight: 700;
     font-size: 0.92rem;
     cursor: pointer;
-    transition: transform 0.2s var(--ease-out), filter 0.2s, opacity 0.2s;
+    transition: transform var(--dur-fast) var(--ease-spring), filter var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
     box-shadow: 0 6px 18px var(--color-54);
 }
 
 .chat-send:hover:not(:disabled) {
     transform: translateY(-1px);
-    filter: brightness(1.05);
+    filter: brightness(1.06);
+    box-shadow: 0 10px 24px var(--color-54);
 }
 
 .chat-send:active:not(:disabled) {
-    transform: translateY(1px);
+    transform: translateY(1px) scale(0.97);
+    filter: brightness(0.97);
 }
 
 .chat-send:disabled {
@@ -1220,11 +1476,15 @@ h1[tabindex="-1"]:focus-visible {
         padding: 0.85rem 0.65rem 1rem;
     }
 
+    /* Two bands: identity + actions share row 1, model controls take row 2.
+       Previously the title and the action pills each claimed a full row and the
+       control row made a third — 147px of chrome before any message. */
     .chat-brand {
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-columns: auto minmax(0, 1fr) auto;
         grid-template-rows: auto auto;
-        gap: 0.35rem 0.55rem;
+        align-items: center;
+        gap: var(--space-3) var(--space-3);
         padding: 0;
     }
 
@@ -1233,44 +1493,66 @@ h1[tabindex="-1"]:focus-visible {
         display: none;
     }
 
+    .sidebar-toggle {
+        grid-column: 1;
+        grid-row: 1;
+        margin-right: 0;
+    }
+
     .brand-copy {
         grid-column: 2;
         grid-row: 1;
     }
 
     .brand-name {
-        font-size: 1.55rem;
+        font-size: 1.3rem;
     }
 
     .chat-subtitle {
-        margin-top: 0.2rem;
-        gap: 0.25rem;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        margin-top: 0;
+        gap: var(--space-2);
     }
 
     .model-picker-trigger {
         min-height: 2.75rem;
     }
 
+    /* Tighten the control strip just enough that picker + effort + meter share
+       one row; at default padding the meter wrapped to a third band and put
+       ~34px of chrome back on top of the transcript. */
+    .reasoning-effort-btn {
+        padding-inline: var(--space-2);
+    }
+
+    .context-meter {
+        height: 1.7rem;
+        padding-inline: var(--space-2);
+    }
+
     .chat-header-actions {
-        grid-column: 1 / -1;
-        grid-row: 2;
-        justify-self: stretch;
-        /* The wide-viewport rule pushes the pills right; on the stacked mobile
-           header they belong at the left edge, lined up with the drawer
-           toggle above them. */
-        justify-content: flex-start;
+        grid-column: 3;
+        grid-row: 1;
+        justify-self: end;
+        justify-content: flex-end;
         margin-left: 0;
-        width: 100%;
-        max-width: 100%;
         flex-wrap: nowrap;
-        gap: 0.35rem;
+        gap: var(--space-1);
+    }
+
+    /* Decorative only (aria-hidden), and the transcript already shows streaming
+       state through the caret and typing dots. Dropping it is what buys the
+       title a place on the action row. */
+    .live-badge {
+        display: none;
     }
 
     .theme-toggle {
         position: relative;
         width: 2.75rem;
         min-width: 2.75rem;
-        min-height: 2.75rem;
+        height: 2.75rem;
         padding: 0;
         overflow: hidden;
         color: transparent;
@@ -1287,11 +1569,7 @@ h1[tabindex="-1"]:focus-visible {
     }
 
     .conversation-usage {
-        min-height: 2.75rem;
-        padding: 0.35rem 0.55rem;
-        font-size: 0.64rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        display: none;
     }
 
     .live-badge .live-label {
@@ -1332,7 +1610,7 @@ h1[tabindex="-1"]:focus-visible {
         position: relative;
         width: 2.75rem;
         min-width: 2.75rem;
-        min-height: 2.75rem;
+        height: 2.75rem;
         padding: 0;
         overflow: hidden;
         color: transparent;
@@ -1350,6 +1628,24 @@ h1[tabindex="-1"]:focus-visible {
 
     .composer {
         padding-left: 0.7rem;
+    }
+
+    /* Edge-to-edge transcript: the framed card is desktop chrome, and on a
+       430px screen its border + padding cost ~32px of message width. */
+    .chat-stage {
+        border-color: transparent;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
+    .chat-messages {
+        padding-inline: 0;
+    }
+
+    .chat-bubble {
+        max-width: 92%;
     }
 }
 
@@ -1408,6 +1704,14 @@ h1[tabindex="-1"]:focus-visible {
     .model-picker-refresh .is-spinning {
         animation: none !important;
     }
+
+    /* Transitions are motion too — reduce, don't merely shorten the keyframes. */
+    *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 /* ─── Model picker ───
@@ -1426,21 +1730,22 @@ h1[tabindex="-1"]:focus-visible {
 .model-picker-trigger {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: var(--space-2);
+    height: 2.25rem;
     max-width: 100%;
-    padding: 0.22rem 0.45rem 0.22rem 0.55rem;
-    border-radius: 0.45rem;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-pill);
     background: var(--color-14);
     border: 1px solid var(--color-49);
     color: var(--teal-deep);
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 500;
     line-height: 1.2;
     cursor: pointer;
-    transition: background 0.18s var(--ease-out),
-                border-color 0.18s var(--ease-out),
-                transform 0.12s var(--ease-out);
+    transition: background var(--dur-base) var(--ease-out),
+                border-color var(--dur-base) var(--ease-out),
+                transform var(--dur-fast) var(--ease-out);
 }
 
 .model-picker-trigger:hover:not(:disabled) {
@@ -1479,7 +1784,7 @@ h1[tabindex="-1"]:focus-visible {
     align-items: center;
     color: var(--teal);
     opacity: 0.75;
-    transition: transform 0.2s var(--ease-out);
+    transition: transform var(--dur-base) var(--ease-out);
 }
 
 .model-picker-chevron svg {
@@ -1514,7 +1819,7 @@ h1[tabindex="-1"]:focus-visible {
     backdrop-filter: blur(18px) saturate(1.15);
     -webkit-backdrop-filter: blur(18px) saturate(1.15);
     overflow: hidden;
-    animation: popover-in 0.18s var(--ease-out) both;
+    animation: popover-in var(--dur-base) var(--ease-out) both;
 }
 
 .model-picker-popover:not([open]) {
@@ -1593,9 +1898,9 @@ h1[tabindex="-1"]:focus-visible {
     background: var(--color-3);
     color: var(--ink-mute);
     cursor: pointer;
-    transition: background 0.18s var(--ease-out),
-                color 0.18s var(--ease-out),
-                border-color 0.18s var(--ease-out);
+    transition: background var(--dur-base) var(--ease-out),
+                color var(--dur-base) var(--ease-out),
+                border-color var(--dur-base) var(--ease-out);
 }
 
 .model-picker-close {
@@ -1720,8 +2025,8 @@ h1[tabindex="-1"]:focus-visible {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: color 0.15s var(--ease-out),
-                background 0.15s var(--ease-out);
+    transition: color var(--dur-fast) var(--ease-out),
+                background var(--dur-fast) var(--ease-out);
     text-align: left;
     white-space: nowrap;
 }
@@ -1754,7 +2059,7 @@ h1[tabindex="-1"]:focus-visible {
 /* Body rows — clickable, with hover + selected state. */
 .model-picker-row {
     cursor: pointer;
-    transition: background 0.12s var(--ease-out);
+    transition: background var(--dur-fast) var(--ease-out);
     border-bottom: 1px solid var(--color-30);
 }
 
@@ -1948,12 +2253,12 @@ h1[tabindex="-1"]:focus-visible {
     font-weight: 600;
     font-size: 0.8rem;
     cursor: pointer;
-    transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out);
+    transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
 }
 
 .model-picker-retry:hover:not(:disabled) {
-    background: var(--copper);
-    color: var(--color-29);
+    background: var(--warm-fill-from);
+    color: var(--warm-fill-ink);
 }
 
 .model-picker-retry:focus-visible {
@@ -2023,8 +2328,11 @@ h1[tabindex="-1"]:focus-visible {
         height: 2.75rem;
     }
 
+    /* Scales with the viewport so the picker, the effort switch and the
+       context meter stay on one control row down to 360px. A fixed 9rem here
+       overflowed and pushed the meter onto a third band. */
     .model-picker-name {
-        max-width: 9rem;
+        max-width: min(9rem, 28vw);
     }
 
     /* Unwind the table so no column tracks remain. */

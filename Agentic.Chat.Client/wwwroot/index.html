@@ -8,7 +8,16 @@
     <base href="/" />
     <link rel="preload" id="webassembly" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#10191d" />
+    <meta name="theme-color" content="#0b1418" />
+    <!-- The type system is not optional: app.css builds every scale on Syne /
+         Figtree / JetBrains Mono. Without these the whole client silently fell
+         back to Segoe UI. Mirrors Agentic.Chat/Components/App.razor. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="style"
+          href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" />
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" />
     <link rel="stylesheet" href="app.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link href="Agentic.Chat.Client.styles.css" rel="stylesheet" />
@@ -72,6 +81,25 @@
                     button.setAttribute("aria-label", `Theme: ${theme}. Activate to change.`);
                 }
             };
+            // The markup ships a hardcoded "Theme: Auto" label, so without this
+            // the button keeps claiming Auto after a stored Light/Dark choice is
+            // restored. WebAssembly renders it after boot, so watch for it and
+            // stop as soon as it lands — a standing observer would re-run on
+            // every streamed token.
+            const paint = () => {
+                const buttons = document.querySelectorAll(".theme-toggle");
+                buttons.forEach(button => window.agenticTheme.renderButton(button));
+                return buttons.length > 0;
+            };
+            if (!paint()) {
+                const observer = new MutationObserver(() => {
+                    if (paint()) observer.disconnect();
+                });
+                observer.observe(document.body ?? document.documentElement, {
+                    childList: true,
+                    subtree: true
+                });
+            }
         })();
     </script>
 </head>

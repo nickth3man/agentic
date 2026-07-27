@@ -41,7 +41,7 @@ public class ProgramTests
         // app.Run() handed control to TestServer) and the default route produced a
         // response. With Blazor Server interactive render mode (no prerender), Home.razor
         // does not throw a NavigationException server-side, so the App.razor shell comes
-        // back as 200; with prerender enabled, NavigateTo("/chat") surfaces as 302.
+        // back as 200; with prerender enabled, NavigateTo("chat") surfaces as 302.
         Assert.True(
             response.StatusCode == HttpStatusCode.OK ||
             response.StatusCode == HttpStatusCode.Redirect ||

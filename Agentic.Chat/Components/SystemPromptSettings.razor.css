@@ -83,10 +83,10 @@
 
 .settings-title {
     margin: 0;
-    font-family: var(--font-display);
-    font-size: 1.05rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-family: var(--font-body);
+    font-size: var(--text-lg);
+    font-weight: 800;
+    letter-spacing: var(--tracking-tight);
     color: var(--ink);
 }
 

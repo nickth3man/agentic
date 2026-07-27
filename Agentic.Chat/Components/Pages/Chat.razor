@@ -14,14 +14,20 @@
 <script type="module" src="@Assets["Components/Pages/Chat.razor.js"]"></script>
 
 <div class="chat-shell @(_sidebarOpen ? "sidebar-open" : null)">
-    <div class="sidebar-backdrop" @onclick="CloseSidebar" aria-hidden="@(!_sidebarOpen)"></div>
+    <div class="sidebar-backdrop" @onclick="CloseSidebarAsync" aria-hidden="@(!_sidebarOpen)"></div>
 
-    <aside class="chat-sidebar" aria-label="Conversations" id="chat-sidebar">
+    <aside class="chat-sidebar"
+           @ref="_sidebar"
+           aria-label="Conversations"
+           aria-modal="@(_sidebarOpen ? "true" : null)"
+           role="@(_sidebarOpen ? "dialog" : null)"
+           @onkeydown="OnSidebarKeyDown"
+           id="chat-sidebar">
         <div class="sidebar-header">
             <h2 class="sidebar-title">Chats</h2>
             <button type="button"
                     class="sidebar-close"
-                    @onclick="CloseSidebar"
+                    @onclick="CloseSidebarAsync"
                     aria-label="Close conversation list">
                 ×
             </button>
@@ -89,7 +95,7 @@
         </ul>
     </aside>
 
-    <main class="chat-page">
+    <main class="chat-page" @ref="_mainContent">
         <div class="chat-atmosphere" aria-hidden="true">
             <div class="orb orb-a"></div>
             <div class="orb orb-b"></div>
@@ -99,8 +105,9 @@
 
         <header class="chat-brand">
             <button type="button"
+                    @ref="_sidebarToggle"
                     class="sidebar-toggle"
-                    @onclick="ToggleSidebar"
+                    @onclick="ToggleSidebarAsync"
                     aria-expanded="@_sidebarOpen"
                     aria-controls="chat-sidebar"
                     aria-label="Open conversation list">
@@ -116,7 +123,7 @@
             <div class="brand-copy">
                 <h1 class="brand-name">Agentic</h1>
                 <div class="chat-subtitle">
-                    Multi-turn via OpenRouter
+                    <span class="provider-label">Multi-turn via OpenRouter</span>
                     <ModelPicker />
                     <ReasoningEffortControl />
                     @if (_contextMeterText is not null)
@@ -402,6 +409,9 @@
     private ElementReference _messagesContainer;
     private ElementReference _scrollSentinel;
     private ElementReference _jumpToLatestButton;
+    private ElementReference _sidebar;
+    private ElementReference _sidebarToggle;
+    private ElementReference _mainContent;
     private IJSObjectReference? _scrollModule;
     private IJSObjectReference? _scrollController;
     private bool _sidebarOpen;
@@ -422,6 +432,9 @@
     private string? _queuedImageDataUrl;
     private int _inputFileKey;
     private string _sessionUsage = string.Empty;
+    private IJSObjectReference? _drawerController;
+    private DotNetObjectReference<Chat>? _selfReference;
+    private bool _needsDrawerInitialize;
 
     protected override void OnInitialized()
     {
@@ -438,10 +451,29 @@
                     "import", "./Components/Pages/Chat.razor.js");
                 _scrollController = await _scrollModule.InvokeAsync<IJSObjectReference>(
                     "initialize", _messagesContainer, _scrollSentinel, _jumpToLatestButton);
+                _selfReference = DotNetObjectReference.Create(this);
             }
             catch
             {
                 // Scrolling remains manual if JS isolation is unavailable.
+            }
+        }
+
+        if (_sidebarOpen && _needsDrawerInitialize && _scrollModule is not null && _selfReference is not null)
+        {
+            _needsDrawerInitialize = false;
+            try
+            {
+                _drawerController = await _scrollModule.InvokeAsync<IJSObjectReference>(
+                    "openDrawer",
+                    _sidebar,
+                    _mainContent,
+                    _sidebarToggle,
+                    _selfReference);
+            }
+            catch
+            {
+                // The drawer remains usable without focus containment.
             }
         }
 
@@ -569,6 +601,8 @@
     public async ValueTask DisposeAsync()
     {
         Dispose();
+        await CloseDrawerControllerAsync(restoreFocus: false);
+        _selfReference?.Dispose();
 
         if (_scrollController is not null)
         {
@@ -658,9 +692,45 @@
         return _chatModule;
     }
 
-    private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
+    private async Task ToggleSidebarAsync()
+    {
+        if (_sidebarOpen)
+        {
+            await CloseSidebarAsync();
+            return;
+        }
 
-    private void CloseSidebar() => _sidebarOpen = false;
+        _sidebarOpen = true;
+        _needsDrawerInitialize = true;
+    }
+
+    private async Task CloseSidebarAsync()
+    {
+        await CloseDrawerControllerAsync(restoreFocus: true);
+        _sidebarOpen = false;
+        _needsDrawerInitialize = false;
+    }
+
+    [JSInvokable]
+    public Task CloseDrawer() => CloseSidebarAsync();
+
+    private Task OnSidebarKeyDown(KeyboardEventArgs e)
+        => e.Key == "Escape" ? CloseSidebarAsync() : Task.CompletedTask;
+
+    private async Task CloseDrawerControllerAsync(bool restoreFocus)
+    {
+        if (_drawerController is null)
+        {
+            return;
+        }
+
+        var controller = _drawerController;
+        _drawerController = null;
+        try { await controller.InvokeVoidAsync("dispose", restoreFocus); }
+        catch { /* browser context may already be gone */ }
+        try { await controller.DisposeAsync(); }
+        catch { /* browser context may already be gone */ }
+    }
 
     private async Task OnSidebarNewChatAsync()
     {
@@ -669,6 +739,7 @@
             return;
         }
 
+        await CloseSidebarAsync();
         await Conversations.NewChatAsync();
         ResetComposerChrome(clearStatus: true);
         await RefreshContextMeterAsync();
@@ -682,6 +753,7 @@
             return;
         }
 
+        await CloseSidebarAsync();
         await Conversations.SwitchAsync(id);
         ResetComposerChrome();
         await RefreshContextMeterAsync();

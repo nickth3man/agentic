@@ -10,7 +10,10 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Each run starts its own processes so local runs are as hermetic as CI.
  */
-const APP_URL = 'http://localhost:5123';
+const APP_PORT = process.env.PLAYWRIGHT_APP_PORT ?? '5123';
+const FAKE_API_PORT = process.env.PLAYWRIGHT_FAKE_API_PORT ?? '5124';
+const APP_URL = `http://localhost:${APP_PORT}`;
+const FAKE_API_URL = `http://127.0.0.1:${FAKE_API_PORT}`;
 
 export default defineConfig({
   testDir: '.',
@@ -32,19 +35,22 @@ export default defineConfig({
   webServer: [
     {
       command: 'node fake-openrouter-server.mjs',
-      url: 'http://127.0.0.1:5124/health',
+      url: `${FAKE_API_URL}/health`,
       timeout: 10_000,
       reuseExistingServer: false,
+      env: {
+        FAKE_OPENROUTER_PORT: FAKE_API_PORT,
+      },
     },
     {
-      command: 'dotnet run --project ../../Agentic.Chat --launch-profile http',
+      command: `dotnet run --project ../../Agentic.Chat -c Release --no-launch-profile --urls ${APP_URL}`,
       url: `${APP_URL}/chat`,
       timeout: 90_000,
       reuseExistingServer: false,
       env: {
         // Same fake-key pattern as Agentic.Chat.Tests/ProgramTests.cs. Not a real key.
         OPENROUTER_API_KEY: 'test-only-fake-key-not-real-no-network',
-        OpenRouter__BaseUrl: 'http://127.0.0.1:5124',
+        OpenRouter__BaseUrl: FAKE_API_URL,
         ASPNETCORE_ENVIRONMENT: 'Development',
       },
     },

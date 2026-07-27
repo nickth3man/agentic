@@ -4,6 +4,89 @@
 
 const BOTTOM_THRESHOLD = 48;
 
+export function openDrawer(drawer, main, trigger, dotnetRef) {
+    const mobile = window.matchMedia("(max-width: 1099px)");
+    if (!(drawer instanceof HTMLElement) || !mobile.matches) {
+        return {
+            dispose() {},
+        };
+    }
+
+    let active = true;
+    const focusableSelector = [
+        "button:not([disabled])",
+        "input:not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        "a[href]",
+        "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+
+    const focusable = () =>
+        [...drawer.querySelectorAll(focusableSelector)]
+            .filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+
+    const dispose = (restoreFocus = true) => {
+        if (!active) return;
+        active = false;
+        document.removeEventListener("keydown", handleKeyDown, true);
+        mobile.removeEventListener("change", handleBreakpointChange);
+        if (main instanceof HTMLElement) main.inert = false;
+        drawer.removeAttribute("tabindex");
+        if (restoreFocus && trigger instanceof HTMLElement) {
+            trigger.focus({ preventScroll: true });
+        }
+    };
+
+    const close = () => {
+        if (!active) return;
+        dispose(true);
+        dotnetRef.invokeMethodAsync("CloseDrawer");
+    };
+
+    const handleKeyDown = (event) => {
+        if (event.key === "Escape") {
+            event.preventDefault();
+            return;
+        }
+        if (event.key !== "Tab") return;
+
+        const items = focusable();
+        if (items.length === 0) {
+            event.preventDefault();
+            drawer.focus();
+            return;
+        }
+
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
+
+    const handleBreakpointChange = (event) => {
+        if (!event.matches) close();
+    };
+
+    drawer.setAttribute("tabindex", "-1");
+    if (main instanceof HTMLElement) main.inert = true;
+    document.addEventListener("keydown", handleKeyDown, true);
+    mobile.addEventListener("change", handleBreakpointChange);
+    requestAnimationFrame(() => {
+        const first = focusable()[0];
+        (first ?? drawer).focus({ preventScroll: true });
+    });
+
+    return {
+        dispose,
+    };
+}
+
 export function initialize(container, sentinel, jumpButton) {
     if (!container || !sentinel || !jumpButton) return null;
 

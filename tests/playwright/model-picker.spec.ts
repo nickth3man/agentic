@@ -32,6 +32,39 @@ async function assertPopoverInViewport(popover: ReturnType<Page['locator']>) {
 }
 
 test.describe('Model picker viewport clamp', () => {
+  test('uses an accessible full-screen selector and restores focus on mobile', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/chat');
+
+    const trigger = page.getByRole('button', { name: 'Select model' });
+    await trigger.click();
+    const popover = page.getByRole('dialog', { name: 'Select a model' });
+    await expect(popover).toBeVisible();
+
+    const metrics = await popover.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        containsFocus: element.contains(document.activeElement),
+      };
+    });
+    expect(metrics.left).toBe(0);
+    expect(metrics.top).toBe(0);
+    expect(metrics.width).toBe(390);
+    expect(metrics.height).toBe(844);
+    expect(metrics.containsFocus).toBe(true);
+    await expect(popover.getByRole('button', { name: 'Close model picker' })).toBeVisible();
+    await expect(popover.locator('.model-picker-row')).toHaveCount(80);
+    await expect(popover.locator('.model-picker-limit')).toContainText('Showing 80 of 102 models');
+
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+
   test('popover and page stay within the viewport on a narrow width', async ({ page }) => {
     await page.setViewportSize({ width: 420, height: 720 });
     await page.goto('/chat');

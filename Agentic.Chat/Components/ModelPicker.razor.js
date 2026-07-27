@@ -12,6 +12,67 @@ const POPOVER_MAX_WIDTH = 640;
 const POPOVER_MARGIN = 8;
 const POPOVER_GAP = 8;
 
+export function openModal(dialog, trigger, dotnetRef, closeMethod, focusSelector) {
+    if (!(dialog instanceof HTMLDialogElement)) return null;
+
+    let active = true;
+    let closing = false;
+
+    const cleanup = (restoreFocus = true) => {
+        if (!active) return;
+        active = false;
+        dialog.removeEventListener("cancel", handleCancel);
+        dialog.removeEventListener("click", handleBackdropClick);
+        if (dialog.open) dialog.close();
+        if (restoreFocus && trigger instanceof HTMLElement) {
+            trigger.focus({ preventScroll: true });
+        }
+    };
+
+    const requestClose = () => {
+        if (!active || closing) return;
+        closing = true;
+        cleanup(true);
+        dotnetRef.invokeMethodAsync(closeMethod);
+    };
+
+    const handleCancel = (event) => {
+        event.preventDefault();
+        requestClose();
+    };
+
+    const handleBackdropClick = (event) => {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        const inside =
+            event.clientX >= rect.left &&
+            event.clientX <= rect.right &&
+            event.clientY >= rect.top &&
+            event.clientY <= rect.bottom;
+        if (!inside) requestClose();
+    };
+
+    dialog.addEventListener("cancel", handleCancel);
+    dialog.addEventListener("click", handleBackdropClick);
+    if (dialog.open) dialog.close();
+    dialog.showModal();
+
+    requestAnimationFrame(() => {
+        if (!active) return;
+        const preferred = focusSelector ? dialog.querySelector(focusSelector) : null;
+        const target = preferred instanceof HTMLElement ? preferred : dialog;
+        target.focus({ preventScroll: true });
+    });
+
+    return cleanup;
+}
+
+export function closeModal(cleanupFn, restoreFocus = true) {
+    if (typeof cleanupFn === "function") {
+        cleanupFn(restoreFocus);
+    }
+}
+
 export function listenForOutsideClick(element, dotnetRef) {
     if (!element) return null;
     let active = true;
@@ -66,6 +127,28 @@ export function positionPopover(wrapper) {
     const triggerRect = trigger.getBoundingClientRect();
     const origin = getFixedContainingBlockOrigin(popover);
 
+    if (window.matchMedia("(max-width: 640px)").matches) {
+        popover.style.position = "fixed";
+        popover.style.inset = "0";
+        popover.style.left = "0";
+        popover.style.top = "0";
+        popover.style.right = "0";
+        popover.style.width = `${viewportWidth}px`;
+        popover.style.maxWidth = `${viewportWidth}px`;
+        popover.style.height = `${viewportHeight}px`;
+        popover.style.maxHeight = `${viewportHeight}px`;
+
+        const tableWrap = popover.querySelector(".model-picker-table-wrap");
+        if (tableWrap instanceof HTMLElement) {
+            const searchRow = popover.querySelector(".model-picker-search-row");
+            const chromeHeight = searchRow instanceof HTMLElement
+                ? searchRow.getBoundingClientRect().height
+                : 0;
+            tableWrap.style.maxHeight = `${Math.max(0, viewportHeight - chromeHeight)}px`;
+        }
+        return;
+    }
+
     const width = Math.min(POPOVER_MAX_WIDTH, Math.max(0, viewportWidth - POPOVER_MARGIN * 2));
     const maxLeft = viewportWidth - POPOVER_MARGIN - width;
     const leftViewport = Math.min(
@@ -74,10 +157,13 @@ export function positionPopover(wrapper) {
 
     // Apply horizontal placement first so height measurement uses the final width.
     popover.style.position = 'fixed';
+    popover.style.inset = 'auto';
     popover.style.left = `${leftViewport - origin.left}px`;
     popover.style.right = 'auto';
     popover.style.width = `${width}px`;
     popover.style.maxWidth = `${width}px`;
+    popover.style.height = 'auto';
+    popover.style.maxHeight = 'none';
 
     // Keep the scrollable table within the remaining viewport height.
     // Do not force a floor height — a short visual viewport (mobile keyboard)

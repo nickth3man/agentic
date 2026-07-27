@@ -11,8 +11,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2.05rem;
-    height: 2.05rem;
+    width: 2.75rem;
+    height: 2.75rem;
     padding: 0;
     border-radius: 999px;
     background: var(--color-16);
@@ -41,10 +41,13 @@
 }
 
 .settings-popover {
-    position: absolute;
-    top: calc(100% + 0.45rem);
-    right: 0;
-    width: min(22rem, calc(100vw - 2rem));
+    position: fixed;
+    top: clamp(1rem, 8vh, 4.5rem);
+    left: 50%;
+    width: min(28rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    margin: 0;
+    box-sizing: border-box;
     z-index: 60;
     padding: 0.85rem 0.9rem 0.95rem;
     display: flex;
@@ -58,17 +61,19 @@
         0 0 0 1px var(--line);
     backdrop-filter: blur(18px) saturate(1.15);
     -webkit-backdrop-filter: blur(18px) saturate(1.15);
+    overflow-y: auto;
+    transform: translateX(-50%);
     animation: settings-popover-in 0.18s var(--ease-out) both;
 }
 
 @keyframes settings-popover-in {
     from {
         opacity: 0;
-        transform: translateY(-6px) scale(0.985);
+        transform: translateX(-50%) translateY(-6px) scale(0.985);
     }
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateX(-50%) translateY(0) scale(1);
     }
 }
 
@@ -115,6 +120,7 @@
 
 .settings-preset {
     padding: 0.45rem 0.55rem;
+    min-height: 2.75rem;
     cursor: pointer;
 }
 
@@ -169,6 +175,8 @@
     color: var(--ink-soft);
     white-space: nowrap;
     cursor: pointer;
+    min-height: 2.75rem;
+    padding-inline: 0.35rem;
 }
 
 .settings-preset:focus-visible,
@@ -195,6 +203,7 @@
     font-weight: 600;
     letter-spacing: 0.02em;
     cursor: pointer;
+    min-height: 2.75rem;
     transition: border-color 0.2s, color 0.2s, background 0.2s;
 }
 
@@ -229,6 +238,52 @@
 .settings-cancel:focus-visible {
     outline: 2px solid var(--teal);
     outline-offset: 2px;
+}
+
+.settings-popover:not([open]) {
+    display: none;
+}
+
+@media (max-width: 560px) {
+    .settings-popover {
+        inset: auto max(0.5rem, env(safe-area-inset-right))
+            max(0.5rem, env(safe-area-inset-bottom))
+            max(0.5rem, env(safe-area-inset-left));
+        width: auto;
+        max-height: calc(100dvh - 1rem);
+        padding: 1rem;
+        border-radius: 1.15rem;
+        transform: none;
+        animation-name: settings-sheet-in;
+    }
+
+    @keyframes settings-sheet-in {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    .settings-textarea {
+        min-height: 6rem;
+    }
+
+    .settings-actions {
+        position: sticky;
+        bottom: -1rem;
+        margin: 0.5rem -1rem -1rem;
+        padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+        background: var(--color-52);
+        border-top: 1px solid var(--line);
+    }
+
+    .settings-apply,
+    .settings-cancel {
+        flex: 1;
+        justify-content: center;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

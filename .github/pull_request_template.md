@@ -12,8 +12,8 @@ Fixes #<!-- issue number, or delete this line if none -->
 
 <!-- Evidence, not intentions. Examples:
 - `dotnet test` — 3 passed
-- `bash start-phone.sh` — HTTP 200 on localhost:5123 and tunnel URL
-- Manual: opened /chat on phone, sent a message, got a streamed reply
+- `bash start-dev.sh` — HTTP 200 on localhost:5123
+- Manual: opened /chat in local browser, sent a message, got a streamed reply
 
 For UI changes, attach a before/after screenshot or short recording.
 -->

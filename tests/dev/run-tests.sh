@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run all start-phone.sh tests sequentially. Used by CI and local dev.
-# Usage: bash tests/start-phone/run-tests.sh
+# Run all start-dev.sh tests sequentially. Used by CI and local dev.
+# Usage: bash tests/dev/run-tests.sh
 # Exit code: number of failed test suites (0 = all passed).
 
 set -uo pipefail
@@ -8,7 +8,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 printf '###############################################\n'
-printf '# start-phone.sh test suite\n'
+printf '# start-dev.sh test suite\n'
 printf '###############################################\n'
 
 SUITES_PASS=0

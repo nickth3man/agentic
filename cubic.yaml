@@ -38,7 +38,7 @@ reviews:
       high-value findings.
     - OpenRouter is the LLM provider — flag any unguarded HTTP or streaming
       cancellation issues.
-    - start-phone.sh is the only supported run entrypoint — bash hygiene
+    - start-dev.sh is the only supported run entrypoint — bash hygiene
       (quoting, traps, set -euo pipefail) matters.
 
 # Not enabled: ultrareview. It costs 3x per reviewed line and runs for ~30 min.

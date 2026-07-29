@@ -1649,7 +1649,7 @@ button {
     }
 }
 
-/* Landscape phones: wide enough to miss the 560px rules, short enough that the
+/* Landscape mobile: wide enough to miss the 560px rules, short enough that the
    full-height header leaves almost no transcript. Compact it instead. */
 @media (max-height: 560px) and (min-width: 561px) {
     .chat-page {

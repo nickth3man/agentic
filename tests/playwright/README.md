@@ -4,7 +4,7 @@ Hermetic browser tests for chat streaming and `Components/Layout/ReconnectModal.
 
 ## Why
 
-The `.NET 10.0.0 GA` reconnect-flow regression introduced a new `resume-failed` state that fires after a `dotnet watch` server restart instead of `rejected`. Without the `|| event.detail.state === "resume-failed"` branch in `ReconnectModal.razor.js`, the phone browser sticks on a "Failed to resume" modal after every rude edit. These tests guard against silent regressions of that branch.
+The `.NET 10.0.0 GA` reconnect-flow regression introduced a new `resume-failed` state that fires after a `dotnet watch` server restart instead of `rejected`. Without the `|| event.detail.state === "resume-failed"` branch in `ReconnectModal.razor.js`, the browser sticks on a "Failed to resume" modal after every rude edit. These tests guard against silent regressions of that branch.
 
 ## Layout
 
@@ -37,7 +37,7 @@ npm test
 
 | State           | Expected behavior     | Why                                                  |
 | --------------- | --------------------- | ---------------------------------------------------- |
-| `resume-failed` | `location.reload()`   | .NET 10.0.0 GA terminal state — must reload or phone gets stuck on "Failed to resume" modal. |
+| `resume-failed` | `location.reload()`   | .NET 10.0.0 GA terminal state — must reload or browser gets stuck on "Failed to resume" modal. |
 | `rejected`      | `location.reload()`   | Original terminal state — must continue working alongside `resume-failed`. |
 | `show`          | no reload             | Transient state (modal appears, retries continue). Reload would interrupt reconnection. |
 | `failed`        | no reload             | Registers visibilitychange listener for retry-on-tab-focus. |

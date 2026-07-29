@@ -292,7 +292,7 @@
     }
 }
 
-/* ─── Off-canvas conversation drawer (phone-first) ─── */
+/* ─── Off-canvas conversation drawer (mobile-first) ─── */
 .chat-shell {
     position: relative;
     height: 100vh;

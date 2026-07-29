@@ -68,38 +68,30 @@ Hot reload behavior:
   if the verbose log prints `No hot reload changes to apply` after an edit that didn't
   propagate, press `Ctrl+R` in the terminal to force a rebuild.
 
-### Run from an agent / headless shell (IMPORTANT)
+### Run from an agent or automated environment
 
-Agents must not run `bash start-dev.sh` in the foreground — the tool call
-blocks forever. The pattern that works (server stays up, tool returns):
+When running from an AI agent or automated environment, choose the approach matching your tooling:
 
-```bash
-# Detach fully so THIS tool call returns AND the server outlives the agent shell:
-#   nohup              — ignore SIGHUP, so the server survives the tool shell
-#                        tearing down after the call returns (without it, a
-#                        backgrounded job can die when the agent session ends).
-#   </dev/null         — don't let the script/children read the tool's stdin.
-#   >/dev/null 2>&1    — don't hold the tool's stdout/stderr pipe open. The
-#                        script detects the non-TTY stdout and writes to
-#                        script.log only (see start-dev.sh "TTY-conditional"),
-#                        so nothing anchors the pipe and this call returns at
-#                        the `&` instead of blocking until Ctrl+C.
-nohup bash start-dev.sh </dev/null >/dev/null 2>&1 &
-SCRIPT_PID=$!
+1. **Managed Observable Terminal (Recommended):**
+   Use a process manager tool (e.g. `hub` or an IDE task terminal) to run `start-dev.sh`:
+   ```json
+   hub(op: "start", name: "server", application: "bash", args: ["start-dev.sh"], ready: {"port": 5123, "log": "App is responding on"})
+   ```
+   This keeps the server process observable, streams logs live, and allows sending keys (such as `Ctrl+R` to force a hot reload rebuild via `hub send`).
 
-# dotnet watch build takes ~20-40s. Poll the log for readiness.
-RUN_ID=$(cat logs/dev/LATEST)
-for i in $(seq 1 60); do
-  grep -q "App is responding on" "logs/dev/$RUN_ID/script.log" 2>/dev/null && break
-  sleep 1
-done
-```
+2. **Detached Shell Execution (Fallback for raw shell tools):**
+   Standard shell tools must not run `bash start-dev.sh` in the foreground because blocking calls never return. Use a fully detached subshell:
+   ```bash
+   nohup bash start-dev.sh </dev/null >/dev/null 2>&1 &
+   SCRIPT_PID=$!
 
-> **Do not** launch with a bare `bash start-dev.sh &` and "no redirection".
-> That form (documented in older revisions of this file) anchors the script's
-> `tee` to the tool's stdout pipe for the script's whole lifetime, so the tool
-> call never returns. The `nohup ... </dev/null >/dev/null 2>&1 &` form above is
-> required from agents.
+   # Wait for readiness in logs/dev/LATEST/script.log
+   RUN_ID=$(cat logs/dev/LATEST)
+   for i in $(seq 1 60); do
+     grep -q "App is responding on" "logs/dev/$RUN_ID/script.log" 2>/dev/null && break
+     sleep 1
+   done
+   ```
 
 The script writes all output to `logs/dev/<run_id>/` automatically:
 - `script.log` — script's own stdout/stderr (banner, status, errors)
@@ -114,9 +106,7 @@ the script's INT trap only works in an interactive foreground terminal (real Ctr
 TERM runs the exact same cleanup: process tree killed, port 5123 freed,
 `meta.json` finalized with the actual exit reason.
 
-`$SCRIPT_PID` is an MSYS PID and only resolves inside the same bash session that
-launched the script. From a **later** agent tool call (different session) — or if
-`kill -TERM` reports "no such process" — shut down at the Windows level instead:
+If `kill -TERM` reports "no such process" — shut down at the Windows level instead:
 
 ```bash
 # Find whatever is listening on 5123, then tree-kill it.
@@ -153,8 +143,12 @@ dotnet test              # or: dotnet test -c Release (see hard rule 2)
 ```
 
 The .NET tests are xUnit in `Agentic.Chat.Tests/`. Add one `[Fact]` class per concern,
-named `<Thing>Tests.cs`. There is no test DB or network mocking yet — keep tests
-fast and hermetic (no OpenRouter calls).
+named `<Thing>Tests.cs`. Keep unit tests fast and hermetic (< 1s execution).
+
+### Developer Feedback Loops
+
+- **Inner Loop (Fast TDD Iteration ~1s):** Run `dotnet test -c Release` frequently while editing code. Executes 350+ unit tests in under 1 second.
+- **Outer Loop (CI Parity before push ~75s):** Run the complete 4-job suite before opening/updating PRs.
 
 Additional test suites (run as separate CI jobs, not part of `dotnet test`):
 
@@ -198,8 +192,7 @@ tested" — a documented skip, not a silent one.
 Automated suites don't cover visual correctness. For UI work (rendering,
 layout, mobile), "verified" means you actually looked:
 
-1. Run the server headless (see [Run from an agent](#run-from-an-agent--headless-shell-important))
-   and open `http://localhost:5123/chat` (follow the `302`, or use `curl -L`).
+1. Run the server (`bash start-dev.sh`) and open `http://localhost:5123/chat` (follow the `302`, or use `curl -L`).
 2. Check the acceptance criteria on both surfaces where relevant. Hot reload makes iterating cheap — in-place edits apply live.
 3. Capture the before/after screenshot the PR template asks for. The Playwright
    suite can drive a headless browser for a scripted screenshot if you don't

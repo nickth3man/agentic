@@ -1,3 +1,8 @@
 {
-  "openRouterFreeApiKey": ""
+  "openRouterFreeApiKey": "",
+  "multiAgent": {
+    "comment": "Set these to public HTTPS+CORS-enabled endpoints to enable the 20-Agent Research Council. Leave empty to disable.",
+    "searxngBaseUrl": "",
+    "ollamaBaseUrl": ""
+  }
 }

@@ -1,11 +1,13 @@
+using System;
 using System.Net.Http.Headers;
 using Agentic.Chat.Components;
 using Agentic.Chat.Data;
 using Agentic.Chat.Services;
 using Agentic.Chat.Services.MultiAgent;
-using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -60,17 +62,64 @@ builder.Services.AddScoped<IActiveConversationWriter>(sp =>
     sp.GetRequiredService<ConversationPersistence>());
 builder.Services.AddScoped<ChatAgentService>();
 builder.Services.AddScoped<ConversationService>();
-builder.Services.AddHttpClient<SearXNGSearchProvider>();
+
+// Multi-agent endpoints: read from configuration so Blazor Server deployments
+// can target a public HTTPS SearXNG/Ollama backend (required for any non-local
+// deployment, including GitHub Pages demo of the WASM client).
+var multiAgentSection = builder.Configuration.GetSection("MultiAgent");
+builder.Services.Configure<MultiAgentOptions>(multiAgentSection);
+var searxngBase = multiAgentSection["SearXNGBaseUrl"];
+var ollamaBase = multiAgentSection["OllamaBaseUrl"];
+var searxngOk = !string.IsNullOrWhiteSpace(searxngBase) && Uri.TryCreate(searxngBase, UriKind.Absolute, out var sUri)
+    && string.Equals(sUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+var ollamaOk = !string.IsNullOrWhiteSpace(ollamaBase) && Uri.TryCreate(ollamaBase, UriKind.Absolute, out var oUri)
+    && string.Equals(oUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+var serverDisabled = !searxngOk
+    ? "Council requires a public HTTPS SearXNG endpoint (MultiAgent:SearXNGBaseUrl)."
+    : (ollamaBase != "" && !ollamaOk
+        ? "Ollama URL invalid. Council will run with unavailable-LLM fallback."
+        : "");
+builder.Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new MultiAgentOptions
+{
+    SearXNGBaseUrl = searxngBase ?? "",
+    OllamaBaseUrl = ollamaBase ?? "",
+    CouncilEnabled = searxngOk,
+    DisabledReason = serverDisabled
+}));
+
+if (searxngOk)
+{
+    builder.Services.AddHttpClient<SearXNGSearchProvider>(c => c.BaseAddress = new Uri(searxngBase!));
+}
+else
+{
+    builder.Services.AddScoped<SearXNGSearchProvider>(_ =>
+        new SearXNGSearchProvider(new HttpClient(), Microsoft.Extensions.Logging.Abstractions.NullLogger<SearXNGSearchProvider>.Instance, "http://invalid"));
+}
 builder.Services.AddHttpClient<WikipediaSearchProvider>();
 builder.Services.AddHttpClient<ArXivSearchProvider>();
-builder.Services.AddHttpClient<OllamaLocalLlmClient>();
-builder.Services.AddScoped<ISearchProvider>(sp => new CompositeSearchProvider([
-    sp.GetRequiredService<SearXNGSearchProvider>(),
-    sp.GetRequiredService<WikipediaSearchProvider>(),
-    sp.GetRequiredService<ArXivSearchProvider>()
-]));
-builder.Services.AddScoped<Agentic.Chat.Services.MultiAgent.ILocalLlmClient, OllamaLocalLlmClient>();
-builder.Services.AddScoped<Agentic.Chat.Services.MultiAgent.ResearchTeamCoordinator>();
+
+builder.Services.AddScoped<ISearchProvider>(sp => new CompositeSearchProvider(
+    searxngOk
+        ? new ISearchProvider[]
+        {
+            sp.GetRequiredService<SearXNGSearchProvider>(),
+            sp.GetRequiredService<WikipediaSearchProvider>(),
+            sp.GetRequiredService<ArXivSearchProvider>()
+        }
+        : Array.Empty<ISearchProvider>()));
+
+if (ollamaOk)
+{
+    builder.Services.AddHttpClient<OllamaLocalLlmClient>(c => c.BaseAddress = new Uri(ollamaBase!));
+    builder.Services.AddScoped<ILocalLlmClient, OllamaLocalLlmClient>();
+}
+else
+{
+    builder.Services.AddScoped<ILocalLlmClient, UnavailableLocalLlm>();
+}
+
+builder.Services.AddScoped<ResearchTeamCoordinator>();
 
 var app = builder.Build();
 

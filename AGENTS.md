@@ -177,7 +177,7 @@ dotnet format --verify-no-changes && dotnet build -warnaserror -c Release
 # Job `test` (ubuntu): .NET build + xUnit
 dotnet restore && dotnet build --no-restore -c Release && dotnet test --no-build -c Release
 
-# Job `start-phone-tests` (windows): bash lifecycle suite
+# Job `dev-tests` (windows): bash lifecycle suite
 bash -n start-dev.sh && bash tests/dev/run-tests.sh
 
 # Job `playwright-tests` (ubuntu): Blazor reconnect UI
@@ -186,7 +186,7 @@ cd tests/playwright && npm install && npx playwright test
 
 Run `dotnet format` (no flags) to auto-fix any formatting the first job flags —
 it must be a no-op on a clean checkout, so run it before pushing. The `format`
-and `test` jobs are fast and hermetic — always run them. The `start-phone-tests`
+and `test` jobs are fast and hermetic — always run them. The `dev-tests`
 job runs the bash test suite on windows-latest. The Playwright
 job is slower (`npm install` + `npx playwright install chromium`); it's fine to
 **skip it locally and rely on CI** *unless your change touches the reconnect UI,
@@ -258,7 +258,7 @@ PRs required, only `squash` merges allowed, `dismiss_stale_reviews_on_push` on,
 `required_approving_review_count` 0, `required_review_thread_resolution` false,
 and all four CI jobs required as status checks — `format` (dotnet format +
 `-warnaserror` Release build on ubuntu-latest), `test` (xUnit on ubuntu-latest),
-`start-phone-tests` (bash suite on windows-latest), and `playwright-tests` (browser suite on
+`dev-tests` (bash suite on windows-latest), and `playwright-tests` (browser suite on
 ubuntu-latest). A PR cannot merge until each of the four reports success, so run
 the CI-parity commands above before pushing. AI reviewer checks (CodeRabbit /
 Sourcery / cubic) are configured advisory — CodeRabbit posts reviews as

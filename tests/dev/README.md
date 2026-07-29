@@ -46,4 +46,4 @@ The smoke test invokes `start-dev.sh` end-to-end (~15–30s startup), verifies t
 
 ## CI
 
-`.github/workflows/ci.yml` runs `bash tests/dev/run-tests.sh` as a dedicated job (`start-phone-tests`) in parallel with the existing `dotnet test` job. The job name is preserved for the ruleset; the working directory has been renamed.
+`.github/workflows/ci.yml` runs `bash tests/dev/run-tests.sh` as a dedicated job (`dev-tests`) in parallel with the existing `dotnet test` job.

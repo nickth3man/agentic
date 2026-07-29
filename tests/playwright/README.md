@@ -47,4 +47,4 @@ npm test
 
 ## CI
 
-`.github/workflows/ci.yml` runs this suite on every PR as the `playwright-tests` job (parallel with `dotnet-test` and `start-phone-tests`).
+`.github/workflows/ci.yml` runs this suite on every PR as the `playwright-tests` job (parallel with `dotnet-test` and `dev-tests`).

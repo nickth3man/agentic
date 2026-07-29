@@ -122,6 +122,8 @@ else
     builder.Services.AddScoped<ILocalLlmClient, UnavailableLocalLlm>();
 }
 
+builder.Services.AddSingleton<ICouncilCapabilities, StaticCouncilCapabilities>();
+
 builder.Services.AddScoped<ResearchTeamCoordinator>();
 
 var app = builder.Build();

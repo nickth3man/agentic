@@ -56,20 +56,6 @@ jobs:
           sed -i "s|__PAGES_BASE_PATH__|${PAGES_BASE_PATH%/}|g" "$publish_dir/404.html"
           rm -f "$publish_dir/404.html.br" "$publish_dir/404.html.gz"
 
-      - name: Add shared free-model key
-        shell: bash
-        env:
-          OPENROUTER_FREE_API_KEY: ${{ secrets.OPENROUTER_FREE_API_KEY }}
-        run: |
-          if [ -z "$OPENROUTER_FREE_API_KEY" ]; then
-            echo 'Repository secret OPENROUTER_FREE_API_KEY is required.' >&2
-            exit 1
-          fi
-          publish_dir='Agentic.Chat.Client/bin/Release/net10.0/publish/wwwroot'
-          jq -n --arg key "$OPENROUTER_FREE_API_KEY" \
-            '{openRouterFreeApiKey: $key}' > "$publish_dir/app-config.json"
-          rm -f "$publish_dir/app-config.json.br" "$publish_dir/app-config.json.gz"
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:

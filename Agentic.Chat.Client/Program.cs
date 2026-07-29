@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Agentic.Chat;
+using Agentic.Chat.Client.Services;
 using Agentic.Chat.Services;
 using Agentic.Chat.Services.MultiAgent;
 using Microsoft.AspNetCore.Components.Web;
@@ -15,14 +16,14 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Synchronously fetch wwwroot/app-config.json before registering MultiAgent
-// services. Council availability requires a valid https:// SearXNG URL —
-// Ollama is optional. Localhost / http endpoints are rejected on Pages to
-// prevent the feature from silently returning no research data.
+// Synchronously fetch wwwroot/app-config.json before registering MultiAgent services.
+// The Pages deployment does not ship a static API key; the council stays disabled
+// until the visitor enters their own OpenRouter key. SearXNG/Ollama URLs are kept
+// as overrides for users self-hosting a full backend.
 var initialHttp = new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) };
 var searxngUrl = "";
 var ollamaUrl = "";
-var councilDisabledReason = "Multi-agent council is not configured. Add multiAgent.searxngBaseUrl to wwwroot/app-config.json with a public HTTPS+CORS endpoint.";
+var councilDisabledReason = "Multi-agent council needs your OpenRouter API key. Open the key settings (top-right of the chat header) to add one.";
 try
 {
     var cfg = await initialHttp.GetFromJsonAsync<JsonElement>("app-config.json");
@@ -43,20 +44,19 @@ bool IsValidHttps(string u) => !string.IsNullOrWhiteSpace(u)
     && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
 var searxngOk = IsValidHttps(searxngUrl);
 var ollamaOk = IsValidHttps(ollamaUrl);
-var councilEnabled = searxngOk && ollamaOk; // require BOTH SearXNG and Ollama
-if (!councilEnabled)
-{
-    if (!searxngOk && !ollamaOk)
-        councilDisabledReason = "Multi-agent council requires both SearXNG and Ollama endpoints in wwwroot/app-config.json (multiAgent.searxngBaseUrl and multiAgent.ollamaBaseUrl), each a public HTTPS+CORS URL.";
-    else if (!searxngOk)
-        councilDisabledReason = searxngUrl == ""
-            ? "Multi-agent council requires a SearXNG endpoint. Add multiAgent.searxngBaseUrl to wwwroot/app-config.json with a public HTTPS+CORS URL."
-            : $"Multi-agent SearXNG URL is not a valid https:// endpoint (got: {searxngUrl}).";
-    else
-        councilDisabledReason = ollamaUrl == ""
-            ? "Multi-agent council requires an Ollama endpoint. Add multiAgent.ollamaBaseUrl to wwwroot/app-config.json with a public HTTPS+CORS URL."
-            : $"Multi-agent Ollama URL is not a valid https:// endpoint (got: {ollamaUrl}).";
-}
+// SearXNG/Ollama are now optional overrides. The default reason is the
+// "no OpenRouter key" prompt; if the deployer misconfigured SearXNG/Ollama we
+// surface that and leave the council disabled.
+if (!searxngOk && !ollamaOk && (searxngUrl != "" || ollamaUrl != ""))
+    councilDisabledReason = "Multi-agent council requires both SearXNG and Ollama endpoints in wwwroot/app-config.json (multiAgent.searxngBaseUrl and multiAgent.ollamaBaseUrl), each a public HTTPS+CORS URL.";
+else if (!searxngOk && searxngUrl != "")
+    councilDisabledReason = searxngUrl == ""
+        ? "Multi-agent SearXNG URL is required."
+        : $"Multi-agent SearXNG URL is not a valid https:// endpoint (got: {searxngUrl}).";
+else if (!ollamaOk && ollamaUrl != "")
+    councilDisabledReason = ollamaUrl == ""
+        ? "Multi-agent Ollama URL is required."
+        : $"Multi-agent Ollama URL is not a valid https:// endpoint (got: {ollamaUrl}).";
 
 builder.Services.AddScoped(sp => new HttpClient
 {
@@ -75,9 +75,11 @@ builder.Services.AddSingleton(Options.Create(new MultiAgentOptions
 {
     SearXNGBaseUrl = searxngUrl,
     OllamaBaseUrl = ollamaUrl,
-    CouncilEnabled = councilEnabled,
+    CouncilEnabled = searxngOk && ollamaOk,
     DisabledReason = councilDisabledReason
 }));
+builder.Services.AddScoped<ICouncilCapabilities, CouncilCapabilities>();
+
 builder.Services.AddScoped<BrowserStorage>();
 builder.Services.AddScoped<OpenRouterCredentialService>();
 builder.Services.AddScoped<IOpenRouterClient, OpenRouterClient>();
@@ -96,26 +98,33 @@ builder.Services.AddScoped<ConversationService>();
 builder.Services.AddScoped<ISearchProvider>(sp =>
 {
     var opts = sp.GetRequiredService<IOptions<MultiAgentOptions>>().Value;
-    if (!IsValidHttps(opts.SearXNGBaseUrl))
-    {
-        return new CompositeSearchProvider([]);
-    }
     var http = sp.GetRequiredService<HttpClient>();
-    return new CompositeSearchProvider([
-        new SearXNGSearchProvider(http, NullLogger<SearXNGSearchProvider>.Instance, opts.SearXNGBaseUrl),
+    // Always-available providers (no key, CORS-* or origin=*): Wikipedia + ArXiv + Mwmbl.
+    // CompositeSearchProvider guards each child so a CORS rejection on one (e.g. ArXiv on
+    // Pages) cannot poison the others. SearXNG is added on top when a base URL is configured.
+    var providers = new List<ISearchProvider>
+    {
         new WikipediaSearchProvider(http, NullLogger<WikipediaSearchProvider>.Instance),
-        new ArXivSearchProvider(http, NullLogger<ArXivSearchProvider>.Instance)
-    ]);
+        new ArXivSearchProvider(http, NullLogger<ArXivSearchProvider>.Instance),
+        new MwmblSearchProvider(http, NullLogger<MwmblSearchProvider>.Instance),
+    };
+    if (IsValidHttps(opts.SearXNGBaseUrl))
+    {
+        providers.Add(new SearXNGSearchProvider(http, NullLogger<SearXNGSearchProvider>.Instance, opts.SearXNGBaseUrl));
+    }
+    return new CompositeSearchProvider(providers, NullLogger<CompositeSearchProvider>.Instance);
 });
 builder.Services.AddScoped<ILocalLlmClient>(sp =>
 {
     var opts = sp.GetRequiredService<IOptions<MultiAgentOptions>>().Value;
-    if (!IsValidHttps(opts.OllamaBaseUrl))
-    {
-        return new UnavailableLocalLlm();
-    }
     var http = sp.GetRequiredService<HttpClient>();
-    return new OllamaLocalLlmClient(http, NullLogger<OllamaLocalLlmClient>.Instance, opts.OllamaBaseUrl);
+    return opts.SearXNGBaseUrl != "" && opts.OllamaBaseUrl != "" && IsValidHttps(opts.OllamaBaseUrl)
+        ? new OllamaLocalLlmClient(http, NullLogger<OllamaLocalLlmClient>.Instance, opts.OllamaBaseUrl)
+        : new OpenRouterLocalLlmClient(
+            http,
+            sp.GetRequiredService<OpenRouterCredentialService>(),
+            sp.GetRequiredService<IOptions<OpenRouterOptions>>(),
+            NullLogger<OpenRouterLocalLlmClient>.Instance);
 });
 builder.Services.AddScoped<ResearchTeamCoordinator>();
 

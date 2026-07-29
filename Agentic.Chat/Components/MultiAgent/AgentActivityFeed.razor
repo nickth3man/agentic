@@ -1,0 +1,67 @@
+@using Agentic.Chat.Models.MultiAgent
+
+<div class="agent-activity-feed" aria-label="Agent Activity Feed">
+    <div class="activity-feed-header">
+        <h3 class="activity-feed-title">🤖 20-Agent Team Activity & Handoff Stream</h3>
+        <span class="activity-feed-count">@Frames.Count Step(s) Recorded</span>
+    </div>
+
+    <div class="activity-feed-list" role="list">
+        @foreach (var frame in Frames)
+        {
+            <div class="activity-card @(frame.IsExpanded ? "is-expanded" : null)">
+                <div class="activity-card-header" @onclick="() => ToggleFrame(frame)">
+                    <div class="activity-badge-group">
+                        <span class="division-badge">@frame.DivisionName</span>
+                        <span class="action-badge">@frame.ActionKind</span>
+                        @if (frame.StatusBadge.HasValue)
+                        {
+                            <span class="status-badge status-@frame.StatusBadge.Value.ToString().ToLowerInvariant()">
+                                @(frame.StatusBadge.Value switch {
+                                    ClaimVerificationStatus.Verified => "🟢 Verified",
+                                    ClaimVerificationStatus.Disputed => "🟡 Disputed",
+                                    _ => "⚪ Unresolved"
+                                })
+                            </span>
+                        }
+                    </div>
+
+                    <div class="activity-agents">
+                        <strong class="sender-agent">@frame.SenderAgent</strong>
+                        <span class="arrow">➔</span>
+                        <span class="recipient-agent">@frame.RecipientAgent</span>
+                    </div>
+
+                    <div class="activity-summary">
+                        @frame.ProgressSummary
+                    </div>
+
+                    <div class="activity-time">
+                        @frame.Timestamp.ToString("HH:mm:ss")
+                        <button type="button" class="expand-btn" aria-label="Toggle details">
+                            @(frame.IsExpanded ? "▲" : "▼")
+                        </button>
+                    </div>
+                </div>
+
+                @if (frame.IsExpanded && !string.IsNullOrWhiteSpace(frame.Payload))
+                {
+                    <div class="activity-card-body">
+                        <div class="payload-header">Step Details & Data Payload:</div>
+                        <pre class="payload-content">@frame.Payload</pre>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<AgentActivityFrame> Frames { get; set; } = [];
+
+    private void ToggleFrame(AgentActivityFrame frame)
+    {
+        frame.IsExpanded = !frame.IsExpanded;
+    }
+}

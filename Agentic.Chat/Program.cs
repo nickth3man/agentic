@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using Agentic.Chat.Components;
 using Agentic.Chat.Data;
 using Agentic.Chat.Services;
+using Agentic.Chat.Services.MultiAgent;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -59,6 +60,17 @@ builder.Services.AddScoped<IActiveConversationWriter>(sp =>
     sp.GetRequiredService<ConversationPersistence>());
 builder.Services.AddScoped<ChatAgentService>();
 builder.Services.AddScoped<ConversationService>();
+builder.Services.AddHttpClient<SearXNGSearchProvider>();
+builder.Services.AddHttpClient<WikipediaSearchProvider>();
+builder.Services.AddHttpClient<ArXivSearchProvider>();
+builder.Services.AddHttpClient<OllamaLocalLlmClient>();
+builder.Services.AddScoped<ISearchProvider>(sp => new CompositeSearchProvider([
+    sp.GetRequiredService<SearXNGSearchProvider>(),
+    sp.GetRequiredService<WikipediaSearchProvider>(),
+    sp.GetRequiredService<ArXivSearchProvider>()
+]));
+builder.Services.AddScoped<Agentic.Chat.Services.MultiAgent.ILocalLlmClient, OllamaLocalLlmClient>();
+builder.Services.AddScoped<Agentic.Chat.Services.MultiAgent.ResearchTeamCoordinator>();
 
 var app = builder.Build();
 

@@ -1,0 +1,135 @@
+@using Agentic.Chat.Models.MultiAgent
+
+<div class="research-dashboard" aria-label="Research Dashboard">
+    <div class="dashboard-header">
+        <h2 class="dashboard-title">💡 Visual Research Dashboard</h2>
+        <div class="dashboard-meta">
+            <span class="meta-tag">Topic: <strong>@Dashboard.UserTopic</strong></span>
+            <span class="meta-tag">Rounds: <strong>@Dashboard.RoundsCompleted</strong></span>
+            <span class="meta-tag">Searches Used: <strong>@Dashboard.SearchQueriesExecuted</strong></span>
+        </div>
+    </div>
+
+    <!-- Executive Summary Card -->
+    <div class="dash-card summary-card">
+        <h3 class="card-title">📌 Executive Summary</h3>
+        <p class="summary-text">@Dashboard.ExecutiveSummary</p>
+
+        @if (Dashboard.KeyTakeaways.Count > 0)
+        {
+            <div class="takeaways-list">
+                <strong>Core Takeaways:</strong>
+                <ul>
+                    @foreach (var item in Dashboard.KeyTakeaways)
+                    {
+                        <li>@item</li>
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+
+    <!-- Verified & Disputed Claims Grid -->
+    <div class="dash-section">
+        <h3 class="section-title">📊 Claim Verification Matrix</h3>
+        <div class="claims-grid">
+            @foreach (var claim in Dashboard.Claims)
+            {
+                <div class="claim-card claim-@claim.Status.ToString().ToLowerInvariant()">
+                    <div class="claim-header">
+                        <span class="claim-badge">
+                            @(claim.Status switch {
+                                ClaimVerificationStatus.Verified => "🟢 VERIFIED CLAIM",
+                                ClaimVerificationStatus.Disputed => "🟡 DISPUTED CLAIM",
+                                _ => "⚪ UNRESOLVED CLAIM"
+                            })
+                        </span>
+                    </div>
+                    <h4 class="claim-text">@claim.ClaimText</h4>
+                    <p class="claim-explanation">@claim.Explanation</p>
+
+                    @if (claim.Sources.Count > 0)
+                    {
+                        <div class="claim-sources">
+                            <strong>Sources:</strong> @string.Join(", ", claim.Sources)
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Unresolved Questions (if any) -->
+    @if (Dashboard.UnresolvedQuestions.Count > 0)
+    {
+        <div class="dash-card unresolved-card">
+            <h3 class="card-title warning-title">⚪ Unresolved Questions & Data Gaps</h3>
+            <ul>
+                @foreach (var question in Dashboard.UnresolvedQuestions)
+                {
+                    <li>@question</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <!-- Timeline & FAQs Grid -->
+    <div class="dash-grid-2">
+        @if (Dashboard.Timeline.Count > 0)
+        {
+            <div class="dash-card">
+                <h3 class="card-title">📅 Context Timeline</h3>
+                <div class="timeline-list">
+                    @foreach (var evt in Dashboard.Timeline)
+                    {
+                        <div class="timeline-item">
+                            <span class="timeline-date">@evt.PeriodOrDate</span>
+                            <div class="timeline-content">
+                                <strong>@evt.Title</strong>
+                                <p>@evt.Description</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (Dashboard.Faqs.Count > 0)
+        {
+            <div class="dash-card">
+                <h3 class="card-title">❓ Common Questions & Answers</h3>
+                <div class="faq-list">
+                    @foreach (var faq in Dashboard.Faqs)
+                    {
+                        <details class="faq-item">
+                            <summary class="faq-question">@faq.Question</summary>
+                            <div class="faq-answer">@faq.Answer</div>
+                        </details>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Citations Drawer -->
+    @if (Dashboard.Citations.Count > 0)
+    {
+        <div class="dash-card citations-card">
+            <h3 class="card-title">🔗 Sources & Citations</h3>
+            <div class="citations-chips">
+                @foreach (var cite in Dashboard.Citations)
+                {
+                    <a href="@cite.Url" target="_blank" rel="noopener noreferrer" class="cite-chip">
+                        <span class="chip-title">@cite.SourceTitle</span>
+                        <span class="chip-domain">@cite.Domain</span>
+                    </a>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ResearchDashboard Dashboard { get; set; } = default!;
+}

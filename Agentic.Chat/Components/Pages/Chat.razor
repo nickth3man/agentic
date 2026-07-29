@@ -4,6 +4,10 @@
 @inject IJSRuntime JS
 @inject ModelCatalogService ModelCatalog
 @inject SelectedModelService SelectedModel
+@inject Agentic.Chat.Services.MultiAgent.ResearchTeamCoordinator ResearchCoordinator
+@using Agentic.Chat.Models.MultiAgent
+@using Agentic.Chat.Services.MultiAgent
+@using Agentic.Chat.Components.MultiAgent
 @implements IDisposable
 @implements IAsyncDisposable
 @using Microsoft.AspNetCore.Components
@@ -175,6 +179,14 @@
                  role="log"
                  aria-relevant="additions"
                  aria-busy="@isBusy">
+                @if (_multiAgentFrames.Count > 0)
+                {
+                    <AgentActivityFeed Frames="_multiAgentFrames" />
+                }
+                @if (_multiAgentDashboard != null)
+                {
+                    <ResearchDashboardView Dashboard="_multiAgentDashboard" />
+                }
                 @if (!ChatAgent.Messages.Any())
                 {
                     <div class="empty-state">
@@ -418,6 +430,17 @@
                             <path d="M5 12h12M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         <span class="send-text">Send</span>
+                    </button>
+                    <button type="button"
+                            class="chat-send"
+                            disabled="@isBusy"
+                            aria-label="Run 20-Agent Research Council"
+                            @onclick="RunMultiAgentResearchAsync">
+                        <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M12 3a9 9 0 100 18 9 9 0 000-18z" stroke="currentColor" stroke-width="1.7" fill="none"/>
+                            <path d="M12 8v4m-2 2h4" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        <span class="send-text">Council™</span>
                     </button>
                 }
             </div>
@@ -1052,15 +1075,51 @@
         }
     }
 
+    private List<AgentActivityFrame> _multiAgentFrames = [];
+    private ResearchDashboard? _multiAgentDashboard;
+
+    private async Task RunMultiAgentResearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(inputText) || isBusy) return;
+
+        var topic = inputText;
+        inputText = string.Empty;
+        isBusy = true;
+        errorMessage = null;
+        _multiAgentDashboard = null;
+        _multiAgentFrames = [];
+        statusText = "Running 20-Agent Council...";
+
+        try
+        {
+            var result = await ResearchCoordinator.ExecuteFullSessionAsync(
+                topic,
+                Guid.NewGuid().ToString(),
+                async f => await InvokeAsync(() =>
+                {
+                    _multiAgentFrames.Add(f);
+                    StateHasChanged();
+                }));
+
+            _multiAgentDashboard = ResearchCoordinator.BuildDashboard(
+                topic, _multiAgentFrames, new List<SearchResultItem>(result.SearchItems));
+            statusText = "20-Agent Council complete.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            statusText = "Council error.";
+        }
+        finally
+        {
+            isBusy = false;
+            StateHasChanged();
+        }
+    }
+
     private static string FormatTokens(long tokens)
     {
-        if (tokens < 1_000)
-        {
-            return tokens.ToString();
-        }
-
-        return tokens % 1_000 == 0
-            ? $"{tokens / 1_000}k"
-            : $"{tokens / 1_000m:0.#}k";
+        if (tokens < 1_000) return tokens.ToString();
+        return tokens % 1_000 == 0 ? $"{tokens / 1_000}k" : $"{tokens / 1_000m:0.#}k";
     }
 }

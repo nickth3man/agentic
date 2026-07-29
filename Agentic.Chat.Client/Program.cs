@@ -1,7 +1,9 @@
 using Agentic.Chat;
 using Agentic.Chat.Services;
+using Agentic.Chat.Services.MultiAgent;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
@@ -35,5 +37,14 @@ builder.Services.AddScoped<IActiveConversationWriter>(
     services => services.GetRequiredService<ConversationPersistence>());
 builder.Services.AddScoped<ChatAgentService>();
 builder.Services.AddScoped<ConversationService>();
+builder.Services.AddScoped<ISearchProvider>(_ =>
+    new CompositeSearchProvider([
+        new SearXNGSearchProvider(new HttpClient(), NullLogger<SearXNGSearchProvider>.Instance),
+        new WikipediaSearchProvider(new HttpClient(), NullLogger<WikipediaSearchProvider>.Instance),
+        new ArXivSearchProvider(new HttpClient(), NullLogger<ArXivSearchProvider>.Instance)
+    ]));
+builder.Services.AddScoped<ILocalLlmClient>(_ =>
+    new OllamaLocalLlmClient(new HttpClient(), NullLogger<OllamaLocalLlmClient>.Instance));
+builder.Services.AddScoped<ResearchTeamCoordinator>();
 
 await builder.Build().RunAsync();

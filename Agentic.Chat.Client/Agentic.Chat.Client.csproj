@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <Compile Include="..\Agentic.Chat\Models\*.cs" Link="Models\%(Filename)%(Extension)" />
+    <Compile Include="..\Agentic.Chat\Models\MultiAgent\*.cs" Link="Models\MultiAgent\%(Filename)%(Extension)" />
     <Compile Include="..\Agentic.Chat\Services\ChatAgentService.cs" Link="Services\ChatAgentService.cs" />
     <Compile Include="..\Agentic.Chat\Services\ContextWindow.cs" Link="Services\ContextWindow.cs" />
     <Compile Include="..\Agentic.Chat\Services\ConversationTitle.cs" Link="Services\ConversationTitle.cs" />
@@ -21,12 +22,14 @@
     <Compile Include="..\Agentic.Chat\Services\OpenRouterException.cs" Link="Services\OpenRouterException.cs" />
     <Compile Include="..\Agentic.Chat\Services\OpenRouterOptions.cs" Link="Services\OpenRouterOptions.cs" />
     <Compile Include="..\Agentic.Chat\Services\UsageFormatter.cs" Link="Services\UsageFormatter.cs" />
+    <Compile Include="..\Agentic.Chat\Services\MultiAgent\*.cs" Link="Services\MultiAgent\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <RazorComponent Include="..\Agentic.Chat\Components\ModelPicker.razor" Link="Components\ModelPicker.razor" />
     <RazorComponent Include="..\Agentic.Chat\Components\ReasoningEffortControl.razor" Link="Components\ReasoningEffortControl.razor" />
     <RazorComponent Include="..\Agentic.Chat\Components\SystemPromptSettings.razor" Link="Components\SystemPromptSettings.razor" />
+    <RazorComponent Include="..\Agentic.Chat\Components\MultiAgent\*.razor" Link="Components\MultiAgent\%(Filename)%(Extension)" />
     <RazorComponent Include="..\Agentic.Chat\Components\Layout\MainLayout.razor" Link="Components\Layout\MainLayout.razor" />
     <RazorComponent Include="..\Agentic.Chat\Components\Pages\Chat.razor" Link="Components\Pages\Chat.razor" />
     <RazorComponent Include="..\Agentic.Chat\Components\Pages\Home.razor" Link="Components\Pages\Home.razor" />

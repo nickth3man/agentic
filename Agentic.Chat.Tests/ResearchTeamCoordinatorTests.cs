@@ -277,4 +277,166 @@ public sealed class ResearchTeamCoordinatorTests
         Assert.Contains("Unresolved", host!.Payload);
         Assert.Contains("20-agent", host.ProgressSummary);
     }
+
+    // ── Coverage edge cases ─────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteResearchSession_EmptyTopic_YieldsNoFrames()
+    {
+        var coordinator = new ResearchTeamCoordinator(
+            new TestSearchProvider([]),
+            new TestLlmClient(),
+            NullLogger<ResearchTeamCoordinator>.Instance);
+
+        var frames = new List<AgentActivityFrame>();
+        await foreach (var frame in coordinator.ExecuteResearchSessionAsync("", Guid.NewGuid().ToString(), []))
+        {
+            frames.Add(frame);
+        }
+
+        Assert.Empty(frames);
+    }
+
+    [Fact]
+    public async Task FullSession_NoChallenge_CompletesNormally()
+    {
+        var items = new List<SearchResultItem> { new SearchResultItem("A", "B", "https://example.org", "Test") };
+        var coordinator = new ResearchTeamCoordinator(
+            new TestSearchProvider(items),
+            new NoChallengeLlmClient(),
+            NullLogger<ResearchTeamCoordinator>.Instance);
+
+        var result = await coordinator.ExecuteFullSessionAsync("Topic", Guid.NewGuid().ToString());
+        Assert.NotEmpty(result.Frames);
+        Assert.DoesNotContain(result.Frames, f => f.ActionKind == "TargetedReSearch");
+    }
+
+    [Fact]
+    public async Task FullSession_InvalidJsonChallenge_HandledGracefully()
+    {
+        var items = new List<SearchResultItem> { new SearchResultItem("A", "B", "https://example.org", "Test") };
+        var coordinator = new ResearchTeamCoordinator(
+            new TestSearchProvider(items),
+            new InvalidJsonLlmClient(),
+            NullLogger<ResearchTeamCoordinator>.Instance);
+
+        var result = await coordinator.ExecuteFullSessionAsync("Topic", Guid.NewGuid().ToString());
+        Assert.NotEmpty(result.Frames);
+        Assert.DoesNotContain(result.Frames, f => f.ActionKind == "TargetedReSearch");
+    }
+
+    [Fact]
+    public async Task FullSession_UnknownChallengeRole_FallsBackToGeneral()
+    {
+        var items = new List<SearchResultItem> { new SearchResultItem("A", "B", "https://example.org", "Test") };
+        var coordinator = new ResearchTeamCoordinator(
+            new TestSearchProvider(items),
+            new UnknownRoleChallengeLlmClient(),
+            NullLogger<ResearchTeamCoordinator>.Instance);
+
+        var result = await coordinator.ExecuteFullSessionAsync("Topic", Guid.NewGuid().ToString());
+        var reSearches = result.Frames.Where(f => f.ActionKind == "TargetedReSearch").ToList();
+        Assert.NotEmpty(reSearches);
+        Assert.Contains(reSearches, f => f.SenderAgent == "\U0001f310 General Web Search");
+    }
+
+    [Fact]
+    public async Task FullSession_BounceBackSearchError_HandlesGracefully()
+    {
+        var coordinator = new ResearchTeamCoordinator(
+            new BounceBackFailingProvider(),
+            new ChallengeLlmClient(),
+            NullLogger<ResearchTeamCoordinator>.Instance);
+
+        var result = await coordinator.ExecuteFullSessionAsync("Topic", Guid.NewGuid().ToString());
+        var reSearchErrors = result.Frames.Where(f => f.ActionKind == "TargetedReSearch" && f.Payload == "Search error.").ToList();
+        Assert.NotEmpty(reSearchErrors);
+    }
+
+    [Fact]
+    public async Task FullSession_ChallengeWithoutHint_FallsBackToTargetClaim()
+    {
+        var recorder = new RecordingSearchProvider(new SearchResultItem("A", "B", "https://example.org", "Test"));
+        var coordinator = new ResearchTeamCoordinator(
+            recorder,
+            new NoHintChallengeLlmClient(),
+            NullLogger<ResearchTeamCoordinator>.Instance);
+
+        var result = await coordinator.ExecuteFullSessionAsync("Topic", Guid.NewGuid().ToString());
+        // Bounce-back should use TargetClaim ("side effects") because SearchQueryHint is null
+        var bounceBackQueries = recorder.Queries.Skip(6).ToList();
+        Assert.NotEmpty(bounceBackQueries);
+        Assert.All(bounceBackQueries, q => Assert.Equal("side effects", q));
+    }
+
+    /// <summary>LLM stub that returns "No further challenges." for verifiers, never raises challenges.</summary>
+    private sealed class NoChallengeLlmClient : ILocalLlmClient
+    {
+        public Task<string> GenerateCompletionAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
+        {
+            if (systemPrompt.Contains("Skeptic") || systemPrompt.Contains("Fact Verifier"))
+                return Task.FromResult("No further challenges.");
+            return Task.FromResult($"Analysis for: {userPrompt}");
+        }
+    }
+
+    /// <summary>LLM stub that returns invalid JSON to exercise the TryParseChallenge catch block.</summary>
+    private sealed class InvalidJsonLlmClient : ILocalLlmClient
+    {
+        public Task<string> GenerateCompletionAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
+        {
+            if (systemPrompt.Contains("Skeptic") || systemPrompt.Contains("Fact Verifier"))
+                return Task.FromResult("{invalid}");
+            return Task.FromResult($"Analysis for: {userPrompt}");
+        }
+    }
+
+    /// <summary>LLM stub that returns a challenge with no matching role (exercises the General fallback).</summary>
+    private sealed class UnknownRoleChallengeLlmClient : ILocalLlmClient
+    {
+        public Task<string> GenerateCompletionAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
+        {
+            if (systemPrompt.Contains("Skeptic") || systemPrompt.Contains("Fact Verifier"))
+                return Task.FromResult("{\"target\":\"miss\",\"question\":\"why\",\"role\":\"❓UnknownRole\",\"hint\":\"search hint\"}");
+            return Task.FromResult($"Analysis for: {userPrompt}");
+        }
+    }
+
+    /// <summary>LLM stub that returns a challenge JSON without the "hint" field.</summary>
+    private sealed class NoHintChallengeLlmClient : ILocalLlmClient
+    {
+        public Task<string> GenerateCompletionAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
+        {
+            if (systemPrompt.Contains("Skeptic") || systemPrompt.Contains("Fact Verifier"))
+                return Task.FromResult("{\"target\":\"side effects\",\"question\":\"deeper evidence needed\",\"role\":\"📚\"}");
+            return Task.FromResult($"Analysis for: {userPrompt}");
+        }
+    }
+
+    /// <summary>Succeeds for first 6 calls (initial gather phase), then throws on bounce-back.</summary>
+    private sealed class BounceBackFailingProvider : ISearchProvider
+    {
+        private int _callCount;
+        public Task<List<SearchResultItem>> SearchAsync(string query, CancellationToken cancellationToken = default)
+        {
+            _callCount++;
+            if (_callCount <= 6)
+                return Task.FromResult(new List<SearchResultItem> { new SearchResultItem("Result", "Snippet", "https://example.org", "Test") });
+            throw new InvalidOperationException("Bounce-back network failure");
+        }
+    }
+
+    /// <summary>Records every query passed to SearchAsync for later inspection.</summary>
+    private sealed class RecordingSearchProvider : ISearchProvider
+    {
+        private readonly SearchResultItem _result;
+        private readonly List<string> _queries = new();
+        public IReadOnlyList<string> Queries => _queries;
+        public RecordingSearchProvider(SearchResultItem result) => _result = result;
+        public Task<List<SearchResultItem>> SearchAsync(string query, CancellationToken cancellationToken = default)
+        {
+            _queries.Add(query);
+            return Task.FromResult(new List<SearchResultItem> { _result });
+        }
+    }
 }

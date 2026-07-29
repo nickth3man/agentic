@@ -248,9 +248,7 @@ public sealed class ResearchTeamCoordinator
                 searchCount++;
                 stepIndex++;
 
-                var query = string.IsNullOrWhiteSpace(challenge.SearchQueryHint)
-                    ? challenge.TargetClaim
-                    : challenge.SearchQueryHint;
+                var query = challenge.SearchQueryHint;
 
                 AgentActivityFrame reFrame;
                 try
@@ -398,7 +396,7 @@ public sealed class ResearchTeamCoordinator
         };
 
         stepIndex++;
-        var statusMsg = gatheredSearchItems.Count > 0 || searchCount > 0
+        var statusMsg = gatheredSearchItems.Count > 0
             ? $"{gatheredSearchItems.Count} items across {searchCount} searches and {roundCounter + 1} verify rounds. All claims Unresolved — corroboration needed."
             : "No search results. All claims Unresolved.";
         yield return new AgentActivityFrame

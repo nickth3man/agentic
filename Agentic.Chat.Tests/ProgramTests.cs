@@ -26,6 +26,7 @@ public class ProgramTests
     [Fact]
     public async Task Host_RegistersCouncilDisabled_WhenNoConfig()
     {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
         using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
         await using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b => b.UseEnvironment("Development"));
@@ -37,6 +38,7 @@ public class ProgramTests
     [Fact]
     public async Task Host_RegistersCouncilEnabled_WhenSearXngHttpsConfigured()
     {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
         using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
         Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "https://search.example.com");
         Environment.SetEnvironmentVariable("MultiAgent__OllamaBaseUrl", "https://llm.example.com");
@@ -54,6 +56,7 @@ public class ProgramTests
     [Fact]
     public async Task Host_RejectsHttpSearXngUrl()
     {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
         using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
         Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "http://insecure.example.com");
         try
@@ -70,6 +73,7 @@ public class ProgramTests
     [Fact]
     public async Task Host_RejectsInvalidOllamaUrl()
     {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
         using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
         Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "https://search.example.com");
         Environment.SetEnvironmentVariable("MultiAgent__OllamaBaseUrl", "not-a-url");
@@ -106,6 +110,7 @@ public class ProgramTests
     [Fact]
     public async Task Host_AcceptsValidOllamaHttps()
     {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
         using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
         Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "https://search.example.com");
         Environment.SetEnvironmentVariable("MultiAgent__OllamaBaseUrl", "https://llm.example.com");

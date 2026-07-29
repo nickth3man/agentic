@@ -196,6 +196,14 @@ public sealed class ProviderSuccessPathTests
     }
 
     [Fact]
+    public async Task Wikipedia_EmptyQueryReturnsEmpty()
+    {
+        var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)));
+        var provider = new WikipediaSearchProvider(client, NullLogger<WikipediaSearchProvider>.Instance);
+        Assert.Empty(await provider.SearchAsync(""));
+    }
+
+    [Fact]
     public async Task Wikipedia_NonSuccessReturnsEmpty()
     {
         var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
@@ -214,6 +222,20 @@ public sealed class ProviderSuccessPathTests
         }));
         var provider = new WikipediaSearchProvider(client, NullLogger<WikipediaSearchProvider>.Instance);
         Assert.Empty(await provider.SearchAsync("test"));
+    }
+
+    [Fact]
+    public async Task Wikipedia_HandlesExceptionsViaTryCatch()
+    {
+        // Force an exception: an HttpRequestHandler that always throws triggers
+        // the catch (Exception ex) block at lines 54-57.
+        var client = new HttpClient(new ThrowingHandler())
+        {
+            Timeout = TimeSpan.FromSeconds(1)
+        };
+        var provider = new WikipediaSearchProvider(client, NullLogger<WikipediaSearchProvider>.Instance);
+        var results = await provider.SearchAsync("test");
+        Assert.Empty(results); // catch returns []
     }
 
     [Fact]
@@ -271,6 +293,12 @@ public sealed class ProviderSuccessPathTests
         public StubHandler(HttpResponseMessage response) => _response = response;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(_response);
+    }
+
+    private sealed class ThrowingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => throw new HttpRequestException("Simulated network error");
     }
 }
 

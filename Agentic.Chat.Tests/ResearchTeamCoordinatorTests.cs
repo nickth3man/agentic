@@ -20,13 +20,14 @@ public sealed class ResearchTeamCoordinatorTests
             => Task.FromResult(_results);
     }
 
-    /// <summary>LLM stub that returns text containing a "Re-search needed:" challenge, exercising the bounce-back branch.</summary>
+    /// <summary>LLM stub that returns a JSON Challenge object, exercising the bounce-back branch.</summary>
     private sealed class ChallengeLlmClient : ILocalLlmClient
     {
         public Task<string> GenerateCompletionAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
         {
             if (systemPrompt.Contains("Skeptic") || systemPrompt.Contains("Fact Verifier"))
-                return Task.FromResult("Re-search needed: deeper evidence on side effects");
+                return Task.FromResult(
+                    "{\"target\":\"side effects\",\"question\":\"deeper evidence needed\",\"role\":\"📚\",\"hint\":\"side effects research papers\"}");
             return Task.FromResult($"Analysis for: {userPrompt}");
         }
     }
@@ -131,7 +132,6 @@ public sealed class ResearchTeamCoordinatorTests
         Assert.Equal(ClaimVerificationStatus.Unresolved, dashboard.Claims[0].Status);
         Assert.NotEmpty(dashboard.UnresolvedQuestions);
     }
-
     [Fact]
     public async Task ExecuteResearchSession_EnqueueChallenges_WhenSkepticFindsGaps()
     {
@@ -141,7 +141,7 @@ public sealed class ResearchTeamCoordinatorTests
         };
         var coordinator = new ResearchTeamCoordinator(
             new TestSearchProvider(items),
-            new TestLlmClient(),
+            new ChallengeLlmClient(),
             NullLogger<ResearchTeamCoordinator>.Instance);
 
         var frames = new List<AgentActivityFrame>();
@@ -155,6 +155,8 @@ public sealed class ResearchTeamCoordinatorTests
         Assert.Contains(frames, f => f.ActionKind == "FactCheckAudit");
         Assert.Contains(frames, f => f.ActionKind == "MythBusting");
         Assert.Contains(frames, f => f.ActionKind == "FinalResponseRendered");
+        Assert.Contains(frames, f => f.ActionKind == "TargetedReSearch"
+            && f.SenderAgent == "📚 Academic & Literature");
     }
 
     [Fact]

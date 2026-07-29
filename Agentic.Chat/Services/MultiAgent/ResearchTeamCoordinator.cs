@@ -9,6 +9,17 @@ using Microsoft.Extensions.Logging;
 
 namespace Agentic.Chat.Services.MultiAgent;
 
+/// <summary>
+/// Strongly-typed challenge raised by a verifier. Routes to a specific
+/// gathering role on bounce-back (no magic prose parsing).
+/// </summary>
+public record Challenge(
+    string TargetClaim,
+    string Question,
+    string AssignedSearchRole,
+    string SearchQueryHint
+);
+
 public sealed class ResearchTeamCoordinator
 {
     public const int MaxRounds = 3;
@@ -38,7 +49,7 @@ public sealed class ResearchTeamCoordinator
 
         var stepIndex = 0;
         var searchCount = 0;
-        var challengeQueue = new List<string>();
+        var challengeQueue = new List<Challenge>();
         var roundCounter = 0;
 
         // ── ROUND 1: DIRECTOR + 6 GATHERING AGENTS ──────────────────
@@ -124,12 +135,13 @@ public sealed class ResearchTeamCoordinator
                 ? string.Join("\n", gatheredSearchItems.Take(3).Select(i => $"{i.Title}: {i.Url}"))
                 : "No evidence on blackboard.";
 
-            // 8. Skeptic
+            // 8. Skeptic — emits a structured Challenge or "no challenge"
             stepIndex++;
-            var skeptic = await _llmClient
-                .GenerateCompletionAsync("You are the ⚖️ Skeptic. If evidence is missing on a specific angle, say 'Re-search needed: <topic>'. Otherwise say 'No further challenges.'",
+            var skepticRaw = await _llmClient
+                .GenerateCompletionAsync("You are the ⚖️ Skeptic. Reply with one of: (a) literal token 'No further challenges.' OR (b) JSON {\"target\":\"<claim>\",\"question\":\"<why>\",\"role\":\"<📰|📚|📊|💬|🌍|🌐>\",\"hint\":\"<query>\"}.",
                     $"Evidence: {evidence}", cancellationToken)
                 .ConfigureAwait(false);
+            var skepticChallenge = TryParseChallenge(skepticRaw);
             yield return new AgentActivityFrame
             {
                 SessionId = sessionId,
@@ -138,19 +150,21 @@ public sealed class ResearchTeamCoordinator
                 RecipientAgent = "Blackboard",
                 DivisionName = "Verification Division",
                 ActionKind = "CounterClaimChallenge",
-                ProgressSummary = $"Reviewed {gatheredSearchItems.Count} items.",
-                Payload = skeptic,
+                ProgressSummary = skepticChallenge is null
+                    ? $"Reviewed {gatheredSearchItems.Count} items; no challenge raised."
+                    : $"Reviewed {gatheredSearchItems.Count} items; raised challenge on '{skepticChallenge.TargetClaim}'.",
+                Payload = skepticRaw,
                 StatusBadge = ClaimVerificationStatus.Unresolved
             };
-            if (skeptic.Contains("Re-search needed:", StringComparison.OrdinalIgnoreCase))
-                challengeQueue.Add(skeptic.Split("Re-search needed:")[1].Trim().TrimEnd('.'));
+            if (skepticChallenge != null) challengeQueue.Add(skepticChallenge);
 
-            // 9. Fact Verifier
+            // 9. Fact Verifier — emits a structured Challenge or "no challenge"
             stepIndex++;
-            var verifier = await _llmClient
-                .GenerateCompletionAsync("You are the 🛡️ Fact Verifier. Note credibility in 1 sentence. If evidence is missing for a subtopic, say 'Re-search needed: <subtopic>'.",
+            var verifierRaw = await _llmClient
+                .GenerateCompletionAsync("You are the 🛡️ Fact Verifier. Reply with one of: (a) literal token 'No further challenges.' OR (b) JSON {\"target\":\"<claim>\",\"question\":\"<why>\",\"role\":\"<📰|📚|📊|💬|🌍|🌐>\",\"hint\":\"<query>\"}.",
                     $"Audit: {evidence}", cancellationToken)
                 .ConfigureAwait(false);
+            var verifierChallenge = TryParseChallenge(verifierRaw);
             yield return new AgentActivityFrame
             {
                 SessionId = sessionId,
@@ -159,12 +173,13 @@ public sealed class ResearchTeamCoordinator
                 RecipientAgent = "Blackboard",
                 DivisionName = "Verification Division",
                 ActionKind = "FactCheckAudit",
-                ProgressSummary = $"Audited {gatheredSearchItems.Count} items.",
-                Payload = verifier,
+                ProgressSummary = verifierChallenge is null
+                    ? $"Audited {gatheredSearchItems.Count} items; no challenge raised."
+                    : $"Audited {gatheredSearchItems.Count} items; raised challenge on '{verifierChallenge.TargetClaim}'.",
+                Payload = verifierRaw,
                 StatusBadge = ClaimVerificationStatus.Unresolved
             };
-            if (verifier.Contains("Re-search needed:", StringComparison.OrdinalIgnoreCase))
-                challengeQueue.Add(verifier.Split("Re-search needed:")[1].Trim().TrimEnd('.'));
+            if (verifierChallenge != null) challengeQueue.Add(verifierChallenge);
 
             // 10. Source Credibility Rating
             stepIndex++;
@@ -216,10 +231,12 @@ public sealed class ResearchTeamCoordinator
                 StatusBadge = ClaimVerificationStatus.Unresolved
             };
 
-            // ── BOUNCE BACK: process enqueued challenges ──
+            // ── BOUNCE BACK: route each structured Challenge to its assigned role ──
+            // Dedup by (TargetClaim, AssignedSearchRole) so multiple verifiers
+            // raising the same gap don't burn duplicate budget.
             var pending = challengeQueue
-                .Where(c => !string.IsNullOrWhiteSpace(c))
-                .Distinct()
+                .GroupBy(c => (c.TargetClaim, c.AssignedSearchRole))
+                .Select(g => g.First())
                 .Take(MaxSearchBudget - searchCount)
                 .ToList();
             if (pending.Count == 0) break;
@@ -231,20 +248,24 @@ public sealed class ResearchTeamCoordinator
                 searchCount++;
                 stepIndex++;
 
+                var query = string.IsNullOrWhiteSpace(challenge.SearchQueryHint)
+                    ? challenge.TargetClaim
+                    : challenge.SearchQueryHint;
+
                 AgentActivityFrame reFrame;
                 try
                 {
-                    var items = await _searchProvider.SearchAsync(challenge, cancellationToken).ConfigureAwait(false);
+                    var items = await _searchProvider.SearchAsync(query, cancellationToken).ConfigureAwait(false);
                     gatheredSearchItems.AddRange(items);
                     reFrame = new AgentActivityFrame
                     {
                         SessionId = sessionId,
                         StepIndex = stepIndex,
-                        SenderAgent = "📊 ROUND-TABLE RE-SEARCH",
+                        SenderAgent = challenge.AssignedSearchRole,
                         RecipientAgent = "Blackboard",
                         DivisionName = "Gathering Division",
                         ActionKind = "TargetedReSearch",
-                        ProgressSummary = $"Re-searched '{challenge}' — {items.Count} results.",
+                        ProgressSummary = $"{challenge.AssignedSearchRole} re-searched '{challenge.TargetClaim}' — {items.Count} results.",
                         Payload = items.Count > 0
                             ? string.Join("\n", items.Select(i => $"• [{i.SourceEngine}] {i.Title}"))
                             : "No items.",
@@ -257,19 +278,20 @@ public sealed class ResearchTeamCoordinator
                     {
                         SessionId = sessionId,
                         StepIndex = stepIndex,
-                        SenderAgent = "📊 ROUND-TABLE RE-SEARCH",
+                        SenderAgent = challenge.AssignedSearchRole,
                         RecipientAgent = "Blackboard",
                         DivisionName = "Gathering Division",
                         ActionKind = "TargetedReSearch",
-                        ProgressSummary = $"Re-search failed for '{challenge}'.",
+                        ProgressSummary = $"{challenge.AssignedSearchRole} re-search failed for '{challenge.TargetClaim}'.",
                         Payload = "Search error.",
                         StatusBadge = ClaimVerificationStatus.Unresolved
                     };
                 }
                 yield return reFrame;
             }
-        }
 
+
+        }
         // ── SYNTHESIS (4 agents) ─────────────────────────────────────
         var finalEvidence = gatheredSearchItems.Count > 0
             ? string.Join("\n", gatheredSearchItems.Take(3).Select(i => $"{i.Title}: {i.Url}"))
@@ -409,6 +431,39 @@ public sealed class ResearchTeamCoordinator
         }
 
         return new ResearchSessionResult(frames, searchItems);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822", Justification = "Instance preserved for future extensions requiring DI state.")]
+    /// <summary>
+    /// Parses a verifier's LLM output into a structured Challenge. Returns null
+    /// if the verifier did not raise a challenge (e.g. "No further challenges.").
+    /// </summary>
+    private static Challenge? TryParseChallenge(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var trimmed = raw.Trim();
+        if (trimmed.StartsWith("No further challenges", StringComparison.OrdinalIgnoreCase)) return null;
+        var start = trimmed.IndexOf('{');
+        var end = trimmed.LastIndexOf('}');
+        if (start < 0 || end <= start) return null;
+        var json = trimmed.Substring(start, end - start + 1);
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var target = root.TryGetProperty("target", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String ? t.GetString() : null;
+            var question = root.TryGetProperty("question", out var q) && q.ValueKind == System.Text.Json.JsonValueKind.String ? q.GetString() : null;
+            var role = root.TryGetProperty("role", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String ? r.GetString() : null;
+            var hint = root.TryGetProperty("hint", out var h) && h.ValueKind == System.Text.Json.JsonValueKind.String ? h.GetString() : null;
+            if (string.IsNullOrWhiteSpace(target) || string.IsNullOrWhiteSpace(role)) return null;
+            var knownRoles = new[] { "📰 News & Current Events", "📚 Academic & Literature", "📊 Data & Statistics", "💬 Community & Forum", "🌍 Global Context", "🌐 General Web Search" };
+            var assigned = knownRoles.FirstOrDefault(kr => kr == role || kr.StartsWith(role, StringComparison.Ordinal)) ?? "🌐 General Web Search";
+            return new Challenge(target!, question ?? "Needs evidence", assigned, hint ?? target!);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822", Justification = "Instance preserved for future extensions requiring DI state.")]

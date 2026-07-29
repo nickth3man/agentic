@@ -43,20 +43,19 @@ bool IsValidHttps(string u) => !string.IsNullOrWhiteSpace(u)
     && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
 var searxngOk = IsValidHttps(searxngUrl);
 var ollamaOk = IsValidHttps(ollamaUrl);
-var councilEnabled = searxngOk; // require SearXNG
+var councilEnabled = searxngOk && ollamaOk; // require BOTH SearXNG and Ollama
 if (!councilEnabled)
 {
-    councilDisabledReason = searxngUrl == ""
-        ? "Multi-agent council requires a SearXNG endpoint. Add multiAgent.searxngBaseUrl to wwwroot/app-config.json with a public HTTPS+CORS URL."
-        : $"Multi-agent SearXNG URL is not a valid https:// endpoint (got: {searxngUrl}).";
-}
-else if (ollamaUrl != "" && !ollamaOk)
-{
-    councilDisabledReason = $"Ollama URL is not a valid https:// endpoint (got: {ollamaUrl}). Council will use the unavailable-LLM fallback.";
-}
-else if (!ollamaOk)
-{
-    councilDisabledReason = "Council enabled (SearXNG); local LLM synthesis disabled (Ollama not configured).";
+    if (!searxngOk && !ollamaOk)
+        councilDisabledReason = "Multi-agent council requires both SearXNG and Ollama endpoints in wwwroot/app-config.json (multiAgent.searxngBaseUrl and multiAgent.ollamaBaseUrl), each a public HTTPS+CORS URL.";
+    else if (!searxngOk)
+        councilDisabledReason = searxngUrl == ""
+            ? "Multi-agent council requires a SearXNG endpoint. Add multiAgent.searxngBaseUrl to wwwroot/app-config.json with a public HTTPS+CORS URL."
+            : $"Multi-agent SearXNG URL is not a valid https:// endpoint (got: {searxngUrl}).";
+    else
+        councilDisabledReason = ollamaUrl == ""
+            ? "Multi-agent council requires an Ollama endpoint. Add multiAgent.ollamaBaseUrl to wwwroot/app-config.json with a public HTTPS+CORS URL."
+            : $"Multi-agent Ollama URL is not a valid https:// endpoint (got: {ollamaUrl}).";
 }
 
 builder.Services.AddScoped(sp => new HttpClient

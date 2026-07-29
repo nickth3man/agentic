@@ -4,8 +4,8 @@ using Agentic.Chat.Components;
 using Agentic.Chat.Data;
 using Agentic.Chat.Services;
 using Agentic.Chat.Services.MultiAgent;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -74,16 +74,19 @@ var searxngOk = !string.IsNullOrWhiteSpace(searxngBase) && Uri.TryCreate(searxng
     && string.Equals(sUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
 var ollamaOk = !string.IsNullOrWhiteSpace(ollamaBase) && Uri.TryCreate(ollamaBase, UriKind.Absolute, out var oUri)
     && string.Equals(oUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
-var serverDisabled = !searxngOk
-    ? "Council requires a public HTTPS SearXNG endpoint (MultiAgent:SearXNGBaseUrl)."
-    : (ollamaBase != "" && !ollamaOk
-        ? "Ollama URL invalid. Council will run with unavailable-LLM fallback."
-        : "");
+var bothOk = searxngOk && ollamaOk;
+var serverDisabled = !searxngOk && ollamaBase == ""
+    ? "Council requires public HTTPS SearXNG and Ollama endpoints (MultiAgent:SearXNGBaseUrl and MultiAgent:OllamaBaseUrl)."
+    : !searxngOk
+        ? "Council requires a public HTTPS SearXNG endpoint (MultiAgent:SearXNGBaseUrl)."
+        : !ollamaOk
+            ? "Council requires a public HTTPS Ollama endpoint (MultiAgent:OllamaBaseUrl)."
+            : "";
 builder.Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new MultiAgentOptions
 {
     SearXNGBaseUrl = searxngBase ?? "",
     OllamaBaseUrl = ollamaBase ?? "",
-    CouncilEnabled = searxngOk,
+    CouncilEnabled = bothOk,
     DisabledReason = serverDisabled
 }));
 

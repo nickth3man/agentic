@@ -48,6 +48,23 @@ public sealed class ProviderSuccessPathTests
     }
 
     [Fact]
+    public async Task SearXNG_UsesSnippetWhenContentMissing()
+    {
+        // SearXNG item with no "content" field, only "snippet" — exercises the
+        // r.Snippet fallback branch in SearXNGSearchProvider (and covers the
+        // Snippet property getter on the DTO).
+        var json = "{\"results\":[{\"title\":\"Only Snippet\",\"url\":\"https://a\",\"snippet\":\"Snippet-only fallback\",\"engine\":\"ddg\"}]}";
+        var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        }));
+        var provider = new SearXNGSearchProvider(client, NullLogger<SearXNGSearchProvider>.Instance, "http://x");
+        var results = await provider.SearchAsync("test");
+        Assert.Single(results);
+        Assert.Equal("Snippet-only fallback", results[0].Snippet);
+    }
+
+    [Fact]
     public async Task SearXNG_EmptyResultsReturnsEmpty()
     {
         var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -56,6 +73,111 @@ public sealed class ProviderSuccessPathTests
         }));
         var provider = new SearXNGSearchProvider(client, NullLogger<SearXNGSearchProvider>.Instance, "http://x");
         Assert.Empty(await provider.SearchAsync("test"));
+    }
+
+    [Fact]
+    public async Task SearXNG_HandlesNonStringPropertiesGracefully()
+    {
+        // SearXNG result with title/snippet but missing url/content/engine — exercises
+        // the r.TryGetProperty && ValueKind == String false branch and the ?? fallbacks.
+        var json = "{\"results\":[{\"title\":\"X\",\"url\":123,\"content\":true}]}";
+        var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        }));
+        var provider = new SearXNGSearchProvider(client, NullLogger<SearXNGSearchProvider>.Instance, "http://x");
+        var results = await provider.SearchAsync("test");
+        Assert.Single(results);
+        Assert.Equal("https://searxng.local", results[0].Url);
+        Assert.Equal("No snippet available", results[0].Snippet);
+        Assert.Equal("searxng", results[0].SourceEngine);
+    }
+
+    [Fact]
+    public async Task SearXNG_HandlesMissingResultsProperty()
+    {
+        // No "results" property at all — JsonDocument returns false from TryGetProperty.
+        var json = "{\"query\":\"x\"}";
+        var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        }));
+        var provider = new SearXNGSearchProvider(client, NullLogger<SearXNGSearchProvider>.Instance, "http://x");
+        Assert.Empty(await provider.SearchAsync("test"));
+    }
+
+    [Fact]
+    public async Task SearXNG_HandlesNonArrayResults()
+    {
+        // "results" is a string, not an array — branch on results.ValueKind == Array.
+        var json = "{\"results\":\"not an array\"}";
+        var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        }));
+        var provider = new SearXNGSearchProvider(client, NullLogger<SearXNGSearchProvider>.Instance, "http://x");
+        Assert.Empty(await provider.SearchAsync("test"));
+    }
+
+    [Fact]
+    public async Task SearXNG_CapsAtFiveItems()
+    {
+        // 7 results in the array — only first 5 should be returned (items.Count >= 5 break).
+        var json = "{\"results\":[";
+        for (var i = 0; i < 7; i++)
+            json += (i > 0 ? "," : "") + "{\"title\":\"T" + i + "\",\"url\":\"https://a\",\"engine\":\"e\"}";
+        json += "]}";
+        var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        }));
+        var provider = new SearXNGSearchProvider(client, NullLogger<SearXNGSearchProvider>.Instance, "http://x");
+        var results = await provider.SearchAsync("test");
+        Assert.Equal(5, results.Count);
+    }
+
+    [Fact]
+    public void SearXNG_ConstructorRejectsNullArguments()
+    {
+        Assert.Throws<ArgumentNullException>(() => new SearXNGSearchProvider(null!, NullLogger<SearXNGSearchProvider>.Instance, "http://x"));
+        Assert.Throws<ArgumentNullException>(() => new SearXNGSearchProvider(new HttpClient(), null!, "http://x"));
+    }
+
+    [Fact]
+    public void Wikipedia_ConstructorRejectsNullArguments()
+    {
+        Assert.Throws<ArgumentNullException>(() => new WikipediaSearchProvider(null!, NullLogger<WikipediaSearchProvider>.Instance));
+        Assert.Throws<ArgumentNullException>(() => new WikipediaSearchProvider(new HttpClient(), null!));
+    }
+
+    [Fact]
+    public void ArXiv_ConstructorRejectsNullArguments()
+    {
+        Assert.Throws<ArgumentNullException>(() => new ArXivSearchProvider(null!, NullLogger<ArXivSearchProvider>.Instance));
+        Assert.Throws<ArgumentNullException>(() => new ArXivSearchProvider(new HttpClient(), null!));
+    }
+
+    [Fact]
+    public void Ollama_ConstructorRejectsNullArguments()
+    {
+        Assert.Throws<ArgumentNullException>(() => new OllamaLocalLlmClient(null!, NullLogger<OllamaLocalLlmClient>.Instance, "http://x", "m"));
+        Assert.Throws<ArgumentNullException>(() => new OllamaLocalLlmClient(new HttpClient(), null!, "http://x", "m"));
+    }
+
+    [Fact]
+    public void CompositeSearchProvider_ConstructorRejectsNullArguments()
+    {
+        Assert.Throws<ArgumentNullException>(() => new CompositeSearchProvider(null!));
+    }
+
+    [Fact]
+    public void ResearchTeamCoordinator_ConstructorRejectsNullArguments()
+    {
+        var sp = new SearXNGSearchProvider(new HttpClient(), NullLogger<SearXNGSearchProvider>.Instance, "http://x");
+        var llm = new OllamaLocalLlmClient(new HttpClient(), NullLogger<OllamaLocalLlmClient>.Instance, "http://x", "m");
+        Assert.Throws<ArgumentNullException>(() => new ResearchTeamCoordinator(null!, llm, NullLogger<ResearchTeamCoordinator>.Instance));
+        Assert.Throws<ArgumentNullException>(() => new ResearchTeamCoordinator(sp, null!, NullLogger<ResearchTeamCoordinator>.Instance));
+        Assert.Throws<ArgumentNullException>(() => new ResearchTeamCoordinator(sp, llm, null!));
     }
 
     [Fact]
@@ -77,6 +199,19 @@ public sealed class ProviderSuccessPathTests
     public async Task Wikipedia_NonSuccessReturnsEmpty()
     {
         var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+        var provider = new WikipediaSearchProvider(client, NullLogger<WikipediaSearchProvider>.Instance);
+        Assert.Empty(await provider.SearchAsync("test"));
+    }
+
+    [Fact]
+    public async Task Wikipedia_HandlesNonArrayResults()
+    {
+        // Wikipedia response without query.search (different shape) → doc?.Query?.Search?.Count > 0 is false.
+        var json = "{\"error\":{\"info\":\"x\"}}";
+        var client = new HttpClient(new StubHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        }));
         var provider = new WikipediaSearchProvider(client, NullLogger<WikipediaSearchProvider>.Instance);
         Assert.Empty(await provider.SearchAsync("test"));
     }

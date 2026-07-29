@@ -232,6 +232,32 @@ public sealed class ResearchTeamCoordinatorTests
     }
 
     [Fact]
+    public async Task FullSession_DomainHelperFallsBackForBadUrl()
+    {
+        var items = new List<SearchResultItem> { new SearchResultItem("X", "y", "not a valid url", "S") };
+        var coordinator = new ResearchTeamCoordinator(new TestSearchProvider(items), new TestLlmClient(), NullLogger<ResearchTeamCoordinator>.Instance);
+        var result = await coordinator.ExecuteFullSessionAsync("Topic", Guid.NewGuid().ToString());
+        var dash = coordinator.BuildDashboard("Topic", result.Frames.ToList(), result.SearchItems.ToList());
+        Assert.Contains(dash.Citations, c => c.Domain == "open-source");
+    }
+
+    [Fact]
+    public async Task FullSession_AwaitsCallbackForEachFrame()
+    {
+        var items = new List<SearchResultItem> { new SearchResultItem("A", "B", "https://x", "S") };
+        var coordinator = new ResearchTeamCoordinator(new TestSearchProvider(items), new TestLlmClient(), NullLogger<ResearchTeamCoordinator>.Instance);
+
+        var callbackCount = 0;
+        var result = await coordinator.ExecuteFullSessionAsync(
+            "Topic",
+            Guid.NewGuid().ToString(),
+            onFrameProduced: f => { callbackCount++; return Task.CompletedTask; });
+
+        Assert.NotEmpty(result.Frames);
+        Assert.Equal(result.Frames.Count, callbackCount);
+    }
+
+    [Fact]
     public async Task FullSession_HostSummaryIsTruthful()
     {
         var items = new List<SearchResultItem>

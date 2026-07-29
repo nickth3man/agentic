@@ -5,9 +5,11 @@
 @inject ModelCatalogService ModelCatalog
 @inject SelectedModelService SelectedModel
 @inject Agentic.Chat.Services.MultiAgent.ResearchTeamCoordinator ResearchCoordinator
+@inject Microsoft.Extensions.Options.IOptions<Agentic.Chat.Services.MultiAgent.MultiAgentOptions> MultiAgentOptions
 @using Agentic.Chat.Models.MultiAgent
 @using Agentic.Chat.Services.MultiAgent
 @using Agentic.Chat.Components.MultiAgent
+@using Microsoft.Extensions.Options
 @implements IDisposable
 @implements IAsyncDisposable
 @using Microsoft.AspNetCore.Components
@@ -433,8 +435,9 @@
                     </button>
                     <button type="button"
                             class="chat-send"
-                            disabled="@isBusy"
-                            aria-label="Run 20-Agent Research Council"
+                            disabled="@(isBusy || !MultiAgentOptions.Value.CouncilEnabled)"
+                            aria-label="@(MultiAgentOptions.Value.CouncilEnabled ? "Run 20-Agent Research Council" : $"Council disabled: {MultiAgentOptions.Value.DisabledReason}")"
+                            title="@MultiAgentOptions.Value.DisabledReason"
                             @onclick="RunMultiAgentResearchAsync">
                         <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <path d="M12 3a9 9 0 100 18 9 9 0 000-18z" stroke="currentColor" stroke-width="1.7" fill="none"/>

@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
-using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -19,7 +17,7 @@ public sealed class SearXNGSearchProvider : ISearchProvider
     private readonly ILogger<SearXNGSearchProvider> _logger;
     private readonly string _baseUrl;
 
-    public SearXNGSearchProvider(HttpClient httpClient, ILogger<SearXNGSearchProvider> logger, string baseUrl = "http://localhost:8080")
+    public SearXNGSearchProvider(HttpClient httpClient, ILogger<SearXNGSearchProvider> logger, string baseUrl)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -40,17 +38,24 @@ public sealed class SearXNGSearchProvider : ISearchProvider
 
             if (response.IsSuccessStatusCode)
             {
-                var payload = await response.Content.ReadFromJsonAsync<SearXNGResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
-                if (payload?.Results != null && payload.Results.Count > 0)
+                var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (doc.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
                 {
                     var items = new List<SearchResultItem>();
-                    foreach (var r in payload.Results)
+                    foreach (var r in results.EnumerateArray())
                     {
+                        var title = r.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+                        var url = r.TryGetProperty("url", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null;
+                        var content = r.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+                        var snippet = r.TryGetProperty("snippet", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
+                        var engine = r.TryGetProperty("engine", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+
                         items.Add(new SearchResultItem(
-                            r.Title ?? query,
-                            r.Content ?? r.Snippet ?? "No snippet available",
-                            r.Url ?? "https://searxng.local",
-                            r.Engine ?? "searxng"
+                            title ?? query,
+                            content ?? snippet ?? "No snippet available",
+                            url ?? "https://searxng.local",
+                            engine ?? "searxng"
                         ));
                         if (items.Count >= 5) break;
                     }
@@ -65,16 +70,4 @@ public sealed class SearXNGSearchProvider : ISearchProvider
 
         return [];
     }
-
-    private sealed record SearXNGResponse(
-        [property: JsonPropertyName("results")] List<SearXNGItem>? Results
-    );
-
-    private sealed record SearXNGItem(
-        [property: JsonPropertyName("title")] string? Title,
-        [property: JsonPropertyName("url")] string? Url,
-        [property: JsonPropertyName("content")] string? Content,
-        [property: JsonPropertyName("snippet")] string? Snippet,
-        [property: JsonPropertyName("engine")] string? Engine
-    );
 }

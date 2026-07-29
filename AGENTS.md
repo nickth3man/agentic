@@ -63,11 +63,18 @@ Hot reload behavior:
   connected browser without a page reload. No state loss.
 - **Rude edits** (`Program.cs`, new `.razor` file): server restarts. Local browser
   auto-refreshes via `dotnet watch`'s signal. In-memory chat
-  state resets — `ChatAgentService` is scoped.
+  state resets — `ChatAgentService` is scoped. Re-poll readiness after restart:
+  ```bash
+  ready=0
+  for i in $(seq 1 30); do
+    if curl -fsSL http://localhost:5123/chat >/dev/null 2>&1; then ready=1; break; fi
+    sleep 1
+  done
+  (( ready )) || { echo "Server failed to respond on http://localhost:5123/chat within 30s" >&2; exit 1; }
+  ```
 - **Silent stall** (.NET 10 GA bug, [dotnet/sdk#51185](https://github.com/dotnet/sdk/issues/51185)):
   if the verbose log prints `No hot reload changes to apply` after an edit that didn't
-  propagate, press `Ctrl+R` in the terminal to force a rebuild.
-
+  propagate, press `Ctrl+R` in the terminal (or send `CTRL_R` via process manager) to force a rebuild.
 ### Run from an agent or automated environment
 
 When running from an AI agent or automated environment, choose the approach matching your tooling:
@@ -77,7 +84,7 @@ When running from an AI agent or automated environment, choose the approach matc
    ```json
    hub(op: "start", name: "server", application: "bash", args: ["start-dev.sh"], ready: {"port": 5123, "log": "App is responding on"})
    ```
-   This keeps the server process observable, streams logs live, and allows sending keys (such as `Ctrl+R` to force a hot reload rebuild via `hub send`).
+   This keeps the server process observable, streams logs live, and allows sending keys (such as `Ctrl+R` to force a hot reload rebuild via `hub(op: "send", name: "server", keys: ["CTRL_R"])`).
 
 2. **Detached Shell Execution (Fallback for raw shell tools):**
    Standard shell tools must not run `bash start-dev.sh` in the foreground because blocking calls never return. Use a fully detached subshell:

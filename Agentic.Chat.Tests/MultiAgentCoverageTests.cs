@@ -45,6 +45,52 @@ public sealed class CompositeSearchProviderTests
         public Task<List<SearchResultItem>> SearchAsync(string query, CancellationToken ct = default)
             => Task.FromResult(_items.ToList());
     }
+
+    private sealed class ThrowingSearchProvider : ISearchProvider
+    {
+        public ThrowingSearchProvider(string source) => Source = source;
+        public string Source { get; }
+        public Task<List<SearchResultItem>> SearchAsync(string query, CancellationToken cancellationToken = default)
+            => throw new HttpRequestException("Simulated CORS failure for " + query);
+    }
+
+    [Fact]
+    public async Task Composite_IsolatesFailingChild_FromSuccessfulSiblings()
+    {
+        var wikipediaHit = new SearchResultItem("Test-wikipedia", "climate change snippet", "https://en.wikipedia.org/wiki/Climate_change", "Wikipedia");
+        var mwmblHit = new SearchResultItem("Test-mwmbl", "mwmbl snippet", "https://mwmbl.org/", "Mwmbl");
+        var composite = new CompositeSearchProvider(
+            new ISearchProvider[]
+            {
+                new TestProvider(new[] { wikipediaHit }),
+                new ThrowingSearchProvider("bad"),
+                new TestProvider(new[] { mwmblHit }),
+            },
+            NullLogger<CompositeSearchProvider>.Instance);
+
+        var results = await composite.SearchAsync("climate change");
+
+        Assert.Equal(2, results.Count);
+        Assert.Contains(results, r => r.Title == "Test-wikipedia");
+        Assert.Contains(results, r => r.Title == "Test-mwmbl");
+        Assert.Equal(2, results.Count(r => r.Title.StartsWith("Test-", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Composite_AllFailingChildren_ProduceEmptyAggregate()
+    {
+        var composite = new CompositeSearchProvider(
+            new ISearchProvider[]
+            {
+                new ThrowingSearchProvider("a"),
+                new ThrowingSearchProvider("b"),
+            },
+            NullLogger<CompositeSearchProvider>.Instance);
+
+        var results = await composite.SearchAsync("climate change");
+
+        Assert.Empty(results);
+    }
 }
 
 public sealed class SearchProviderErrorTests

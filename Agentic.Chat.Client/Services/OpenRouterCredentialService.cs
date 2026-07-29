@@ -63,6 +63,23 @@ public sealed class OpenRouterCredentialService(
                 "The shared free-model key is not configured. Add your own OpenRouter API key to continue.");
     }
 
+    /// <summary>
+    /// Returns the visitor's own OpenRouter key, awaiting persistence/initialization
+    /// first. Throws when no user key has been entered (e.g. on a fresh GitHub Pages
+    /// visit). Intended for callers that must never fall back to the static
+    /// <c>app-config.json</c> shared free-model key.
+    /// </summary>
+    public async Task<string> GetUserKeyOrThrowAsync()
+    {
+        await InitializeAsync().ConfigureAwait(false);
+        if (HasUserKey)
+        {
+            return _userKey!;
+        }
+        throw new InvalidOperationException(
+            "OpenRouter multi-agent research requires your own API key. Open the key settings to connect one.");
+    }
+
     public async Task SetUserKeyAsync(string apiKey, bool rememberOnDevice)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(apiKey);

@@ -5,7 +5,7 @@
 @inject ModelCatalogService ModelCatalog
 @inject SelectedModelService SelectedModel
 @inject Agentic.Chat.Services.MultiAgent.ResearchTeamCoordinator ResearchCoordinator
-@inject Microsoft.Extensions.Options.IOptions<Agentic.Chat.Services.MultiAgent.MultiAgentOptions> MultiAgentOptions
+@inject Agentic.Chat.Services.MultiAgent.ICouncilCapabilities Council
 @using Agentic.Chat.Models.MultiAgent
 @using Agentic.Chat.Services.MultiAgent
 @using Agentic.Chat.Components.MultiAgent
@@ -435,9 +435,9 @@
                     </button>
                     <button type="button"
                             class="chat-send"
-                            disabled="@(isBusy || !MultiAgentOptions.Value.CouncilEnabled)"
-                            aria-label="@(MultiAgentOptions.Value.CouncilEnabled ? "Run 20-Agent Research Council" : $"Council disabled: {MultiAgentOptions.Value.DisabledReason}")"
-                            title="@MultiAgentOptions.Value.DisabledReason"
+                            disabled="@(isBusy || !Council.IsCouncilEnabled)"
+                            aria-label="@(Council.IsCouncilEnabled ? "Run 20-Agent Research Council" : $"Council disabled: {Council.DisabledReason}")"
+                            title="@Council.DisabledReason"
                             @onclick="RunMultiAgentResearchAsync">
                         <svg class="send-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <path d="M12 3a9 9 0 100 18 9 9 0 000-18z" stroke="currentColor" stroke-width="1.7" fill="none"/>
@@ -491,6 +491,7 @@
     protected override void OnInitialized()
     {
         SelectedModel.OnChange += OnSelectedModelChanged;
+        Council.Changed += OnCouncilChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -559,6 +560,8 @@
         _sendCts = null;
         Conversations.OnChange -= OnConversationsChanged;
         SelectedModel.OnChange -= OnSelectedModelChanged;
+        Council.Changed -= OnCouncilChanged;
+        GC.SuppressFinalize(this);
     }
 
     private void OnConversationsChanged()
@@ -583,6 +586,12 @@
                 errorMessage = ex.Message;
             }
         });
+
+    // The council button is gated by ICouncilCapabilities, which flips when
+    // the visitor enters or clears an OpenRouter key in the credential popover
+    // (and on initial load). Re-render so the disabled state and tooltip update.
+    private void OnCouncilChanged()
+        => _ = InvokeAsync(StateHasChanged);
 
     private async Task UpdateModelCapabilitiesAsync()
     {

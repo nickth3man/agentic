@@ -5,11 +5,11 @@ Guidance for AI agents (and humans) working in this repo.
 ## What this is
 
 **Agentic.Chat** — a Blazor Server (.NET 10) chat app backed by the OpenRouter API.
-It runs via `start-phone.sh`, which starts the app with `dotnet watch` (hot reload) and exposes it to a phone via a Cloudflare quick tunnel. Users pick models via a ModelPicker UI; selection persists across sessions via `ProtectedLocalStorage`.
+It runs via `start-dev.sh`, which starts the app with `dotnet watch` (hot reload). Users pick models via a ModelPicker UI; selection persists across sessions via `ProtectedLocalStorage`.
 
 - `Agentic.Chat/` — the web app (entry point: `Program.cs`)
 - `Agentic.Chat.Tests/` — xUnit test project
-- `start-phone.sh` — one-command Git Bash script: `dotnet watch` (hot reload) on `localhost:5123` + `cloudflared` quick tunnel + clean shutdown. **The only supported way to run the server.**
+- `start-dev.sh` — one-command Git Bash script: `dotnet watch` (hot reload) on `localhost:5123` + clean shutdown. **The only supported way to run the server.**
 - `agentic.slnx` — solution file (XML format, .NET 10 default)
 
 ### Where things live
@@ -27,7 +27,7 @@ Start here instead of re-deriving the layout each session.
 | `Models/` | `ChatDisplayMessage`, `OpenRouterModel` DTOs | JSON shape drift vs. the OpenRouter API |
 | `Components/Pages/Chat.razor` | Chat page: renders messages and streaming output | `@key`, render mode, markup rendering, mobile overflow |
 | `Components/ModelPicker.razor` (+`.js`) | Model dropdown UI + JS interop | Dropdown z-index/stacking (see #10), interop disposal |
-| `Components/Layout/ReconnectModal.razor` (+`.js`) | SignalR circuit-reconnect UI; phone auto-refresh on rude-edit restart | `resume-failed` handler; circuit lifecycle |
+| `Components/Layout/ReconnectModal.razor` (+`.js`) | SignalR circuit-reconnect UI; auto-refresh on rude-edit restart | `resume-failed` handler; circuit lifecycle |
 | `Program.cs` / `Program.Partial.cs` | Startup, DI registration, options binding | Rude-edit restarts (see hot reload); service lifetimes |
 
 ## Hard rules
@@ -36,17 +36,15 @@ Start here instead of re-deriving the layout each session.
    environment variable. It must never appear in files, logs, diffs, or commit
    messages. `appsettings*.json` must never contain an API key (a test enforces this).
 2. **Don't kill a running server you didn't start.** A live `Agentic.Chat.exe`
-   locks `bin/Debug` build outputs; if a session may be in use (e.g. someone on a
-   phone via tunnel), build/test with `-c Release` to use a separate output dir,
+   locks `bin/Debug` build outputs; if a session may be in use, build/test with `-c Release` to use a separate output dir,
    or ask before stopping it.
 3. **Keep `*.sh` at LF** (`.gitattributes` enforces this — don't override it).
 
 ## Setup (Windows + Git Bash)
 
 - .NET SDK 10.x (`dotnet --version` → 10.0.x)
-- `cloudflared` on PATH (for the phone tunnel)
 - `OPENROUTER_API_KEY` set as a Windows User env var. Git Bash sessions started
-  before the var was set won't inherit it — `start-phone.sh` handles this by
+  before the var was set won't inherit it — `start-dev.sh` handles this by
   loading it from the registry without printing it.
 
 ## Run the server
@@ -54,20 +52,17 @@ Start here instead of re-deriving the layout each session.
 Interactive (Git Bash):
 
 ```bash
-bash start-phone.sh     # hot-reload dev server on http://localhost:5123 + cloudflared tunnel
+bash start-dev.sh     # hot-reload dev server on http://localhost:5123
 ```
 
 This is the **only** supported way to run the server. The script starts `dotnet watch`
-(hot reload) and `cloudflared` together, prints the phone link, and cleans up both
-processes on Ctrl+C.
+(hot reload) and cleans up on Ctrl+C.
 
 Hot reload behavior:
 - **In-place edits** (Razor markup, C# method bodies, CSS): applied live to every
-  connected browser (local + phone) without a page reload. No state loss.
+  connected browser without a page reload. No state loss.
 - **Rude edits** (`Program.cs`, new `.razor` file): server restarts. Local browser
-  auto-refreshes via `dotnet watch`'s signal; phone auto-refreshes via the
-  `resume-failed` handler in `Components/Layout/ReconnectModal.razor.js`. The
-  cloudflared URL stays stable (cloudflared is a separate process). In-memory chat
+  auto-refreshes via `dotnet watch`'s signal. In-memory chat
   state resets — `ChatAgentService` is scoped.
 - **Silent stall** (.NET 10 GA bug, [dotnet/sdk#51185](https://github.com/dotnet/sdk/issues/51185)):
   if the verbose log prints `No hot reload changes to apply` after an edit that didn't
@@ -75,7 +70,7 @@ Hot reload behavior:
 
 ### Run from an agent / headless shell (IMPORTANT)
 
-Agents must not run `bash start-phone.sh` in the foreground — the tool call
+Agents must not run `bash start-dev.sh` in the foreground — the tool call
 blocks forever. The pattern that works (server stays up, tool returns):
 
 ```bash
@@ -86,40 +81,37 @@ blocks forever. The pattern that works (server stays up, tool returns):
 #   </dev/null         — don't let the script/children read the tool's stdin.
 #   >/dev/null 2>&1    — don't hold the tool's stdout/stderr pipe open. The
 #                        script detects the non-TTY stdout and writes to
-#                        script.log only (see start-phone.sh "TTY-conditional"),
+#                        script.log only (see start-dev.sh "TTY-conditional"),
 #                        so nothing anchors the pipe and this call returns at
 #                        the `&` instead of blocking until Ctrl+C.
-nohup bash start-phone.sh </dev/null >/dev/null 2>&1 &
+nohup bash start-dev.sh </dev/null >/dev/null 2>&1 &
 SCRIPT_PID=$!
 
-# dotnet watch build + tunnel provisioning takes ~20-40s. Poll the log for the
-# PHONE LINK rather than sleeping blind — returns as soon as the URL is printed.
-RUN_ID=$(cat logs/start-phone/LATEST)
+# dotnet watch build takes ~20-40s. Poll the log for readiness.
+RUN_ID=$(cat logs/dev/LATEST)
 for i in $(seq 1 60); do
-  grep -q "PHONE LINK" "logs/start-phone/$RUN_ID/script.log" 2>/dev/null && break
+  grep -q "App is responding on" "logs/dev/$RUN_ID/script.log" 2>/dev/null && break
   sleep 1
 done
-grep -A1 "PHONE LINK" "logs/start-phone/$RUN_ID/script.log"   # the https://....trycloudflare.com URL
 ```
 
-> **Do not** launch with a bare `bash start-phone.sh &` and "no redirection".
+> **Do not** launch with a bare `bash start-dev.sh &` and "no redirection".
 > That form (documented in older revisions of this file) anchors the script's
 > `tee` to the tool's stdout pipe for the script's whole lifetime, so the tool
 > call never returns. The `nohup ... </dev/null >/dev/null 2>&1 &` form above is
 > required from agents.
 
-The script writes all output to `logs/start-phone/<run_id>/` automatically:
+The script writes all output to `logs/dev/<run_id>/` automatically:
 - `script.log` — script's own stdout/stderr (banner, status, errors)
 - `app.log` — dotnet watch verbose output (hot-reload flakiness signals live here)
-- `tunnel.log` — cloudflared output (URL provisioning, connection events)
-- `meta.json` — structured run summary (URLs, PIDs, timing, `exit_reason`). Written on exit.
+- `meta.json` — structured run summary (PIDs, timing, `exit_reason`). Written on exit.
 
 The 10 most recent runs are kept; older ones are auto-pruned. `logs/` is already gitignored.
 
 Stopping it later: **`kill -TERM $SCRIPT_PID` — do NOT use `kill -INT`**.
 Backgrounded bash jobs inherit SIGINT as *ignored* (POSIX), so INT does nothing;
 the script's INT trap only works in an interactive foreground terminal (real Ctrl+C).
-TERM runs the exact same cleanup: both process trees killed, port 5123 freed,
+TERM runs the exact same cleanup: process tree killed, port 5123 freed,
 `meta.json` finalized with the actual exit reason.
 
 `$SCRIPT_PID` is an MSYS PID and only resolves inside the same bash session that
@@ -127,40 +119,32 @@ launched the script. From a **later** agent tool call (different session) — or
 `kill -TERM` reports "no such process" — shut down at the Windows level instead:
 
 ```bash
-# Find whatever is listening on 5123, then tree-kill it + cloudflared.
+# Find whatever is listening on 5123, then tree-kill it.
 LPID=$(netstat -ano | grep :5123 | grep LISTENING | awk '{print $NF}' | head -1)
 [ -n "$LPID" ] && taskkill //PID "$LPID" //T //F
-taskkill //IM cloudflared.exe //T //F 2>/dev/null || true
 ```
 
 Verify shutdown:
 
 ```bash
 netstat -ano | grep :5123 | grep LISTENING                       # expect: nothing
-tasklist //FI "IMAGENAME eq cloudflared.exe" //NH                # expect: gone
 tasklist //FI "IMAGENAME eq Agentic.Chat.exe" //NH               # expect: gone
-cat "logs/start-phone/$(cat logs/start-phone/LATEST)/meta.json"  # exit_reason, PIDs, timing
+cat "logs/dev/$(cat logs/dev/LATEST)/meta.json"  # exit_reason, PIDs, timing
 ```
 
 Gotchas learned the hard way:
 
-- The tunnel URL changes every run — always read it from the current run's log.
-  Within a run, the URL stays stable across rude-edit restarts.
 - `/` responds `302 → /chat`; use `curl -L` when health-checking.
-- Some routers (e.g. Verizon CR1000A) NXDOMAIN fresh `trycloudflare.com` names
-  (DNS-rebinding protection). PC-side, verify with `--doh-url https://1.1.1.1/dns-query`;
-  on the phone use cellular data or DNS 1.1.1.1.
 - If port 5123 is occupied, the script refuses (with the exact `taskkill` command)
   and exits. `dotnet watch` must own the port for the whole session — free stale
   `Agentic.Chat`/`dotnet` listeners yourself before re-running.
 - If an agent tool call that launches the server is **interrupted** (you stop the
   call, or the call errors out), the script is SIGKILLed and its EXIT cleanup
-  trap does **not** run. `dotnet watch` / `Agentic.Chat` / `cloudflared` are then
+  trap does **not** run. `dotnet watch` / `Agentic.Chat` are then
   orphaned — still alive, still holding port 5123, with no `meta.json` written.
   The next launch either refuses with `port_occupied`, or worse, `dotnet watch`
   starts but its app crashes with `Failed to bind to address ... address already
-  in use` while the tunnel points at the dead port. After any interrupted run,
-  verify the port is free and taskkill stragglers explicitly before re-launching.
+  in use`. After any interrupted run, verify the port is free and taskkill stragglers explicitly before re-launching.
 
 ## Testing
 
@@ -174,8 +158,8 @@ fast and hermetic (no OpenRouter calls).
 
 Additional test suites (run as separate CI jobs, not part of `dotnet test`):
 
-- `tests/start-phone/` — bash suite for `start-phone.sh` lifecycle, logging, and
-  error paths. Run locally with `bash tests/start-phone/run-tests.sh`. Uses no
+- `tests/dev/` — bash suite for `start-dev.sh` lifecycle, logging, and
+  error paths. Run locally with `bash tests/dev/run-tests.sh`. Uses no
   external test framework (no bats); plain bash with assertions in `lib/assertions.sh`.
 - `tests/playwright/` — Playwright browser suite for the Blazor reconnect UI.
   Run locally with `cd tests/playwright && npm install && npm test`. Auto-starts
@@ -194,7 +178,7 @@ dotnet format --verify-no-changes && dotnet build -warnaserror -c Release
 dotnet restore && dotnet build --no-restore -c Release && dotnet test --no-build -c Release
 
 # Job `start-phone-tests` (windows): bash lifecycle suite
-bash -n start-phone.sh && bash tests/start-phone/run-tests.sh
+bash -n start-dev.sh && bash tests/dev/run-tests.sh
 
 # Job `playwright-tests` (ubuntu): Blazor reconnect UI
 cd tests/playwright && npm install && npx playwright test
@@ -203,8 +187,7 @@ cd tests/playwright && npm install && npx playwright test
 Run `dotnet format` (no flags) to auto-fix any formatting the first job flags —
 it must be a no-op on a clean checkout, so run it before pushing. The `format`
 and `test` jobs are fast and hermetic — always run them. The `start-phone-tests`
-job reaches the network (it provisions a real Cloudflare quick tunnel, up to
-~90s) but is worth running locally when you touch `start-phone.sh`. The Playwright
+job runs the bash test suite on windows-latest. The Playwright
 job is slower (`npm install` + `npx playwright install chromium`); it's fine to
 **skip it locally and rely on CI** *unless your change touches the reconnect UI,
 `ReconnectModal.*`, or `Chat.razor` rendering*. If you skip it, say so in "How
@@ -217,9 +200,7 @@ layout, mobile), "verified" means you actually looked:
 
 1. Run the server headless (see [Run from an agent](#run-from-an-agent--headless-shell-important))
    and open `http://localhost:5123/chat` (follow the `302`, or use `curl -L`).
-2. Check the acceptance criteria on both surfaces where relevant: local browser
-   **and** the phone via the tunnel URL (mobile overflow/scroll behaves
-   differently). Hot reload makes iterating cheap — in-place edits apply live.
+2. Check the acceptance criteria on both surfaces where relevant. Hot reload makes iterating cheap — in-place edits apply live.
 3. Capture the before/after screenshot the PR template asks for. The Playwright
    suite can drive a headless browser for a scripted screenshot if you don't
    have a device handy.
@@ -277,8 +258,7 @@ PRs required, only `squash` merges allowed, `dismiss_stale_reviews_on_push` on,
 `required_approving_review_count` 0, `required_review_thread_resolution` false,
 and all four CI jobs required as status checks — `format` (dotnet format +
 `-warnaserror` Release build on ubuntu-latest), `test` (xUnit on ubuntu-latest),
-`start-phone-tests` (bash suite on windows-latest; installs `cloudflared`
-explicitly since it's not preinstalled), and `playwright-tests` (browser suite on
+`start-phone-tests` (bash suite on windows-latest), and `playwright-tests` (browser suite on
 ubuntu-latest). A PR cannot merge until each of the four reports success, so run
 the CI-parity commands above before pushing. AI reviewer checks (CodeRabbit /
 Sourcery / cubic) are configured advisory — CodeRabbit posts reviews as

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Error-paths test for start-phone.sh: exercise each fail() exit reason and verify
+# Error-paths test for start-dev.sh: exercise each fail() exit reason and verify
 # the corresponding meta.json is written with the correct exit_reason value.
 # Priority 5.
 #
-# Usage: bash tests/start-phone/error-paths-test.sh
+# Usage: bash tests/dev/error-paths-test.sh
 #
 # Covers the deterministic fail paths:
 #   - api_key_missing  (env + Windows registry both empty)
@@ -11,13 +11,12 @@
 #
 # Skipped paths (documented as manual-only — too expensive or environment-dependent
 # to test deterministically without heavy mocking):
-#   - prereq_missing     (would require manipulating PATH to hide dotnet/cloudflared)
+#   - prereq_missing     (would require manipulating PATH to hide dotnet)
 #   - app_startup_failed (would require a project that fails to build)
 #   - app_timeout        (would require blocking the app from responding for 120s)
-#   - tunnel_startup_failed / tunnel_timeout (would require breaking cloudflared)
 #
 # Idempotent: kills any dummy listener it started; each test invocation creates a
-# fresh logs/start-phone/<run>/ dir.
+# fresh logs/dev/<run>/ dir.
 
 set -uo pipefail
 
@@ -89,11 +88,11 @@ trap cleanup EXIT
 wait_for_meta() {
   local deadline=$((SECONDS + 15))
   while (( SECONDS < deadline )); do
-    if [[ -f logs/start-phone/LATEST ]]; then
-      local latest; latest=$(cat logs/start-phone/LATEST)
-      local meta="logs/start-phone/$latest/meta.json"
+    if [[ -f logs/dev/LATEST ]]; then
+      local latest; latest=$(cat logs/dev/LATEST)
+      local meta="logs/dev/$latest/meta.json"
       if [[ -f "$meta" ]]; then
-        echo "logs/start-phone/$latest"
+        echo "logs/dev/$latest"
         return 0
       fi
     fi
@@ -142,44 +141,41 @@ if [[ -n "$SKIP_REASON" ]]; then
 else
   # Capture exit code WITHOUT `|| true` — that pattern would force $? to 0 and
   # mask the very failure we're testing for.
-  OUTPUT=$(bash start-phone.sh 2>&1)
+  OUTPUT=$(bash start-dev.sh 2>&1)
   EXIT_CODE=$?
 
   if [[ $EXIT_CODE -ne 0 ]]; then
-    printf '  \u2713 Script exited non-zero when API key missing (rc=%s)\n' "$EXIT_CODE"
-    START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))
+    printf '  ✓ Script exited non-zero when API key missing (rc=%s)\n' "$EXIT_CODE"
+    DEV_TEST_PASS=$((DEV_TEST_PASS+1))
   else
-    printf '  \u2717 Script exited 0 when API key was missing (should have failed)\n'
-    START_PHONE_TEST_FAIL=$((START_PHONE_TEST_FAIL+1))
+    printf '  ✗ Script exited 0 when API key was missing (should have failed)\n'
+    DEV_TEST_FAIL=$((DEV_TEST_FAIL+1))
   fi
 
-      # meta.json should be written with the right exit_reason
-      RUN_DIR=$(wait_for_meta || true)
-      if [[ -n "$RUN_DIR" ]]; then
-        printf '  \u2713 meta.json written despite early fail (cleanup trap fired)\n'
-        START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))
-        REASON=$(meta_field "$RUN_DIR" "exit_reason")
-        assert_eq "api_key_missing" "$REASON" "meta.json .exit_reason is 'api_key_missing'"
-        # start-phone.sh logs its narrative to script.log (non-TTY: file-only,
-        # see start-phone.sh "TTY-conditional"), so read the error message from
-        # there rather than from captured stdout (which is empty in non-TTY mode).
-        SCRIPT_LOG_CONTENT=$(cat "$RUN_DIR/script.log" 2>/dev/null || true)
-        assert_contains "$SCRIPT_LOG_CONTENT" "OPENROUTER_API_KEY is not set" "Error message names the missing env var (in script.log)"
+  # meta.json should be written with the right exit_reason
+  RUN_DIR=$(wait_for_meta || true)
+  if [[ -n "$RUN_DIR" ]]; then
+    printf '  ✓ meta.json written despite early fail (cleanup trap fired)\n'
+    DEV_TEST_PASS=$((DEV_TEST_PASS+1))
+    REASON=$(meta_field "$RUN_DIR" "exit_reason")
+    assert_eq "api_key_missing" "$REASON" "meta.json .exit_reason is 'api_key_missing'"
+    # start-dev.sh logs its narrative to script.log (non-TTY: file-only,
+    # see start-dev.sh "TTY-conditional"), so read the error message from
+    # there rather than from captured stdout (which is empty in non-TTY mode).
+    SCRIPT_LOG_CONTENT=$(cat "$RUN_DIR/script.log" 2>/dev/null || true)
+    assert_contains "$SCRIPT_LOG_CONTENT" "OPENROUTER_API_KEY is not set" "Error message names the missing env var (in script.log)"
     # meta.json .app_pid should be null (script never reached app startup).
-    # NOTE: do NOT use jq's `// "MISSING"` fallback here — jq treats JSON null as
-    # falsey and would return the fallback. Use plain `.app_pid`; jq -r outputs
-    # the literal string "null" for JSON null, which is what we want to compare.
     APP_PID_VAL=$(jq -r '.app_pid' "$RUN_DIR/meta.json" 2>/dev/null || echo "JQ_MISSING")
     if [[ "$APP_PID_VAL" == "null" ]]; then
-      printf '  \u2713 meta.json .app_pid is null (script never reached app startup)\n'
-      START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))
+      printf '  ✓ meta.json .app_pid is null (script never reached app startup)\n'
+      DEV_TEST_PASS=$((DEV_TEST_PASS+1))
     else
-      printf '  \u2717 meta.json .app_pid is %s (expected null)\n' "$APP_PID_VAL"
-      START_PHONE_TEST_FAIL=$((START_PHONE_TEST_FAIL+1))
+      printf '  ✗ meta.json .app_pid is %s (expected null)\n' "$APP_PID_VAL"
+      DEV_TEST_FAIL=$((DEV_TEST_FAIL+1))
     fi
   else
-    printf '  \u2717 meta.json was not written on api_key_missing fail\n'
-    START_PHONE_TEST_FAIL=$((START_PHONE_TEST_FAIL+1))
+    printf '  ✗ meta.json was not written on api_key_missing fail\n'
+    DEV_TEST_FAIL=$((DEV_TEST_FAIL+1))
   fi
 fi
 
@@ -200,22 +196,22 @@ else
       skip "dummy listener failed to bind 5123"
       stop_dummy_listener
     else
-      printf '  \u2713 Dummy listener occupying 5123 (PID %s)\n' "$DUMMY_PID"
-      START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))
+      printf '  ✓ Dummy listener occupying 5123 (PID %s)\n' "$DUMMY_PID"
+      DEV_TEST_PASS=$((DEV_TEST_PASS+1))
 
       # Set a valid API key so we get past that check and reach the port check
       export OPENROUTER_API_KEY="$FAKE_KEY"
 
       # Capture exit code WITHOUT `|| true` (would mask the failure we're testing).
-      OUTPUT=$(bash start-phone.sh 2>&1)
+      OUTPUT=$(bash start-dev.sh 2>&1)
       EXIT_CODE=$?
 
       if [[ $EXIT_CODE -ne 0 ]]; then
-        printf '  \u2713 Script exited non-zero when port occupied (rc=%s)\n' "$EXIT_CODE"
-        START_PHONE_TEST_PASS=$((START_PHONE_TEST_PASS+1))
+        printf '  ✓ Script exited non-zero when port occupied (rc=%s)\n' "$EXIT_CODE"
+        DEV_TEST_PASS=$((DEV_TEST_PASS+1))
       else
-        printf '  \u2717 Script exited 0 when port was occupied (should have refused)\n'
-        START_PHONE_TEST_FAIL=$((START_PHONE_TEST_FAIL+1))
+        printf '  ✗ Script exited 0 when port was occupied (should have refused)\n'
+        DEV_TEST_FAIL=$((DEV_TEST_FAIL+1))
       fi
 
       # meta.json verification
@@ -223,14 +219,14 @@ else
       if [[ -n "$RUN_DIR" ]]; then
         REASON=$(meta_field "$RUN_DIR" "exit_reason")
         assert_eq "port_occupied" "$REASON" "meta.json .exit_reason is 'port_occupied'"
-        # start-phone.sh logs its narrative to script.log (non-TTY: file-only),
+        # start-dev.sh logs its narrative to script.log (non-TTY: file-only),
         # so read the error message from there rather than from captured stdout.
         SCRIPT_LOG_CONTENT=$(cat "$RUN_DIR/script.log" 2>/dev/null || true)
         assert_contains "$SCRIPT_LOG_CONTENT" "Port 5123 is already occupied" "Error message names port conflict (in script.log)"
         assert_contains "$SCRIPT_LOG_CONTENT" "taskkill"                       "Error suggests taskkill remediation (in script.log)"
       else
-        printf '  \u2717 meta.json was not written on port_occupied fail\n'
-        START_PHONE_TEST_FAIL=$((START_PHONE_TEST_FAIL+1))
+        printf '  ✗ meta.json was not written on port_occupied fail\n'
+        DEV_TEST_FAIL=$((DEV_TEST_FAIL+1))
       fi
 
       stop_dummy_listener
@@ -243,8 +239,8 @@ fi
 # Document the skipped paths (informational, no assertions)
 # --------------------------------------------------------------------------
 printf '\n--- Documented as manual-only (not asserted here) ---\n'
-for reason in prereq_missing app_startup_failed app_timeout tunnel_startup_failed tunnel_timeout; do
-  printf '  \u26a0 %s: requires environment mocking (PATH manipulation / project corruption / network breakage)\n' "$reason"
+for reason in prereq_missing app_startup_failed app_timeout; do
+  printf '  ⚠ %s: requires environment mocking (PATH manipulation / project corruption / network breakage)\n' "$reason"
 done
 
 print_summary "error-paths-test"

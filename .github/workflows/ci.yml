@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
       - name: Verify formatting
         run: dotnet format --verify-no-changes
@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
       - name: Restore
         run: dotnet restore
@@ -46,9 +46,10 @@ jobs:
         run: dotnet test --no-build -c Release
 
   # Priority 1 (bash -n syntax gate) + Priorities 2, 3, 5 (smoke + meta.json + error paths).
-  # Runs on windows-latest because start-phone.sh is Windows-specific: it uses `taskkill`,
+  # Runs on windows-latest because start-dev.sh is Windows-specific: it uses `taskkill`,
   # `powershell` for env-var registry lookup, and is designed for Git Bash. The
-  # windows-latest runner image ships with `cloudflared`, `jq`, and Git Bash preinstalled.
+  # windows-latest runner image ships with `jq` and Git Bash preinstalled.
+  # Job name preserved as `start-phone-tests` because the ruleset requires it.
   start-phone-tests:
     runs-on: windows-latest
     defaults:
@@ -59,27 +60,18 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
-
-      - name: Install cloudflared (not preinstalled on windows-latest)
-        run: |
-          # The script uses cloudflared for the tunnel; windows-latest doesn't ship it.
-          # Download the standalone .exe into Git Bash's /usr/bin so it's on PATH.
-          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -o /usr/bin/cloudflared.exe
-          chmod +x /usr/bin/cloudflared.exe
-          cloudflared --version
+          dotnet-version: "10.0.x"
 
       - name: bash syntax check (priority 1)
-        run: bash -n start-phone.sh
+        run: bash -n start-dev.sh
 
-      - name: Run start-phone test suite (priorities 2, 3, 5)
-        run: bash tests/start-phone/run-tests.sh
+      - name: Run start-dev test suite (priorities 2, 3, 5)
+        run: bash tests/dev/run-tests.sh
         env:
           # Same fake-key pattern as Agentic.Chat.Tests/ProgramTests.cs. Not a real key;
           # the smoke test only loads /chat (no OpenRouter call). Setting it as an env
           # var short-circuits the script's Windows-registry lookup.
           OPENROUTER_API_KEY: test-only-fake-key-not-real-no-network
-
   # Priority 4: Playwright browser tests for the Blazor reconnect UI.
   # Runs on ubuntu-latest because the webServer only needs `dotnet run` (no Windows-specific
   # commands); the ReconnectModal.razor.js handler under test is browser-side and OS-agnostic.
@@ -90,12 +82,12 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
           cache-dependency-path: tests/playwright/package.json
 
       - name: Install Playwright + chromium browser

@@ -49,8 +49,7 @@ jobs:
   # Runs on windows-latest because start-dev.sh is Windows-specific: it uses `taskkill`,
   # `powershell` for env-var registry lookup, and is designed for Git Bash. The
   # windows-latest runner image ships with `jq` and Git Bash preinstalled.
-  # Job name preserved as `start-phone-tests` because the ruleset requires it.
-  start-phone-tests:
+  dev-tests:
     runs-on: windows-latest
     defaults:
       run:

@@ -3,11 +3,11 @@ import { test, expect, type Page } from '@playwright/test';
 /**
  * Tests for Components/Layout/ReconnectModal.razor.js.
  *
- * Priority 4 of the start-phone.sh test plan. These guard the JS reconnect-state
+ * Priority 4 of the dev test plan. These guard the JS reconnect-state
  * handler against silent regressions — specifically the .NET 10.0.0 GA bug where
  * the framework fires 'resume-failed' instead of 'rejected' after a server restart.
  * Without the `|| event.detail.state === "resume-failed"` branch in ReconnectModal.razor.js,
- * the phone browser sticks on a "Failed to resume" modal after every rude edit.
+ * the browser sticks on a "Failed to resume" modal after every rude edit.
  *
  * Approach: navigate to /chat, wait for Blazor to mount #components-reconnect-modal
  * (the element on which the state-change listener is registered), then dispatch

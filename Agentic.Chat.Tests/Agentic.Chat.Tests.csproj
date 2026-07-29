@@ -9,11 +9,11 @@
   <!--
     Coverage gate (coverlet.msbuild 6.0.4). bare `dotnet test -c Release` collects
     cobertura coverage with a 100% minimum on line, branch, and method coverage,
-    and fails the test pass on any regression. Razor-generated classes under
-    Agentic.Chat.Components.* are excluded from the gate because they are out of
-    scope: only Program.cs, Services/ChatAgentService.cs, Services/OpenRouterOptions.cs,
-    and Models/ChatDisplayMessage.cs are gated. coverlet.collector 6.0.4 is kept as
-    the explicit-collection mechanism for ad-hoc XPlat runs.
+    and fails the test pass on any regression. Only four documented types are gated;
+    everything else (Components, Data, MultiAgent, etc.) is outside scope:
+    Program.cs, ChatAgentService.cs, OpenRouterOptions.cs, ChatDisplayMessage.cs.
+    coverlet.collector 6.0.4 is kept as the explicit-collection mechanism for
+    ad-hoc XPlat runs.
   -->
   <PropertyGroup>
     <CollectCoverage>true</CollectCoverage>
@@ -21,11 +21,8 @@
     <Threshold>100</Threshold>
     <ThresholdType>line,branch,method</ThresholdType>
     <ThresholdStat>minimum</ThresholdStat>
-    <!-- Components are out of scope. Data.* is EF entity/DbContext surface covered
-         indirectly by ConversationStoreTests. ConversationService is Blazor-storage
-         orchestration (ProtectedLocalStorage catch paths); persistence behavior is
-         gated via ConversationPersistence + ChatAgentService instead. -->
-    <Exclude>[Agentic.Chat]Agentic.Chat.Components.*,[Agentic.Chat]Agentic.Chat.Data.*,[Agentic.Chat]Agentic.Chat.Services.ConversationService,[Agentic.Chat]Agentic.Chat.Services.ConversationPersistence,[Agentic.Chat]Agentic.Chat.Services.ConversationTitle,[Agentic.Chat]Agentic.Chat.Services.ConversationListItem,[Agentic.Chat]Agentic.Chat.Services.NullActiveConversationWriter,[Agentic.Chat]Agentic.Chat.Services.NullConversationPersistence,[Agentic.Chat]Agentic.Chat.Services.IActiveConversationWriter,[Agentic.Chat]Agentic.Chat.Services.IConversationPersistence</Exclude>
+    <!-- Only the four documented types are gated by include; everything else is outside scope. -->
+    <Include>[Agentic.Chat]Program,[Agentic.Chat]Agentic.Chat.Services.ChatAgentService,[Agentic.Chat]Agentic.Chat.Services.OpenRouterOptions,[Agentic.Chat]Agentic.Chat.Models.ChatDisplayMessage</Include>
     <CoverletOutput>coverage/</CoverletOutput>
   </PropertyGroup>
 

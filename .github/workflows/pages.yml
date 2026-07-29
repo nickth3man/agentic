@@ -4,19 +4,21 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Agentic.Chat.Client/**'
-      - 'Agentic.Chat/Components/**'
-      - 'Agentic.Chat/Models/**'
-      - 'Agentic.Chat/Services/ChatAgentService.cs'
-      - 'Agentic.Chat/Services/ContextWindow.cs'
-      - 'Agentic.Chat/Services/ConversationTitle.cs'
-      - 'Agentic.Chat/Services/IOpenRouterClient.cs'
-      - 'Agentic.Chat/Services/MarkdownRenderer.cs'
-      - 'Agentic.Chat/Services/OpenRouterException.cs'
-      - 'Agentic.Chat/Services/OpenRouterOptions.cs'
-      - 'Agentic.Chat/Services/UsageFormatter.cs'
-      - 'Directory.Build.props'
-      - '.github/workflows/pages.yml'
+      - "Agentic.Chat.Client/**"
+      - "Agentic.Chat/Components/**"
+      - "Agentic.Chat/Models/**"
+      - "Agentic.Chat/Services/ChatAgentService.cs"
+      - "Agentic.Chat/Services/ContextWindow.cs"
+      - "Agentic.Chat/Services/ConversationTitle.cs"
+      - "Agentic.Chat/Services/IOpenRouterClient.cs"
+      - "Agentic.Chat/Services/MarkdownRenderer.cs"
+      - "Agentic.Chat/Services/OpenRouterException.cs"
+      - "Agentic.Chat/Services/OpenRouterOptions.cs"
+      - "Agentic.Chat/Services/UsageFormatter.cs"
+      - "Agentic.Chat/Services/MultiAgent/**"
+      - "Agentic.Chat/Components/MultiAgent/**"
+      - "Directory.Build.props"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -34,7 +36,7 @@ jobs:
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
       - name: Configure Pages
         id: pages

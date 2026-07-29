@@ -23,6 +23,112 @@ namespace Agentic.Chat.Tests;
 //       covers the IsNullOrWhiteSpace(apiKey) true branch and the throw on lines 19-21.
 public class ProgramTests
 {
+    [Fact]
+    public async Task Host_RegistersCouncilDisabled_WhenNoConfig()
+    {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
+        using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(b => b.UseEnvironment("Development"));
+        var opts = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Agentic.Chat.Services.MultiAgent.MultiAgentOptions>>().Value;
+        Assert.False(opts.CouncilEnabled);
+        Assert.NotEmpty(opts.DisabledReason);
+    }
+
+    [Fact]
+    public async Task Host_RegistersCouncilEnabled_WhenSearXngHttpsConfigured()
+    {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
+        using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
+        Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "https://search.example.com");
+        Environment.SetEnvironmentVariable("MultiAgent__OllamaBaseUrl", "https://llm.example.com");
+        try
+        {
+            await using var factory = new WebApplicationFactory<Program>()
+                .WithWebHostBuilder(b => b.UseEnvironment("Development"));
+            var opts = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Agentic.Chat.Services.MultiAgent.MultiAgentOptions>>().Value;
+            Assert.True(opts.CouncilEnabled);
+            Assert.Equal("https://search.example.com", opts.SearXNGBaseUrl);
+        }
+        finally { Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", null); }
+    }
+
+    [Fact]
+    public async Task Host_RejectsHttpSearXngUrl()
+    {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
+        using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
+        Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "http://insecure.example.com");
+        try
+        {
+            await using var factory = new WebApplicationFactory<Program>()
+                .WithWebHostBuilder(b => b.UseEnvironment("Development"));
+            var opts = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Agentic.Chat.Services.MultiAgent.MultiAgentOptions>>().Value;
+            Assert.False(opts.CouncilEnabled);
+            Assert.NotEqual(0, opts.DisabledReason.IndexOf("HTTPS", System.StringComparison.OrdinalIgnoreCase));
+        }
+        finally { Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", null); }
+    }
+
+    [Fact]
+    public async Task Host_RejectsInvalidOllamaUrl()
+    {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
+        using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
+        Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "https://search.example.com");
+        Environment.SetEnvironmentVariable("MultiAgent__OllamaBaseUrl", "not-a-url");
+        try
+        {
+            await using var factory = new WebApplicationFactory<Program>()
+                .WithWebHostBuilder(b => b.UseEnvironment("Development"));
+            var opts = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Agentic.Chat.Services.MultiAgent.MultiAgentOptions>>().Value;
+            Assert.False(opts.CouncilEnabled);
+            Assert.Contains("Ollama", opts.DisabledReason);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", null);
+            Environment.SetEnvironmentVariable("MultiAgent__OllamaBaseUrl", null);
+        }
+    }
+
+    [Fact]
+    public async Task Host_RejectsSearXngOnlyWithoutOllama()
+    {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
+        Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "https://search.example.com");
+        try
+        {
+            using var factory = new AppFactory("Development");
+            var opts = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Agentic.Chat.Services.MultiAgent.MultiAgentOptions>>().Value;
+            Assert.False(opts.CouncilEnabled);
+            Assert.Contains("Ollama", opts.DisabledReason);
+        }
+        finally { Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", null); }
+    }
+
+    [Fact]
+    public async Task Host_AcceptsValidOllamaHttps()
+    {
+        using var apiKey = EnvVar.Set("OPENROUTER_API_KEY", FakeApiKey);
+        using var _ = EnvVarScope.ClearPrefix("MultiAgent__");
+        Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", "https://search.example.com");
+        Environment.SetEnvironmentVariable("MultiAgent__OllamaBaseUrl", "https://llm.example.com");
+        try
+        {
+            await using var factory = new WebApplicationFactory<Program>()
+                .WithWebHostBuilder(b => b.UseEnvironment("Development"));
+            var opts = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Agentic.Chat.Services.MultiAgent.MultiAgentOptions>>().Value;
+            Assert.True(opts.CouncilEnabled);
+            Assert.Empty(opts.DisabledReason);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MultiAgent__SearXNGBaseUrl", null);
+            Environment.SetEnvironmentVariable("MultiAgent__OllamaBaseUrl", null);
+        }
+    }
+
     // Synthetic API key used so the api-key guard is satisfied in tests that need to
     // reach later Program.cs lines. The real OPENROUTER_API_KEY never lives in files
     // (AGENTS.md hard rule); this string is not and never was a real key.

@@ -1,50 +1,54 @@
 using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
-using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
-using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Agentic.Chat.Tests.Fixtures;
 
 namespace Agentic.Chat.Tests;
 
-public class ChatAgentServiceSendStreamingTests
+public class ChatAgentServiceSendStreamingTests : IClassFixture<ChatAgentServiceFixture>
 {
+    private readonly ChatAgentServiceFixture _fixture;
+
+    public ChatAgentServiceSendStreamingTests(ChatAgentServiceFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public async Task NullUserText_Throws()
     {
-        var service = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
 
         // ArgumentException.ThrowIfNullOrWhiteSpace(null!) throws ArgumentNullException
         // (which derives from ArgumentException), so use ThrowsAnyAsync.
         await Assert.ThrowsAnyAsync<ArgumentException>(
-            () => Consume(service.SendStreamingAsync(null!)));
+            () => ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync(null!)));
     }
 
     [Fact]
     public async Task EmptyUserText_Throws()
     {
-        var service = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => Consume(service.SendStreamingAsync(string.Empty)));
+            () => ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync(string.Empty)));
     }
 
     [Fact]
     public async Task WhitespaceUserText_Throws()
     {
-        var service = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => Consume(service.SendStreamingAsync("   ")));
+            () => ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("   ")));
     }
 
     [Fact]
     public async Task AddsUserAndAssistantMessages_ToMessagesList()
     {
-        var service = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
 
-        await Consume(service.SendStreamingAsync("hello"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hello"));
 
         Assert.Equal(2, service.Messages.Count);
         Assert.Equal("user", service.Messages[0].Role);
@@ -57,9 +61,9 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task TrimsUserText()
     {
-        var service = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
 
-        await Consume(service.SendStreamingAsync("  hi there  "));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("  hi there  "));
 
         Assert.Equal("hi there", service.Messages[0].Content);
     }
@@ -67,13 +71,12 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task HappyPath_AccumulatesContentDeltas()
     {
-        var service = CreateService(new[]
-        {
+        var (service, _) = _fixture.CreateBuilder().WithDeltas(new[] {
             new StreamDelta("Hello", null),
             new StreamDelta(", world", null)
-        });
+        }).Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         var assistant = service.Messages[1];
         Assert.Equal("Hello, world", assistant.Content);
@@ -83,11 +86,10 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task YieldsAssistantReference_AfterEachDelta()
     {
-        var service = CreateService(new[]
-        {
+        var (service, _) = _fixture.CreateBuilder().WithDeltas(new[] {
             new StreamDelta("Hello", null),
             new StreamDelta(", world", null)
-        });
+        }).Build();
 
         // Snapshot state at each yield: the shared instance is mutated in place, so reading
         // it after the loop completes would only show the final state.
@@ -117,9 +119,11 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task NonSuccess_SetsErrorMessage()
     {
-        var service = CreateService(exception: new OpenRouterException(400, "rate limited"));
+        var (service, _) = _fixture.CreateBuilder()
+            .WithException(new OpenRouterException(400, "rate limited"))
+            .Build();
 
-        var messages = await Consume(service.SendStreamingAsync("hi"));
+        var messages = await ChatAgentServiceTestHelpers.ConsumeToList(service.SendStreamingAsync("hi"));
         var assistant = messages[^1];
 
         Assert.StartsWith("(Error 400:", assistant.Content);
@@ -132,9 +136,11 @@ public class ChatAgentServiceSendStreamingTests
     public async Task ErrorBody_TruncatedAt300Chars()
     {
         var body = new string('x', 400);
-        var service = CreateService(exception: new OpenRouterException(400, body));
+        var (service, _) = _fixture.CreateBuilder()
+            .WithException(new OpenRouterException(400, body))
+            .Build();
 
-        var messages = await Consume(service.SendStreamingAsync("hi"));
+        var messages = await ChatAgentServiceTestHelpers.ConsumeToList(service.SendStreamingAsync("hi"));
         var assistant = messages[^1];
 
         const string prefix = "(Error 400: ";
@@ -151,9 +157,9 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task EmptyStream_SetsNoResponseContent()
     {
-        var service = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         Assert.Equal("(No response content returned.)", service.Messages[1].Content);
     }
@@ -161,14 +167,13 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task ReasoningStream_Accumulated()
     {
-        var service = CreateService(new[]
-        {
+        var (service, _) = _fixture.CreateBuilder().WithDeltas(new[] {
             new StreamDelta(null, "think"),
             new StreamDelta(null, "ing"),
             new StreamDelta("answer", null)
-        });
+        }).Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         Assert.Equal("thinking", service.Messages[1].Reasoning);
         Assert.Equal("answer", service.Messages[1].Content);
@@ -179,13 +184,12 @@ public class ChatAgentServiceSendStreamingTests
     {
         // Covers hadRealContent when content is empty but reasoning is present
         // (right-hand arm of the OR) — distinct from EmptyStream_SetsNoResponseContent.
-        var service = CreateService(
-        [
+        var (service, _) = _fixture.CreateBuilder().WithDeltas([
             new StreamDelta(null, "think"),
             new StreamDelta(null, "ing")
-        ]);
+]).Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         Assert.Equal(string.Empty, service.Messages[1].Content);
         Assert.Equal("thinking", service.Messages[1].Reasoning);
@@ -198,12 +202,12 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task CancelledToken_FinalizesThenThrowsOperationCanceled()
     {
-        var service = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => Consume(service.SendStreamingAsync("hi", cancellationToken: cts.Token)));
+            () => ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi", cancellationToken: cts.Token)));
 
         // Service finalizes before rethrowing — display unlocked, marker only.
         Assert.Equal(2, service.Messages.Count);
@@ -214,11 +218,10 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task CancelAfterPartialContent_PersistsPartialAssistantAndRethrows()
     {
-        var service = CreateService(
-        [
+        var (service, _) = _fixture.CreateBuilder().WithDeltas([
             new StreamDelta("partial", null),
             new StreamDelta(" more", null)
-        ]);
+]).Build();
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
@@ -250,11 +253,10 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task CancelAfterPartialReasoning_PersistsReasoningAndRethrows()
     {
-        var service = CreateService(
-        [
+        var (service, _) = _fixture.CreateBuilder().WithDeltas([
             new StreamDelta(null, "thinking…"),
             new StreamDelta("answer", null)
-        ]);
+]).Build();
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
@@ -282,10 +284,9 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task CancelBeforeAnyContent_RemovesEmptyAssistantAndRethrows()
     {
-        var service = CreateService(
-        [
+        var (service, _) = _fixture.CreateBuilder().WithDeltas([
             new StreamDelta("never-delivered", null)
-        ]);
+]).Build();
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
@@ -317,11 +318,10 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task CancelAfterReasoningOnly_PersistsPartialReasoningAndRethrows()
     {
-        var service = CreateService(
-        [
+        var (service, _) = _fixture.CreateBuilder().WithDeltas([
             new StreamDelta(null, "thinking…"),
             new StreamDelta("answer", null)
-        ]);
+]).Build();
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
@@ -351,12 +351,10 @@ public class ChatAgentServiceSendStreamingTests
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var writer = new RecordingConversationWriter(gate);
-        var service = CreateService(
-            [
+        var (service, _) = _fixture.CreateBuilder().WithDeltas([
                 new StreamDelta("partial answer", null),
                 new StreamDelta(" more", null)
-            ],
-            conversationWriter: writer);
+]).WithConversationWriter(writer).Build();
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
@@ -395,12 +393,10 @@ public class ChatAgentServiceSendStreamingTests
     public async Task CancelWithPartialContent_PersistFailure_StillRethrowsCancellation()
     {
         var writer = new RecordingConversationWriter(failFinalization: true);
-        var service = CreateService(
-            [
+        var (service, _) = _fixture.CreateBuilder().WithDeltas([
                 new StreamDelta("partial answer", null),
                 new StreamDelta(" more", null)
-            ],
-            conversationWriter: writer);
+]).WithConversationWriter(writer).Build();
         using var cts = new CancellationTokenSource();
 
         await using var enumerator = service
@@ -427,9 +423,9 @@ public class ChatAgentServiceSendStreamingTests
     public async Task SendWithImage_AddsMultipartUserMessageToApiTranscript()
     {
         var fake = new FakeOpenRouterClient([new StreamDelta("looks like a cat", null)]);
-        var service = CreateServiceWithClient(fake);
+        var (service, _) = _fixture.CreateBuilder().WithClient(fake).Build();
 
-        await Consume(service.SendStreamingAsync(
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync(
             "What is this?",
             "data:image/jpeg;base64,abc123"));
 
@@ -448,13 +444,12 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task HappyPath_CapturesUsageFromFinalChunk()
     {
-        var service = CreateService(new[]
-        {
+        var (service, _) = _fixture.CreateBuilder().WithDeltas(new[] {
             new StreamDelta("Hello", null),
             new StreamDelta(null, null, new MessageUsage(1200, 340, 0.0041m))
-        });
+        }).Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         var assistant = service.Messages[1];
         Assert.Equal("Hello", assistant.Content);
@@ -468,13 +463,12 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task UsageWithoutCost_EstimatesFromCatalogPricing()
     {
-        var service = CreateService(new[]
-        {
+        var (service, _) = _fixture.CreateBuilder().WithDeltas(new[] {
             new StreamDelta("Hi", null),
             new StreamDelta(null, null, new MessageUsage(1000, 500, null))
-        });
+        }).Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         var usage = service.Messages[1].Usage;
         Assert.NotNull(usage);
@@ -486,9 +480,9 @@ public class ChatAgentServiceSendStreamingTests
     public async Task SendAsync_DoesNotIncludeDeprecatedUsageIncludeFlag()
     {
         var fake = new FakeOpenRouterClient([new StreamDelta("ok", null)]);
-        var service = CreateServiceWithClient(fake);
+        var (service, _) = _fixture.CreateBuilder().WithClient(fake).Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         Assert.NotNull(fake.LastRequest);
         var json = JsonSerializer.Serialize(fake.LastRequest);
@@ -498,12 +492,11 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task HappyPath_UsageOnlyDelta_UpdatesAssistant()
     {
-        var service = CreateService(new[]
-        {
+        var (service, _) = _fixture.CreateBuilder().WithDeltas(new[] {
             new StreamDelta(null, null, new MessageUsage(50, 25, 0.001m))
-        });
+        }).Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         Assert.Equal(50, service.Messages[1].Usage!.PromptTokens);
     }
@@ -511,14 +504,14 @@ public class ChatAgentServiceSendStreamingTests
     [Fact]
     public async Task ConcurrentSend_WhileStreamActive_ThrowsInvalidOperation()
     {
-        var service = CreateService([new StreamDelta("hello", null)]);
+        var (service, _) = _fixture.CreateBuilder().WithDeltas([new StreamDelta("hello", null)]).Build();
 
         await using var enumerator = service.SendStreamingAsync("first").GetAsyncEnumerator();
         Assert.True(await enumerator.MoveNextAsync());
         Assert.True(service.IsStreamActive);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => Consume(service.SendStreamingAsync("second")));
+            () => ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("second")));
         Assert.Contains("already in progress", ex.Message, StringComparison.OrdinalIgnoreCase);
 
         while (await enumerator.MoveNextAsync())
@@ -532,108 +525,6 @@ public class ChatAgentServiceSendStreamingTests
         Assert.Equal("assistant", service.Messages[1].Role);
         Assert.Equal("hello", service.Messages[1].Content);
     }
-
-    // ---------- helpers ----------
-
-    private static ChatAgentService CreateServiceWithClient(FakeOpenRouterClient fakeClient)
-    {
-        var options = Options.Create(new OpenRouterOptions
-        {
-            BaseUrl = "https://test.local/",
-            Model = "test-model"
-        });
-        var logger = NullLogger<ChatAgentService>.Instance;
-        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
-        catalog.SeedForTest(
-        [
-            new OpenRouterModel(
-                "test-model",
-                "test-model",
-                128_000L,
-                DateTimeOffset.UtcNow,
-                "text->text",
-                new OpenRouterPricing(0.0000025m, 0.00001m),
-                ["tools", "reasoning"])
-        ]);
-
-        var js = TestSupport.NewProtectedJSRuntime();
-        var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
-        var selection = new SelectedModelService(storage);
-        selection.SetCurrentModelIdForTest(null);
-        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
-        systemPrompt.SetCurrentPromptForTest(null);
-
-        return new ChatAgentService(
-            fakeClient,
-            options,
-            logger,
-            selection,
-            catalog,
-            systemPrompt,
-            TestSupport.NewChatSettings(storage),
-            NullActiveConversationWriter.Instance);
-    }
-
-    private static ChatAgentService CreateService(
-        IEnumerable<StreamDelta>? deltas = null,
-        Exception? exception = null,
-        string? selectedModelId = null,
-        string? catalogId = "test-model",
-        bool catalogSupportsReasoning = true,
-        IActiveConversationWriter? conversationWriter = null)
-    {
-        var fakeClient = new FakeOpenRouterClient(deltas, exception);
-        var options = Options.Create(new OpenRouterOptions
-        {
-            BaseUrl = "https://test.local/",
-            Model = "test-model"
-        });
-        var logger = NullLogger<ChatAgentService>.Instance;
-        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
-        if (catalogId is not null)
-        {
-            catalog.SeedForTest(new[]
-            {
-                new OpenRouterModel(
-                    catalogId,
-                    catalogId,
-                    128_000L,
-                    DateTimeOffset.UtcNow,
-                    "text->text",
-                    new OpenRouterPricing(0.0000025m, 0.00001m),
-                    catalogSupportsReasoning
-                        ? new[] { "tools", "reasoning", "tool_choice" }
-                        : new[] { "tools", "tool_choice" })
-            });
-        }
-
-        // SetCurrentModelIdForTest sets IsLoaded=true and raises OnChange, matching
-        // the post-LoadAsync state for both the "stored" and "not stored" branches.
-        var js = TestSupport.NewProtectedJSRuntime();
-        var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
-        var selection = new SelectedModelService(storage);
-        selection.SetCurrentModelIdForTest(selectedModelId);
-        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
-        systemPrompt.SetCurrentPromptForTest(null);
-
-        return new ChatAgentService(
-            fakeClient,
-            options,
-            logger,
-            selection,
-            catalog,
-            systemPrompt,
-            TestSupport.NewChatSettings(storage),
-            conversationWriter ?? NullActiveConversationWriter.Instance);
-    }
-
-    private static async Task<List<ChatDisplayMessage>> Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
-    {
-        var list = new List<ChatDisplayMessage>();
-        await foreach (var m in stream) list.Add(m);
-        return list;
-    }
-
     private sealed class RecordingConversationWriter : IActiveConversationWriter
     {
         private readonly TaskCompletionSource? _blockFinalization;
@@ -693,11 +584,4 @@ public class ChatAgentServiceSendStreamingTests
         }
     }
 
-    private sealed class UnusedHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name)
-            => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
-    }
 }
-
-

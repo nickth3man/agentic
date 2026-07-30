@@ -1,18 +1,22 @@
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
-using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
-using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Agentic.Chat.Tests.Fixtures;
 
 namespace Agentic.Chat.Tests;
 
-public class ChatAgentServiceLoadTranscriptTests
+public class ChatAgentServiceLoadTranscriptTests : IClassFixture<ChatAgentServiceFixture>
 {
+    private readonly ChatAgentServiceFixture _fixture;
+
+    public ChatAgentServiceLoadTranscriptTests(ChatAgentServiceFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public void LoadTranscript_RebuildsDisplayAndApiMessages_IncludingReasoning()
     {
-        var service = CreateService();
+        var service = _fixture.CreateBuilder().Build().Service;
 
         service.LoadTranscript(
         [
@@ -32,7 +36,7 @@ public class ChatAgentServiceLoadTranscriptTests
     [Fact]
     public void LoadTranscript_AssistantWithoutReasoning_AddsApiMessageWithNullReasoning()
     {
-        var service = CreateService();
+        var service = _fixture.CreateBuilder().Build().Service;
 
         service.LoadTranscript(
         [
@@ -53,7 +57,7 @@ public class ChatAgentServiceLoadTranscriptTests
     public async Task LoadTranscript_ApiOmitsErrorsAndEmptyPlaceholder_OnNextSend()
     {
         var fake = new FakeOpenRouterClient([new StreamDelta("next", null)]);
-        var service = CreateService(fake);
+        var service = _fixture.CreateBuilder().WithClient(fake).Build().Service;
 
         service.LoadTranscript(
         [
@@ -101,7 +105,7 @@ public class ChatAgentServiceLoadTranscriptTests
     [Fact]
     public async Task LoadTranscript_WhileStreaming_IsNoOp()
     {
-        var service = CreateService(new StreamDelta("x", null));
+        var service = _fixture.CreateBuilder().WithDeltas(new StreamDelta("x", null)).Build().Service;
         await using var enumerator = service.SendStreamingAsync("hi").GetAsyncEnumerator();
         Assert.True(await enumerator.MoveNextAsync());
         Assert.True(service.IsStreamActive);
@@ -123,7 +127,7 @@ public class ChatAgentServiceLoadTranscriptTests
     public async Task LoadTranscript_AssistantWithWhitespaceReasoning_StoresNullReasoningInApi()
     {
         var fake = new FakeOpenRouterClient([new StreamDelta("next", null)]);
-        var service = CreateService(fake);
+        var service = _fixture.CreateBuilder().WithClient(fake).Build().Service;
 
         service.LoadTranscript(
         [
@@ -146,7 +150,7 @@ public class ChatAgentServiceLoadTranscriptTests
     public async Task LoadTranscript_WhitespaceOnlyAssistant_OmittedFromApi()
     {
         var fake = new FakeOpenRouterClient([new StreamDelta("next", null)]);
-        var service = CreateService(fake);
+        var service = _fixture.CreateBuilder().WithClient(fake).Build().Service;
 
         service.LoadTranscript(
         [
@@ -173,14 +177,14 @@ public class ChatAgentServiceLoadTranscriptTests
     [Fact]
     public void LoadTranscript_Null_Throws()
     {
-        var service = CreateService();
+        var service = _fixture.CreateBuilder().Build().Service;
         Assert.Throws<ArgumentNullException>(() => service.LoadTranscript(null!));
     }
 
     [Fact]
     public void IsStreamActive_FalseWhenIdle()
     {
-        Assert.False(CreateService().IsStreamActive);
+        Assert.False(_fixture.CreateBuilder().Build().Service.IsStreamActive);
     }
 
     [Theory]
@@ -214,7 +218,7 @@ public class ChatAgentServiceLoadTranscriptTests
     public async Task LoadTranscript_AssistantWithNonEmptyReasoning_StripsItFromApiHistory()
     {
         var fake = new FakeOpenRouterClient([new StreamDelta("next", null)]);
-        var service = CreateService(fake);
+        var service = _fixture.CreateBuilder().WithClient(fake).Build().Service;
 
         service.LoadTranscript(
         [
@@ -241,7 +245,7 @@ public class ChatAgentServiceLoadTranscriptTests
     [Fact]
     public void LoadTranscript_UserWithImage_RebuildsMultipartApiMessage()
     {
-        var service = CreateService(new FakeOpenRouterClient([]));
+        var service = _fixture.CreateBuilder().WithClient(new FakeOpenRouterClient([])).Build().Service;
         service.LoadTranscript(
         [
             new ChatDisplayMessage
@@ -258,50 +262,5 @@ public class ChatAgentServiceLoadTranscriptTests
         Assert.Equal("look", user.Content.Parts[0].Text);
         Assert.Equal("image_url", user.Content.Parts[1].Type);
         Assert.Equal("data:image/jpeg;base64,abc", user.Content.Parts[1].ImageUrl!.Url);
-    }
-
-    private static ChatAgentService CreateService(params StreamDelta[] deltas)
-        => CreateService(new FakeOpenRouterClient(deltas));
-
-    private static ChatAgentService CreateService(FakeOpenRouterClient fake)
-    {
-        var options = Options.Create(new OpenRouterOptions
-        {
-            BaseUrl = "https://test.local/",
-            Model = "test-model"
-        });
-        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
-        catalog.SeedForTest(
-        [
-            new OpenRouterModel(
-                "test-model",
-                "test-model",
-                128_000L,
-                DateTimeOffset.UtcNow,
-                "text->text",
-                new OpenRouterPricing(0.0000025m, 0.00001m),
-                ["tools", "reasoning"])
-        ]);
-        var js = TestSupport.NewProtectedJSRuntime();
-        var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
-        var selection = new SelectedModelService(storage);
-        selection.SetCurrentModelIdForTest(null);
-        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
-        systemPrompt.SetCurrentPromptForTest(null);
-        return new ChatAgentService(
-            fake,
-            options,
-            NullLogger<ChatAgentService>.Instance,
-            selection,
-            catalog,
-            systemPrompt,
-            TestSupport.NewChatSettings(storage),
-            NullActiveConversationWriter.Instance);
-    }
-
-    private sealed class UnusedHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name)
-            => throw new InvalidOperationException("Catalog must not fetch in this test.");
     }
 }

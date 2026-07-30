@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Agentic.Chat.Services;
+using Agentic.Chat.Tests.Fixtures;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,8 +13,15 @@ namespace Agentic.Chat.Tests;
 // Storage-layer tests for SystemPromptService. Mirrors SelectedModelServiceTests:
 // real ProtectedLocalStorage + TestSupport.ProtectedJSRuntime, with dedicated
 // IDataProtectionProvider fakes to hit each LoadAsync/SetAsync catch branch.
-public class SystemPromptServiceTests
+public class SystemPromptServiceTests : IClassFixture<ProtectedBrowserStorageFixture>
 {
+    private readonly ProtectedBrowserStorageFixture _fixture;
+
+    public SystemPromptServiceTests(ProtectedBrowserStorageFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public async Task LoadAsync_WithNoStoredValue_SetsIsLoadedTrue_CurrentPromptNull()
     {
@@ -32,13 +40,13 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task LoadAsync_WithStoredValue_SetsCurrentPrompt_RaisesOnChange()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var sharedDp = new EphemeralDataProtectionProvider();
-        var initial = new SystemPromptService(BuildStorage(js, sharedDp), NullLogger<SystemPromptService>.Instance);
+        var initial = new SystemPromptService(_fixture.CreateStorage(js, sharedDp), NullLogger<SystemPromptService>.Instance);
         await initial.SetAsync("Stored system prompt.");
         Assert.True(js.Store.ContainsKey(SystemPromptService.StorageKey));
 
-        var fresh = new SystemPromptService(BuildStorage(js, sharedDp), NullLogger<SystemPromptService>.Instance);
+        var fresh = new SystemPromptService(_fixture.CreateStorage(js, sharedDp), NullLogger<SystemPromptService>.Instance);
         var changes = 0;
         fresh.OnChange += () => changes++;
 
@@ -52,7 +60,9 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task LoadAsync_OnNoJsInterop_SwallowsInvalidOperationException_IsLoadedTrue()
     {
-        var storage = new ProtectedLocalStorage(new NoInteropJSRuntime(), new EphemeralDataProtectionProvider());
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateNoInteropRuntime(),
+            new EphemeralDataProtectionProvider());
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
 
         await service.LoadAsync();
@@ -64,8 +74,8 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task LoadAsync_OnJSException_Swallows_IsLoadedTrue()
     {
-        var storage = new ProtectedLocalStorage(
-            new ThrowingJSRuntime(new JSException("synthetic load failure")),
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateThrowingRuntime(new JSException("synthetic load failure")),
             new EphemeralDataProtectionProvider());
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
 
@@ -80,12 +90,12 @@ public class SystemPromptServiceTests
     {
         var seedBytes = Encoding.UTF8.GetBytes("not a JSON string");
         var seedProtected = Convert.ToBase64String(seedBytes);
-        var js = TestSupport.NewProtectedJSRuntime(new Dictionary<string, string>
+        var js = _fixture.CreateRuntime(new Dictionary<string, string>
         {
             [SystemPromptService.StorageKey] = seedProtected
         });
 
-        var storage = new ProtectedLocalStorage(js, new IdentityDataProtectionProvider());
+        var storage = _fixture.CreateStorage(js, _fixture.CreateIdentityProtector());
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
 
         await service.LoadAsync();
@@ -97,15 +107,15 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task LoadAsync_OnWrongProtectedProvider_SwallowsCryptographicException_IsLoadedTrue()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var writer = new SystemPromptService(
-            new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider()),
+            _fixture.CreateStorage(js),
             NullLogger<SystemPromptService>.Instance);
         await writer.SetAsync("A prompt.");
         Assert.True(js.Store.ContainsKey(SystemPromptService.StorageKey));
 
         var reader = new SystemPromptService(
-            new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider()),
+            _fixture.CreateStorage(js),
             NullLogger<SystemPromptService>.Instance);
         var before = reader.CurrentPrompt;
 
@@ -120,13 +130,13 @@ public class SystemPromptServiceTests
     {
         var seedBytes = Encoding.UTF8.GetBytes("\"\"");
         var seedProtected = Convert.ToBase64String(seedBytes);
-        var js = TestSupport.NewProtectedJSRuntime(new Dictionary<string, string>
+        var js = _fixture.CreateRuntime(new Dictionary<string, string>
         {
             [SystemPromptService.StorageKey] = seedProtected
         });
 
         var service = new SystemPromptService(
-            new ProtectedLocalStorage(js, new IdentityDataProtectionProvider()),
+            _fixture.CreateStorage(js, _fixture.CreateIdentityProtector()),
             NullLogger<SystemPromptService>.Instance);
 
         await service.LoadAsync();
@@ -156,7 +166,9 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task SetAsync_OnStorageFailure_StillUpdatesInMemory_RaisesOnChange()
     {
-        var storage = new ProtectedLocalStorage(new NoInteropJSRuntime(), new EphemeralDataProtectionProvider());
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateNoInteropRuntime(),
+            new EphemeralDataProtectionProvider());
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         var changes = 0;
         service.OnChange += () => changes++;
@@ -171,8 +183,8 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task SetAsync_OnJSException_StillUpdatesInMemory()
     {
-        var storage = new ProtectedLocalStorage(
-            new ThrowingJSRuntime(new JSException("synthetic js failure")),
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateThrowingRuntime(new JSException("synthetic js failure")),
             new EphemeralDataProtectionProvider());
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
 
@@ -185,8 +197,8 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task SetAsync_OnUnexpectedException_Propagates()
     {
-        var storage = new ProtectedLocalStorage(
-            new ThrowingJSRuntime(new IOException("not a best-effort failure")),
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateThrowingRuntime(new IOException("not a best-effort failure")),
             new EphemeralDataProtectionProvider());
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
 
@@ -214,9 +226,9 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task SetAsync_OnCryptographicExceptionOnProtect_Swallows_StillUpdatesInMemory()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
-        var faultyDp = new FaultyDataProtectionProvider(new CryptographicException("synthetic"));
-        var storage = new ProtectedLocalStorage(js, faultyDp);
+        var js = _fixture.CreateRuntime();
+        var faultyDp = _fixture.CreateFaultyProtector(new CryptographicException("synthetic"));
+        var storage = _fixture.CreateStorage(js, faultyDp);
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         var changes = 0;
         service.OnChange += () => changes++;
@@ -231,9 +243,9 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task SetAsync_OnJsonExceptionFromProtect_Swallows_StillUpdatesInMemory()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
-        var faultyDp = new FaultyDataProtectionProvider(new JsonException("synthetic"));
-        var storage = new ProtectedLocalStorage(js, faultyDp);
+        var js = _fixture.CreateRuntime();
+        var faultyDp = _fixture.CreateFaultyProtector(new JsonException("synthetic"));
+        var storage = _fixture.CreateStorage(js, faultyDp);
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
 
         await service.SetAsync("Prompt despite json failure.");
@@ -262,7 +274,9 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task ClearAsync_OnStorageFailure_StillNullsInMemory()
     {
-        var storage = new ProtectedLocalStorage(new NoInteropJSRuntime(), new EphemeralDataProtectionProvider());
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateNoInteropRuntime(),
+            new EphemeralDataProtectionProvider());
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         service.SetCurrentPromptForTest("Sticky override.");
 
@@ -276,12 +290,12 @@ public class SystemPromptServiceTests
     public async Task LoadAsync_WithOversizedStoredValue_TruncatesToMaxLength()
     {
         var oversized = new string('y', SystemPromptService.MaxPromptLength + 50);
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var sharedDp = new EphemeralDataProtectionProvider();
         // Bypass SetAsync length guard by writing via the protected store directly.
-        await new ProtectedLocalStorage(js, sharedDp).SetAsync(SystemPromptService.StorageKey, oversized);
+        await _fixture.CreateStorage(js, sharedDp).SetAsync(SystemPromptService.StorageKey, oversized);
 
-        var reader = new SystemPromptService(BuildStorage(js, sharedDp), NullLogger<SystemPromptService>.Instance);
+        var reader = new SystemPromptService(_fixture.CreateStorage(js, sharedDp), NullLogger<SystemPromptService>.Instance);
         await reader.LoadAsync();
 
         Assert.True(reader.IsLoaded);
@@ -291,8 +305,8 @@ public class SystemPromptServiceTests
     [Fact]
     public async Task ClearAsync_OnJsException_StillClearsInMemory()
     {
-        var storage = new ProtectedLocalStorage(
-            new ThrowingJSRuntime(new JSException("synthetic localStorage failure")),
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateThrowingRuntime(new JSException("synthetic localStorage failure")),
             new EphemeralDataProtectionProvider());
         var service = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         service.SetCurrentPromptForTest("UI override.");
@@ -306,9 +320,7 @@ public class SystemPromptServiceTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        var storage = new ProtectedLocalStorage(
-            TestSupport.NewProtectedJSRuntime(),
-            new EphemeralDataProtectionProvider());
+        var storage = _fixture.CreateStorage();
 
         Assert.Throws<ArgumentNullException>(() =>
             new SystemPromptService(null!, NullLogger<SystemPromptService>.Instance));
@@ -319,8 +331,8 @@ public class SystemPromptServiceTests
     [Fact]
     public void SetCurrentPromptForTest_UpdatesStateAndRaisesOnChange()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
-        var service = new SystemPromptService(BuildStorage(js), NullLogger<SystemPromptService>.Instance);
+        var js = _fixture.CreateRuntime();
+        var service = new SystemPromptService(_fixture.CreateStorage(js), NullLogger<SystemPromptService>.Instance);
         var changes = 0;
         service.OnChange += () => changes++;
 
@@ -347,76 +359,11 @@ public class SystemPromptServiceTests
         Assert.False(string.IsNullOrEmpty(concise.Prompt));
     }
 
-    private static (SystemPromptService Service, TestSupport.ProtectedJSRuntime Store) BuildService(
+    private (SystemPromptService Service, TestSupport.ProtectedJSRuntime Store) BuildService(
         Dictionary<string, string>? seed = null)
     {
-        var store = TestSupport.NewProtectedJSRuntime(seed is null ? null : new Dictionary<string, string>(seed));
-        var storage = BuildStorage(store);
+        var store = _fixture.CreateRuntime(seed is null ? null : new Dictionary<string, string>(seed));
+        var storage = _fixture.CreateStorage(store);
         return (new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance), store);
-    }
-
-    private static ProtectedLocalStorage BuildStorage(
-        TestSupport.ProtectedJSRuntime store,
-        IDataProtectionProvider? dp = null)
-        => new(store, dp ?? new EphemeralDataProtectionProvider());
-
-    private sealed class NoInteropJSRuntime : IJSRuntime
-    {
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
-            => throw new InvalidOperationException("JS interop is not available in this test.");
-
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args)
-            => throw new InvalidOperationException("JS interop is not available in this test.");
-    }
-
-    private sealed class ThrowingJSRuntime(Exception error) : IJSRuntime
-    {
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
-            => throw error;
-
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args)
-            => throw error;
-    }
-
-    private sealed class IdentityDataProtectionProvider : IDataProtectionProvider
-    {
-        private static readonly IDataProtector Protector = new IdentityDataProtector();
-
-        public IDataProtector CreateProtector(string purpose) => Protector;
-    }
-
-    private sealed class IdentityDataProtector : IDataProtector
-    {
-        public byte[] Protect(byte[] userData) => userData;
-        public byte[] Unprotect(byte[] protectedData) => protectedData;
-        public IDataProtector CreateProtector(string purpose) => this;
-    }
-
-    private sealed class FaultyDataProtectionProvider : IDataProtectionProvider
-    {
-        private readonly Exception _onOp;
-
-        public FaultyDataProtectionProvider(Exception onOp)
-        {
-            ArgumentNullException.ThrowIfNull(onOp);
-            _onOp = onOp;
-        }
-
-        public IDataProtector CreateProtector(string purpose) => new FaultyDataProtector(_onOp);
-    }
-
-    private sealed class FaultyDataProtector : IDataProtector
-    {
-        private readonly Exception _onOp;
-
-        public FaultyDataProtector(Exception onOp)
-        {
-            ArgumentNullException.ThrowIfNull(onOp);
-            _onOp = onOp;
-        }
-
-        public byte[] Protect(byte[] userData) => throw _onOp;
-        public byte[] Unprotect(byte[] protectedData) => throw _onOp;
-        public IDataProtector CreateProtector(string purpose) => this;
     }
 }

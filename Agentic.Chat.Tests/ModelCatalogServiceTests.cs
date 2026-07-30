@@ -3,12 +3,20 @@ using System.Text;
 using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
+using Agentic.Chat.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agentic.Chat.Tests;
 
-public class ModelCatalogServiceTests
+public class ModelCatalogServiceTests : IClassFixture<HttpMessageHandlerFixture>
 {
+    private readonly HttpMessageHandlerFixture _http;
+
+    public ModelCatalogServiceTests(HttpMessageHandlerFixture http)
+    {
+        _http = http;
+    }
+
     private const string RepresentativeJson = """
         {
           "id": "openai/gpt-4o",
@@ -35,7 +43,7 @@ public class ModelCatalogServiceTests
         return sb.ToString();
     }
 
-    private static ModelCatalogService BuildService(StubHandler handler)
+    private static ModelCatalogService BuildService(HttpMessageHandler handler)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -50,7 +58,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task GetModelsAsync_OnFirstCall_FetchesAndCaches()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         var list = await service.GetModelsAsync();
@@ -64,7 +72,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task GetModelsAsync_OnSecondCallWithinTtl_DoesNotRefetch()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         _ = await service.GetModelsAsync();
@@ -76,7 +84,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task GetModelsAsync_AfterTtlExpires_Refetches()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         _ = await service.GetModelsAsync();
@@ -93,7 +101,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task RefreshAsync_AlwaysFetches_RegardlessOfCache()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         _ = await service.GetModelsAsync();
@@ -108,7 +116,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task GetModelsAsync_OnFetchFailureWithNoCache_Throws()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((string.Empty, HttpStatusCode.InternalServerError)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(string.Empty, HttpStatusCode.InternalServerError));
         var service = BuildService(handler);
 
         // 500 surfaces from GetStreamAsync's EnsureSuccessStatusCode as HttpRequestException.
@@ -118,7 +126,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task Dispose_ThenGetModelsAsync_ThrowsWithoutHttpCall()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         service.Dispose();
@@ -132,15 +140,15 @@ public class ModelCatalogServiceTests
     public async Task GetModelsAsync_OnFetchFailureWithExistingCache_ReturnsStale_NoThrow()
     {
         var calls = 0;
-        var handler = new StubHandler((_, _) =>
+        var handler = _http.CreateFuncHandler((_, _) =>
         {
             var n = Interlocked.Increment(ref calls);
             // First call: success. Subsequent calls: 500.
             if (n == 1)
             {
-                return Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK));
+                return HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson));
             }
-            return Task.FromResult((string.Empty, HttpStatusCode.InternalServerError));
+            return HttpMessageHandlerFixture.RespondJson(string.Empty, HttpStatusCode.InternalServerError);
         });
         var service = BuildService(handler);
 
@@ -159,7 +167,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task GetModelsAsync_OnEmptyDataArray_ReturnsEmptyList()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult(("{\"data\":[]}", HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson("{\"data\":[]}"));
         var service = BuildService(handler);
 
         var list = await service.GetModelsAsync();
@@ -172,7 +180,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task FindByIdAsync_Hit_ReturnsModel()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         var model = await service.FindByIdAsync("openai/gpt-4o");
@@ -184,7 +192,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task FindByIdAsync_Miss_ReturnsNull()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         var model = await service.FindByIdAsync("not/in/catalog");
@@ -195,7 +203,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task FindByIdAsync_TrimsAndMatchesIdCaseInsensitively()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         var model = await service.FindByIdAsync("  OpenAI/GPT-4o  ");
@@ -207,7 +215,7 @@ public class ModelCatalogServiceTests
     [Fact]
     public async Task FindByIdAsync_NullOrEmptyId_Throws()
     {
-        var handler = new StubHandler((_, _) => Task.FromResult((Envelope(RepresentativeJson), HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson)));
         var service = BuildService(handler);
 
         // ThrowIfNullOrEmpty throws ArgumentNullException for null and ArgumentException
@@ -266,14 +274,14 @@ public class ModelCatalogServiceTests
         // Force the critical-section overlap so two callers race the SemaphoreSlim.
         var gate = new TaskCompletionSource();
         var calls = 0;
-        var handler = new StubHandler(async (_, ct) =>
+        var handler = _http.CreateFuncHandler(async (_, ct) =>
         {
             var n = Interlocked.Increment(ref calls);
             if (n == 1)
             {
                 await gate.Task.WaitAsync(ct);
             }
-            return (Envelope(RepresentativeJson), HttpStatusCode.OK);
+            return await HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson));
         });
         var service = BuildService(handler);
 
@@ -298,10 +306,10 @@ public class ModelCatalogServiceTests
         // the explicit catch(OperationCanceledException) { throw; } branch that
         // distinguishes user-cancellation from generic network failure (which falls
         // back to the stale cache).
-        var handler = new StubHandler(async (_, ct) =>
+        var handler = _http.CreateFuncHandler(async (_, ct) =>
         {
             await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
-            return (Envelope(RepresentativeJson), HttpStatusCode.OK);
+            return await HttpMessageHandlerFixture.RespondJson(Envelope(RepresentativeJson));
         });
         var service = BuildService(handler);
 
@@ -384,7 +392,7 @@ public class ModelCatalogServiceTests
         // {} envelope — STJ produces an envelope with Data=null. FetchAsync's
         // `envelope?.Data is null || ...` short-circuits to true; the
         // IsNull branch gets exercised.
-        var handler = new StubHandler((_, _) => Task.FromResult(("{}", HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson("{}"));
         var service = BuildService(handler);
 
         var list = await service.GetModelsAsync();
@@ -398,7 +406,7 @@ public class ModelCatalogServiceTests
     {
         // Explicit "data": null — exercises the `envelope.Data is null` branch
         // (after the `?.` short-circuit evaluated envelope).
-        var handler = new StubHandler((_, _) => Task.FromResult(("{\"data\":null}", HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson("{\"data\":null}"));
         var service = BuildService(handler);
 
         var list = await service.GetModelsAsync();
@@ -412,39 +420,12 @@ public class ModelCatalogServiceTests
     {
         // Top-level JSON null makes STJ's DeserializeAsync<ModelListEnvelope> return
         // a null envelope — exercises the `?.` short-circuit branch.
-        var handler = new StubHandler((_, _) => Task.FromResult(("null", HttpStatusCode.OK)));
+        var handler = _http.CreateFuncHandler((_, _) => HttpMessageHandlerFixture.RespondJson("null"));
         var service = BuildService(handler);
 
         var list = await service.GetModelsAsync();
 
         Assert.Empty(list);
         Assert.Equal(1, handler.CallCount);
-    }
-
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, CancellationToken, Task<(string Body, HttpStatusCode Status)>> _respond;
-        private int _callCount;
-
-        public StubHandler(Func<HttpRequestMessage, CancellationToken, Task<(string Body, HttpStatusCode Status)>> respond)
-        {
-            _respond = respond;
-        }
-
-        public int CallCount => Volatile.Read(ref _callCount);
-
-        public TaskCompletionSource EnteredTask { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var n = Interlocked.Increment(ref _callCount);
-            if (n == 1) EnteredTask.TrySetResult();
-            var (body, status) = await _respond(request, cancellationToken).ConfigureAwait(false);
-            var msg = new HttpResponseMessage(status)
-            {
-                Content = new StringContent(body, Encoding.UTF8, "application/json")
-            };
-            return msg;
-        }
     }
 }

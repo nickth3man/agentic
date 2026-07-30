@@ -1,18 +1,25 @@
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
+using Agentic.Chat.Tests.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agentic.Chat.Tests;
 
-public class OpenRouterClientTests
+public class OpenRouterClientTests : IClassFixture<HttpMessageHandlerFixture>
 {
+    private readonly HttpMessageHandlerFixture _http;
+
+    public OpenRouterClientTests(HttpMessageHandlerFixture http)
+    {
+        _http = http;
+    }
+
     [Fact]
     public async Task StreamChatAsync_AccumulatesContentDeltas()
     {
-        var handler = new StubHandler(
+        var handler = _http.CreateTextHandler(
             "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{\"content\":\", world\"}}]}\n\n" +
             "data: [DONE]\n\n");
@@ -29,7 +36,7 @@ public class OpenRouterClientTests
     [Fact]
     public async Task StreamChatAsync_FiltersNonDataLines()
     {
-        var handler = new StubHandler(
+        var handler = _http.CreateTextHandler(
             "event: ping\n" +
             ":comment\n" +
             "\n" +
@@ -47,7 +54,7 @@ public class OpenRouterClientTests
     [Fact]
     public async Task StreamChatAsync_StopsAtDoneMarker()
     {
-        var handler = new StubHandler(
+        var handler = _http.CreateTextHandler(
             "data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n\n" +
             "data: [DONE]\n\n" +
             "data: {\"choices\":[{\"delta\":{\"content\":\"second\"}}]}\n\n");
@@ -63,7 +70,7 @@ public class OpenRouterClientTests
     [Fact]
     public async Task StreamChatAsync_NonSuccess_ThrowsOpenRouterException()
     {
-        var handler = new StubHandler("rate limited", HttpStatusCode.BadRequest);
+        var handler = _http.CreateTextHandler("rate limited", HttpStatusCode.BadRequest);
         using var provider = BuildProvider(handler);
         var client = new OpenRouterClient(provider.GetRequiredService<IHttpClientFactory>());
 
@@ -77,7 +84,7 @@ public class OpenRouterClientTests
     [Fact]
     public async Task StreamChatAsync_CancelledToken_ThrowsOperationCanceled()
     {
-        var handler = new StubHandler("data: [DONE]\n\n");
+        var handler = _http.CreateTextHandler("data: [DONE]\n\n");
         using var provider = BuildProvider(handler);
         var client = new OpenRouterClient(provider.GetRequiredService<IHttpClientFactory>());
         using var cts = new CancellationTokenSource();
@@ -90,7 +97,7 @@ public class OpenRouterClientTests
     [Fact]
     public async Task StreamChatAsync_YieldsUsageChunk()
     {
-        var handler = new StubHandler(
+        var handler = _http.CreateTextHandler(
             "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n" +
             "data: {\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_cost\":0.001}}\n\n" +
             "data: [DONE]\n\n");
@@ -107,7 +114,7 @@ public class OpenRouterClientTests
     [Fact]
     public async Task StreamChatAsync_RequestShape()
     {
-        var handler = new StubHandler("data: [DONE]\n\n");
+        var handler = _http.CreateTextHandler("data: [DONE]\n\n");
         using var provider = BuildProvider(handler);
         var client = new OpenRouterClient(provider.GetRequiredService<IHttpClientFactory>());
         var request = new ChatCompletionRequest(
@@ -170,7 +177,7 @@ public class OpenRouterClientTests
             assistantReasoning);
     }
 
-    private static ServiceProvider BuildProvider(StubHandler handler)
+    private static ServiceProvider BuildProvider(HttpMessageHandlerFixture.TextStubHandler handler)
     {
         var services = new ServiceCollection();
         services.AddHttpClient("OpenRouter", client =>
@@ -196,35 +203,5 @@ public class OpenRouterClientTests
             deltas.Add(delta);
         }
         return deltas;
-    }
-
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly string _body;
-        private readonly HttpStatusCode _status;
-
-        public StubHandler(string body, HttpStatusCode status = HttpStatusCode.OK)
-        {
-            _body = body;
-            _status = status;
-        }
-
-        public HttpMethod? CapturedMethod { get; private set; }
-        public Uri? CapturedUri { get; private set; }
-        public string? CapturedBody { get; private set; }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            CapturedMethod = request.Method;
-            CapturedUri = request.RequestUri;
-            CapturedBody = request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
-            return Task.FromResult(new HttpResponseMessage(_status)
-            {
-                Content = new StringContent(_body, Encoding.UTF8, "text/event-stream")
-            });
-        }
     }
 }

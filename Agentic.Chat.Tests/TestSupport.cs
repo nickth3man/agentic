@@ -6,11 +6,11 @@ using Microsoft.JSInterop;
 
 namespace Agentic.Chat.Tests;
 
-// Test helpers shared across SelectedModelServiceTests and ChatAgentServiceSendStreamingTests.
+// Cross-cutting test primitives used by the shared fixtures and individual tests.
 // Real EphemeralDataProtectionProvider + a hand-rolled IJSRuntime fake that speaks the
 // framework's localStorage interop protocol — the same one
 // ProtectedBrowserStorage.GetProtectedJsonAsync / SetProtectedJsonAsync invoke.
-internal static class TestSupport
+public static class TestSupport
 {
     public static ProtectedJSRuntime NewProtectedJSRuntime(Dictionary<string, string>? seed = null)
         => new(seed);
@@ -76,7 +76,7 @@ internal static class TestSupport
     }
 }
 
-internal sealed class FakeOpenRouterClient : IOpenRouterClient
+public sealed class FakeOpenRouterClient : IOpenRouterClient
 {
     // Per-call scripted responses (FIFO). The single-response ctor enqueues a
     // single response; multi-call tests (retry/regenerate/multi-send) enqueue

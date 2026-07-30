@@ -1,8 +1,7 @@
 using System.Text.Json;
 using Agentic.Chat.Models;
 using Agentic.Chat.Services;
-using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
-using Microsoft.AspNetCore.DataProtection;
+using Agentic.Chat.Tests.Fixtures;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -12,7 +11,7 @@ namespace Agentic.Chat.Tests;
 // affordances. Transcript invariant under test: error placeholders and the
 // "(No response content returned.)" placeholder are NEVER appended to _apiMessages;
 // only real user and assistant turns live there.
-public class ChatAgentServiceTranscriptHygieneTests
+public class ChatAgentServiceTranscriptHygieneTests : IClassFixture<ChatAgentServiceFixture>
 {
     // Cached JsonSerializerOptions satisfies CA1869 (cached for performance) and
     // matches the JSON serialization shape used by ChatAgentServiceResetTests so
@@ -22,6 +21,13 @@ public class ChatAgentServiceTranscriptHygieneTests
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    private readonly ChatAgentServiceFixture _fixture;
+
+    public ChatAgentServiceTranscriptHygieneTests(ChatAgentServiceFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public async Task EmptyResponse_PlaceholderNotAddedToTranscript()
     {
@@ -29,10 +35,10 @@ public class ChatAgentServiceTranscriptHygieneTests
         // content returned.)" placeholder in the API transcript — the second
         // request's messages must be exactly [system, user, user] with no
         // placeholder strings.
-        var (service, fake) = CreateService();
+        var (service, fake) = _fixture.CreateBuilder().Build();
 
-        await Consume(service.SendStreamingAsync("first"));
-        await Consume(service.SendStreamingAsync("second"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("first"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("second"));
 
         Assert.NotNull(fake.LastRequest);
         var messages = fake.LastRequest!.Messages;
@@ -56,18 +62,20 @@ public class ChatAgentServiceTranscriptHygieneTests
         // visible in the display list (with IsError=true), but it must NEVER
         // appear in the next request's transcript. Second send uses an empty
         // fake so we can assert the transcript shape cleanly.
-        var (service, fake) = CreateService(
-            FakeOpenRouterClient.FakeResponse.Err(new OpenRouterException(429, "too many requests")),
-            FakeOpenRouterClient.FakeResponse.Ok());
+        var (service, fake) = _fixture.CreateBuilder()
+            .WithResponses(
+                FakeOpenRouterClient.FakeResponse.Err(new OpenRouterException(429, "too many requests")),
+                FakeOpenRouterClient.FakeResponse.Ok())
+            .Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
 
         var errorAssistant = service.Messages[^1];
         Assert.Equal("assistant", errorAssistant.Role);
         Assert.True(errorAssistant.IsError);
         Assert.Contains("too many requests", errorAssistant.Content);
 
-        await Consume(service.SendStreamingAsync("again"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("again"));
 
         Assert.NotNull(fake.LastRequest);
         var messages = fake.LastRequest!.Messages;
@@ -86,14 +94,16 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public async Task RetryLastAsync_AfterError_ReplacesErrorAndRestreams()
     {
-        var (service, fake) = CreateService(
-            FakeOpenRouterClient.FakeResponse.Err(new OpenRouterException(500, "boom")),
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Hello", null)));
+        var (service, fake) = _fixture.CreateBuilder()
+            .WithResponses(
+                FakeOpenRouterClient.FakeResponse.Err(new OpenRouterException(500, "boom")),
+                FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Hello", null)))
+            .Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
         Assert.True(service.Messages[^1].IsError);
 
-        await Consume(service.RetryLastAsync());
+        await ChatAgentServiceTestHelpers.Consume(service.RetryLastAsync());
 
         // The error placeholder is gone, replaced by the new assistant turn.
         var assistant = service.Messages[^1];
@@ -120,14 +130,16 @@ public class ChatAgentServiceTranscriptHygieneTests
     {
         // After a normal successful send, RetryLastAsync must be a no-op:
         // Messages unchanged and the fake is never re-entered.
-        var (service, fake) = CreateService(
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Hi", null)),
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Should not happen", null)));
+        var (service, fake) = _fixture.CreateBuilder()
+            .WithResponses(
+                FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Hi", null)),
+                FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Should not happen", null)))
+            .Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
         var messagesAfterSend = service.Messages.ToArray();
 
-        await Consume(service.RetryLastAsync());
+        await ChatAgentServiceTestHelpers.Consume(service.RetryLastAsync());
 
         Assert.Equal(messagesAfterSend.Length, service.Messages.Count);
         Assert.Same(messagesAfterSend[^1], service.Messages[^1]);
@@ -145,15 +157,17 @@ public class ChatAgentServiceTranscriptHygieneTests
         // call's request saw the user turn only (the prior assistant was popped
         // from the transcript before re-streaming). Then send a third message
         // and confirm the regenerated assistant is in the transcript exactly once.
-        var (service, fake) = CreateService(
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("first", null)),
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("second", null)),
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("ok", null)));
+        var (service, fake) = _fixture.CreateBuilder()
+            .WithResponses(
+                FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("first", null)),
+                FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("second", null)),
+                FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("ok", null)))
+            .Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
         Assert.Equal("first", service.Messages[^1].Content);
 
-        await Consume(service.RegenerateAsync());
+        await ChatAgentServiceTestHelpers.Consume(service.RegenerateAsync());
         Assert.Equal("second", service.Messages[^1].Content);
         // The display message count is unchanged from after the first send: the
         // assistant was replaced, the user turn was kept.
@@ -168,7 +182,7 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal("user", regenerateMessages[1].Role);
         Assert.Equal("hi", regenerateMessages[1].Content);
 
-        await Consume(service.SendStreamingAsync("more"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("more"));
 
         // Third call's transcript: system + user + regenerated assistant + new user.
         var messages = fake.LastRequest!.Messages;
@@ -190,14 +204,16 @@ public class ChatAgentServiceTranscriptHygieneTests
         // placeholder from display, leave the user turn intact in the transcript
         // (the _apiMessages[^1].Role == "assistant" guard must refuse to pop the
         // user message), and stream a fresh response.
-        var (service, fake) = CreateService(
-            FakeOpenRouterClient.FakeResponse.Ok(),
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("real answer", null)));
+        var (service, fake) = _fixture.CreateBuilder()
+            .WithResponses(
+                FakeOpenRouterClient.FakeResponse.Ok(),
+                FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("real answer", null)))
+            .Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
         Assert.Equal("(No response content returned.)", service.Messages[^1].Content);
 
-        await Consume(service.RegenerateAsync());
+        await ChatAgentServiceTestHelpers.Consume(service.RegenerateAsync());
 
         var assistant = service.Messages[^1];
         Assert.Equal("assistant", assistant.Role);
@@ -214,7 +230,7 @@ public class ChatAgentServiceTranscriptHygieneTests
         Assert.Equal("hi", messages[1].TextContent);
 
         // A follow-up send proves the regenerated assistant entered the transcript once.
-        await Consume(service.SendStreamingAsync("more"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("more"));
         var follow = fake.LastRequest!.Messages;
         Assert.Equal(4, follow.Count);
         Assert.Equal("assistant", follow[2].Role);
@@ -226,14 +242,16 @@ public class ChatAgentServiceTranscriptHygieneTests
     {
         // After a send that errored, the last display message is an error
         // assistant, not a completed assistant. Regenerate must NOT touch it.
-        var (service, fake) = CreateService(
-            FakeOpenRouterClient.FakeResponse.Err(new OpenRouterException(500, "boom")),
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Should not happen", null)));
+        var (service, fake) = _fixture.CreateBuilder()
+            .WithResponses(
+                FakeOpenRouterClient.FakeResponse.Err(new OpenRouterException(500, "boom")),
+                FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Should not happen", null)))
+            .Build();
 
-        await Consume(service.SendStreamingAsync("hi"));
+        await ChatAgentServiceTestHelpers.Consume(service.SendStreamingAsync("hi"));
         var snapshot = service.Messages.ToArray();
 
-        await Consume(service.RegenerateAsync());
+        await ChatAgentServiceTestHelpers.Consume(service.RegenerateAsync());
 
         Assert.Equal(snapshot.Length, service.Messages.Count);
         Assert.Same(snapshot[^1], service.Messages[^1]);
@@ -244,12 +262,13 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public async Task RegenerateAsync_WhenEmpty_IsNoOp()
     {
-        var (service, fake) = CreateService(
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Should not happen", null)));
+        var (service, fake) = _fixture.CreateBuilder()
+            .WithResponses(FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Should not happen", null)))
+            .Build();
 
         Assert.Empty(service.Messages);
 
-        await Consume(service.RegenerateAsync());
+        await ChatAgentServiceTestHelpers.Consume(service.RegenerateAsync());
 
         Assert.Empty(service.Messages);
         Assert.Equal(0, fake.CallCount);
@@ -258,12 +277,13 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public async Task RetryLastAsync_WhenEmpty_IsNoOp()
     {
-        var (service, fake) = CreateService(
-            FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Should not happen", null)));
+        var (service, fake) = _fixture.CreateBuilder()
+            .WithResponses(FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Should not happen", null)))
+            .Build();
 
         Assert.Empty(service.Messages);
 
-        await Consume(service.RetryLastAsync());
+        await ChatAgentServiceTestHelpers.Consume(service.RetryLastAsync());
 
         Assert.Empty(service.Messages);
         Assert.Equal(0, fake.CallCount);
@@ -279,7 +299,7 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public void TryPopErrorPlaceholder_DisplayEmpty_ReturnsFalse()
     {
-        var (service, _) = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         Assert.Empty(service.Messages);
 
         Assert.False(service.TryPopErrorPlaceholder());
@@ -288,7 +308,7 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public void TryPopErrorPlaceholder_LastIsUser_ReturnsFalse()
     {
-        var (service, _) = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         service.AddDisplayMessageForTest("user", "hi");
 
         Assert.False(service.TryPopErrorPlaceholder());
@@ -299,7 +319,7 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public void TryPopErrorPlaceholder_LastIsStreamingAssistant_ReturnsFalse()
     {
-        var (service, _) = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         service.AddDisplayMessageForTest("assistant", "streaming");
 
         Assert.False(service.TryPopErrorPlaceholder());
@@ -309,7 +329,7 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public void TryPopErrorPlaceholder_PopsErrorAssistant()
     {
-        var (service, _) = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         service.AddDisplayMessageForTest("user", "hi");
         // Simulate an error assistant in display without involving the streaming
         // core (which would normally set IsError via an OpenRouterException).
@@ -332,7 +352,7 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public void TryPopLastCompletedAssistant_DisplayEmpty_ReturnsFalse()
     {
-        var (service, _) = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         Assert.Empty(service.Messages);
 
         Assert.False(service.TryPopLastCompletedAssistant(out _));
@@ -341,7 +361,7 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public void TryPopLastCompletedAssistant_LastIsUser_ReturnsFalse()
     {
-        var (service, _) = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         service.AddDisplayMessageForTest("user", "hi");
 
         Assert.False(service.TryPopLastCompletedAssistant(out _));
@@ -354,7 +374,9 @@ public class ChatAgentServiceTranscriptHygieneTests
         // After the first MoveNextAsync, the streaming core has added both the
         // user and the streaming assistant placeholder. Pop should refuse
         // because IsStreaming is true.
-        var (service, _) = CreateService(FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Hi", null)));
+        var (service, _) = _fixture.CreateBuilder()
+            .WithResponses(FakeOpenRouterClient.FakeResponse.Ok(new StreamDelta("Hi", null)))
+            .Build();
         await using var enumerator = service.SendStreamingAsync("hi").GetAsyncEnumerator();
         Assert.True(await enumerator.MoveNextAsync());
         Assert.Equal(2, service.Messages.Count);
@@ -367,7 +389,7 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public void TryPopLastCompletedAssistant_RealContent_WasPersistedTrue()
     {
-        var (service, _) = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         service.LoadTranscript(
         [
             new ChatDisplayMessage { Role = "user", Content = "q" },
@@ -383,7 +405,7 @@ public class ChatAgentServiceTranscriptHygieneTests
     [Fact]
     public void TryPopLastCompletedAssistant_NullReasoning_WasPersistedByContent()
     {
-        var (service, _) = CreateService();
+        var (service, _) = _fixture.CreateBuilder().Build();
         service.LoadTranscript(
         [
             new ChatDisplayMessage { Role = "user", Content = "q" },
@@ -403,9 +425,8 @@ public class ChatAgentServiceTranscriptHygieneTests
             BaseUrl = "https://test.local/",
             Model = "test-model"
         });
-        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
-        var js = TestSupport.NewProtectedJSRuntime();
-        var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
+        var catalog = new ModelCatalogService(_fixture.Http.CreateUnusedFactory());
+        var storage = _fixture.Storage.CreateStorage();
         var selection = new SelectedModelService(storage);
         var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
         systemPrompt.SetCurrentPromptForTest(null);
@@ -421,55 +442,4 @@ public class ChatAgentServiceTranscriptHygieneTests
                 null!));
         Assert.Equal("conversationWriter", ex.ParamName);
     }
-
-    // ── helpers ──────────────────────────────────────────────────────────
-
-    private static (ChatAgentService Service, FakeOpenRouterClient Client) CreateService(
-        params FakeOpenRouterClient.FakeResponse[] responses)
-    {
-        var fake = new FakeOpenRouterClient(responses);
-        var options = Options.Create(new OpenRouterOptions
-        {
-            BaseUrl = "https://test.local/",
-            Model = "test-model"
-        });
-        var logger = NullLogger<ChatAgentService>.Instance;
-        var catalog = new ModelCatalogService(new UnusedHttpClientFactory());
-        catalog.SeedForTest(new[]
-        {
-            new OpenRouterModel(
-                "test-model",
-                "test-model",
-                128_000L,
-                DateTimeOffset.UtcNow,
-                "text->text",
-                new OpenRouterPricing(0.0000025m, 0.00001m),
-                new[] { "tools", "reasoning", "tool_choice" })
-        });
-
-        var js = TestSupport.NewProtectedJSRuntime();
-        var storage = new ProtectedLocalStorage(js, new EphemeralDataProtectionProvider());
-        var selection = new SelectedModelService(storage);
-        selection.SetCurrentModelIdForTest(null);
-        var systemPrompt = new SystemPromptService(storage, NullLogger<SystemPromptService>.Instance);
-        systemPrompt.SetCurrentPromptForTest(null);
-
-        return (new ChatAgentService(fake, options, logger, selection, catalog, systemPrompt, TestSupport.NewChatSettings(storage), NullActiveConversationWriter.Instance), fake);
-    }
-
-    private static async Task Consume(IAsyncEnumerable<ChatDisplayMessage> stream)
-    {
-        await foreach (var _ in stream)
-        {
-            /* drain */
-        }
-    }
-
-    private sealed class UnusedHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name)
-            => throw new InvalidOperationException("The seeded model catalog must not fetch models in this test.");
-    }
 }
-
-

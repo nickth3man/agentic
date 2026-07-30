@@ -1,14 +1,21 @@
 using System.Text;
 using System.Text.Json;
 using Agentic.Chat.Services;
+using Agentic.Chat.Tests.Fixtures;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.JSInterop;
 
 namespace Agentic.Chat.Tests;
 
-public class ChatSettingsServiceTests
+public class ChatSettingsServiceTests : IClassFixture<ProtectedBrowserStorageFixture>
 {
+    private readonly ProtectedBrowserStorageFixture _fixture;
+
+    public ChatSettingsServiceTests(ProtectedBrowserStorageFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public async Task LoadAsync_WithNoStoredValue_KeepsDefaults()
     {
@@ -28,14 +35,14 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task RoundTrip_PersistsEffortTemperatureAndMaxTokens()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var sharedDp = new EphemeralDataProtectionProvider();
-        var initial = new ChatSettingsService(BuildStorage(js, sharedDp));
+        var initial = new ChatSettingsService(_fixture.CreateStorage(js, sharedDp));
         await initial.SetReasoningEffortAsync(ReasoningEffortLevel.High);
         await initial.SetTemperatureAsync(0.7);
         await initial.SetMaxTokensAsync(1024);
 
-        var fresh = new ChatSettingsService(BuildStorage(js, sharedDp));
+        var fresh = new ChatSettingsService(_fixture.CreateStorage(js, sharedDp));
         await fresh.LoadAsync();
 
         Assert.Equal(ReasoningEffortLevel.High, fresh.ReasoningEffort);
@@ -84,7 +91,9 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task LoadAsync_OnNoJsInterop_Swallows_IsLoadedTrue()
     {
-        var storage = new ProtectedLocalStorage(new NoInteropJSRuntime(), new EphemeralDataProtectionProvider());
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateNoInteropRuntime(),
+            new EphemeralDataProtectionProvider());
         var service = new ChatSettingsService(storage);
 
         await service.LoadAsync();
@@ -98,11 +107,11 @@ public class ChatSettingsServiceTests
     {
         var seedBytes = Encoding.UTF8.GetBytes("not a JSON object");
         var seedProtected = Convert.ToBase64String(seedBytes);
-        var js = TestSupport.NewProtectedJSRuntime(new Dictionary<string, string>
+        var js = _fixture.CreateRuntime(new Dictionary<string, string>
         {
             [ChatSettingsService.StorageKey] = seedProtected
         });
-        var storage = new ProtectedLocalStorage(js, new IdentityDataProtectionProvider());
+        var storage = _fixture.CreateStorage(js, _fixture.CreateIdentityProtector());
         var service = new ChatSettingsService(storage);
 
         await service.LoadAsync();
@@ -114,9 +123,9 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task LoadAsync_IgnoresOutOfRangePersistedValues()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var dp = new EphemeralDataProtectionProvider();
-        var storage = BuildStorage(js, dp);
+        var storage = _fixture.CreateStorage(js, dp);
         var bad = new ChatSettingsService.ChatSettingsState(
             (ReasoningEffortLevel)999,
             9.0,
@@ -134,9 +143,9 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task LoadAsync_IgnoresTemperatureBelowMin()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var dp = new EphemeralDataProtectionProvider();
-        var storage = BuildStorage(js, dp);
+        var storage = _fixture.CreateStorage(js, dp);
         await storage.SetAsync(
             ChatSettingsService.StorageKey,
             new ChatSettingsService.ChatSettingsState(ReasoningEffortLevel.Medium, -0.01, null));
@@ -150,9 +159,9 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task LoadAsync_IgnoresMaxTokensAboveMax()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var dp = new EphemeralDataProtectionProvider();
-        var storage = BuildStorage(js, dp);
+        var storage = _fixture.CreateStorage(js, dp);
         await storage.SetAsync(
             ChatSettingsService.StorageKey,
             new ChatSettingsService.ChatSettingsState(
@@ -169,9 +178,9 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task LoadAsync_AppliesTemperatureOnly_WhenMaxTokensNull()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var dp = new EphemeralDataProtectionProvider();
-        var storage = BuildStorage(js, dp);
+        var storage = _fixture.CreateStorage(js, dp);
         await storage.SetAsync(
             ChatSettingsService.StorageKey,
             new ChatSettingsService.ChatSettingsState(ReasoningEffortLevel.High, 1.25, null));
@@ -185,9 +194,9 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task LoadAsync_AppliesMaxTokensOnly_WhenTemperatureNull()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var dp = new EphemeralDataProtectionProvider();
-        var storage = BuildStorage(js, dp);
+        var storage = _fixture.CreateStorage(js, dp);
         await storage.SetAsync(
             ChatSettingsService.StorageKey,
             new ChatSettingsService.ChatSettingsState(
@@ -204,9 +213,9 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task LoadAsync_AppliesValidBoundaryValues()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var dp = new EphemeralDataProtectionProvider();
-        var storage = BuildStorage(js, dp);
+        var storage = _fixture.CreateStorage(js, dp);
         var state = new ChatSettingsService.ChatSettingsState(
             ReasoningEffortLevel.Low,
             ChatSettingsService.MinTemperature,
@@ -246,7 +255,9 @@ public class ChatSettingsServiceTests
     [Fact]
     public async Task SetReasoningEffortAsync_OnPersistFailure_KeepsInMemoryValue()
     {
-        var storage = new ProtectedLocalStorage(new NoInteropJSRuntime(), new EphemeralDataProtectionProvider());
+        var storage = _fixture.CreateStorage(
+            _fixture.CreateNoInteropRuntime(),
+            new EphemeralDataProtectionProvider());
         var service = new ChatSettingsService(storage);
 
         await service.SetReasoningEffortAsync(ReasoningEffortLevel.Low);
@@ -277,35 +288,11 @@ public class ChatSettingsServiceTests
         Assert.Throws<ArgumentNullException>(() => new ChatSettingsService(null!));
     }
 
-    private static (ChatSettingsService Service, TestSupport.ProtectedJSRuntime Store) BuildService(
+    private (ChatSettingsService Service, TestSupport.ProtectedJSRuntime Store) BuildService(
         Dictionary<string, string>? seed = null)
     {
-        var js = TestSupport.NewProtectedJSRuntime(seed);
-        var storage = BuildStorage(js, new EphemeralDataProtectionProvider());
+        var js = _fixture.CreateRuntime(seed);
+        var storage = _fixture.CreateStorage(js, new EphemeralDataProtectionProvider());
         return (new ChatSettingsService(storage), js);
-    }
-
-    private static ProtectedLocalStorage BuildStorage(IJSRuntime js, IDataProtectionProvider dp)
-        => new(js, dp);
-
-    private sealed class NoInteropJSRuntime : IJSRuntime
-    {
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
-            => throw new InvalidOperationException("JavaScript interop calls cannot be issued at this time.");
-
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args)
-            => throw new InvalidOperationException("JavaScript interop calls cannot be issued at this time.");
-    }
-
-    private sealed class IdentityDataProtectionProvider : IDataProtectionProvider
-    {
-        public IDataProtector CreateProtector(string purpose) => new IdentityProtector();
-
-        private sealed class IdentityProtector : IDataProtector
-        {
-            public IDataProtector CreateProtector(string purpose) => this;
-            public byte[] Protect(byte[] plaintext) => plaintext;
-            public byte[] Unprotect(byte[] protectedData) => protectedData;
-        }
     }
 }

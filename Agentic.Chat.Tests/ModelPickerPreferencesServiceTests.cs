@@ -1,25 +1,32 @@
 using Agentic.Chat.Services;
+using Agentic.Chat.Tests.Fixtures;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.JSInterop;
 
 namespace Agentic.Chat.Tests;
 
-public class ModelPickerPreferencesServiceTests
+public class ModelPickerPreferencesServiceTests : IClassFixture<ProtectedBrowserStorageFixture>
 {
+    private readonly ProtectedBrowserStorageFixture _fixture;
+
+    public ModelPickerPreferencesServiceTests(ProtectedBrowserStorageFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public async Task LoadAsync_WithStoredPreferences_NormalizesAndRaisesChange()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var dataProtection = new EphemeralDataProtectionProvider();
-        var storage = BuildStorage(js, dataProtection);
+        var storage = _fixture.CreateStorage(js, dataProtection);
         await storage.SetAsync(
             ModelPickerPreferencesService.StorageKey,
             new ModelPickerPreferences(
                 ["openai/gpt-4o", "OPENAI/GPT-4O", " ", "anthropic/claude"],
                 ["first", "FIRST", " ", "second", "third", "fourth", "fifth", "sixth"]));
 
-        var service = new ModelPickerPreferencesService(BuildStorage(js, dataProtection));
+        var service = new ModelPickerPreferencesService(_fixture.CreateStorage(js, dataProtection));
         var changes = 0;
         service.OnChange += () => changes++;
 
@@ -34,7 +41,7 @@ public class ModelPickerPreferencesServiceTests
     [Fact]
     public async Task LoadAsync_WithNoStoredPreferences_LeavesCollectionsEmpty()
     {
-        var service = new ModelPickerPreferencesService(BuildStorage(TestSupport.NewProtectedJSRuntime()));
+        var service = new ModelPickerPreferencesService(_fixture.CreateStorage());
 
         await service.LoadAsync();
 
@@ -47,7 +54,9 @@ public class ModelPickerPreferencesServiceTests
     public async Task LoadAsync_OnStorageFailure_LeavesCollectionsEmpty()
     {
         var service = new ModelPickerPreferencesService(
-            new ProtectedLocalStorage(new NoInteropJSRuntime(), new EphemeralDataProtectionProvider()));
+            _fixture.CreateStorage(
+                _fixture.CreateNoInteropRuntime(),
+                new EphemeralDataProtectionProvider()));
 
         await service.LoadAsync();
 
@@ -58,9 +67,9 @@ public class ModelPickerPreferencesServiceTests
     [Fact]
     public async Task ToggleFavoriteAsync_AddsThenRemovesAndPersists()
     {
-        var js = TestSupport.NewProtectedJSRuntime();
+        var js = _fixture.CreateRuntime();
         var dataProtection = new EphemeralDataProtectionProvider();
-        var service = new ModelPickerPreferencesService(BuildStorage(js, dataProtection));
+        var service = new ModelPickerPreferencesService(_fixture.CreateStorage(js, dataProtection));
         var changes = 0;
         service.OnChange += () => changes++;
 
@@ -71,7 +80,7 @@ public class ModelPickerPreferencesServiceTests
 
         await service.ToggleFavoriteAsync("openai/gpt-4o");
 
-        var reloaded = new ModelPickerPreferencesService(BuildStorage(js, dataProtection));
+        var reloaded = new ModelPickerPreferencesService(_fixture.CreateStorage(js, dataProtection));
         await reloaded.LoadAsync();
         Assert.False(reloaded.IsFavorite("openai/gpt-4o"));
         Assert.Equal(2, changes);
@@ -80,7 +89,7 @@ public class ModelPickerPreferencesServiceTests
     [Fact]
     public async Task RecordRecentAsync_MovesDuplicateToFrontAndKeepsFive()
     {
-        var service = new ModelPickerPreferencesService(BuildStorage(TestSupport.NewProtectedJSRuntime()));
+        var service = new ModelPickerPreferencesService(_fixture.CreateStorage());
 
         foreach (var id in new[] { "one", "two", "three", "four", "five", "six", "three" })
         {
@@ -95,7 +104,9 @@ public class ModelPickerPreferencesServiceTests
     public async Task PersistFailure_StillUpdatesMemoryAndRaisesChange()
     {
         var service = new ModelPickerPreferencesService(
-            new ProtectedLocalStorage(new NoInteropJSRuntime(), new EphemeralDataProtectionProvider()));
+            _fixture.CreateStorage(
+                _fixture.CreateNoInteropRuntime(),
+                new EphemeralDataProtectionProvider()));
         var changes = 0;
         service.OnChange += () => changes++;
 
@@ -111,7 +122,7 @@ public class ModelPickerPreferencesServiceTests
     [Fact]
     public async Task ModelIds_CannotBeNullOrEmpty()
     {
-        var service = new ModelPickerPreferencesService(BuildStorage(TestSupport.NewProtectedJSRuntime()));
+        var service = new ModelPickerPreferencesService(_fixture.CreateStorage());
 
         Assert.Throws<ArgumentNullException>(() => service.IsFavorite(null!));
         Assert.Throws<ArgumentException>(() => service.IsFavorite(string.Empty));
@@ -125,22 +136,5 @@ public class ModelPickerPreferencesServiceTests
     public void Constructor_NullStorage_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => new ModelPickerPreferencesService(null!));
-    }
-
-    private static ProtectedLocalStorage BuildStorage(
-        TestSupport.ProtectedJSRuntime store,
-        IDataProtectionProvider? dataProtection = null)
-        => new(store, dataProtection ?? new EphemeralDataProtectionProvider());
-
-    private sealed class NoInteropJSRuntime : IJSRuntime
-    {
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
-            => throw new InvalidOperationException("JS interop is not available in this test.");
-
-        public ValueTask<TValue> InvokeAsync<TValue>(
-            string identifier,
-            CancellationToken cancellationToken,
-            object?[]? args)
-            => throw new InvalidOperationException("JS interop is not available in this test.");
     }
 }
